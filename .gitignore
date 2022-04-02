@@ -1,2 +1,6 @@
 /MyPlayground.playground
 xcuserdata
+Carthage/
+/Cartfile
+Library/
+*.DS_Store
