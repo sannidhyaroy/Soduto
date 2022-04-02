@@ -26,12 +26,16 @@
 		02EC48B51F229CCE00C9370F /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B41F229CCE00C9370F /* Configuration.swift */; };
 		02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */; };
 		76E5A00B27F88EB6000FD208 /* NMSSH.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00727F88EB6000FD208 /* NMSSH.xcframework */; };
-		76E5A00C27F88EB6000FD208 /* CleanroomLogger.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00827F88EB6000FD208 /* CleanroomLogger.xcframework */; };
-		76E5A00D27F88EB6000FD208 /* CocoaAsyncSocket.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00927F88EB6000FD208 /* CocoaAsyncSocket.xcframework */; };
-		76E5A00E27F88EB6000FD208 /* Reachability.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00A27F88EB6000FD208 /* Reachability.xcframework */; };
 		76E5A01327F8975F000FD208 /* libssh2.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A01027F8975F000FD208 /* libssh2.a */; };
 		76E5A01427F8975F000FD208 /* libcrypto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A01127F8975F000FD208 /* libcrypto.a */; };
 		76E5A01527F8975F000FD208 /* libssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A01227F8975F000FD208 /* libssl.a */; };
+		76E5A01A27F89E3E000FD208 /* NMSSH.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00727F88EB6000FD208 /* NMSSH.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		76E5A03A27F8A10E000FD208 /* CleanroomLogger.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00827F88EB6000FD208 /* CleanroomLogger.xcframework */; };
+		76E5A03B27F8A10E000FD208 /* CleanroomLogger.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00827F88EB6000FD208 /* CleanroomLogger.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		76E5A03D27F8A110000FD208 /* CocoaAsyncSocket.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00927F88EB6000FD208 /* CocoaAsyncSocket.xcframework */; };
+		76E5A03E27F8A110000FD208 /* CocoaAsyncSocket.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00927F88EB6000FD208 /* CocoaAsyncSocket.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		76E5A03F27F8A112000FD208 /* Reachability.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00A27F88EB6000FD208 /* Reachability.xcframework */; };
+		76E5A04027F8A112000FD208 /* Reachability.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76E5A00A27F88EB6000FD208 /* Reachability.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		840538201ED62282003798AA /* WelcomeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8405381F1ED62282003798AA /* WelcomeWindowController.swift */; };
 		840FC2F91DEF6AF400AC4824 /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */; };
 		84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */; };
@@ -144,6 +148,20 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
+				76E5A01A27F89E3E000FD208 /* NMSSH.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		76E5A03C27F8A10E000FD208 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				76E5A04027F8A112000FD208 /* Reachability.xcframework in Embed Frameworks */,
+				76E5A03B27F8A10E000FD208 /* CleanroomLogger.xcframework in Embed Frameworks */,
+				76E5A03E27F8A110000FD208 /* CocoaAsyncSocket.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -198,16 +216,6 @@
 		02968CFE204C4B9000FCE5E0 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		02EC48B41F229CCE00C9370F /* Configuration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Configuration.swift; path = Configuration/Configuration.swift; sourceTree = "<group>"; };
 		02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceConfiguration.swift; sourceTree = "<group>"; };
-		76E59F9B27F8350B000FD208 /* NMSSH.framework.dSYM */ = {isa = PBXFileReference; lastKnownFileType = wrapper.dsym; name = NMSSH.framework.dSYM; path = Carthage/Build/Mac/NMSSH.framework.dSYM; sourceTree = "<group>"; };
-		76E59F9C27F8351B000FD208 /* NMSSH.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NMSSH.framework; path = Carthage/Build/Mac/NMSSH.framework; sourceTree = "<group>"; };
-		76E59FA027F837FC000FD208 /* CleanroomLogger.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CleanroomLogger.framework; path = Carthage/Build/Mac/CleanroomLogger.framework; sourceTree = "<group>"; };
-		76E59FAF27F83EF0000FD208 /* libcrypto.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libcrypto.a; path = "Carthage/Checkouts/NMSSH/NMSSH-OSX/Libraries/lib/libcrypto.a"; sourceTree = "<group>"; };
-		76E59FB027F83EF0000FD208 /* libssh2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssh2.a; path = "Carthage/Checkouts/NMSSH/NMSSH-OSX/Libraries/lib/libssh2.a"; sourceTree = "<group>"; };
-		76E59FB127F83EF0000FD208 /* libssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssl.a; path = "Carthage/Checkouts/NMSSH/NMSSH-OSX/Libraries/lib/libssl.a"; sourceTree = "<group>"; };
-		76E59FB527F841A8000FD208 /* CocoaAsyncSocket.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CocoaAsyncSocket.framework; path = Carthage/Build/Mac/CocoaAsyncSocket.framework; sourceTree = "<group>"; };
-		76E59FB727F8422C000FD208 /* Reachability.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Reachability.framework; path = Carthage/Build/Mac/Reachability.framework; sourceTree = "<group>"; };
-		76E59FBB27F84C05000FD208 /* OpenSSL.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = OpenSSL.xcframework; path = Carthage/Build/OpenSSL.xcframework; sourceTree = "<group>"; };
-		76E59FBD27F84DCD000FD208 /* SwiftSH.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SwiftSH.xcframework; path = Carthage/Build/SwiftSH.xcframework; sourceTree = "<group>"; };
 		76E5A00727F88EB6000FD208 /* NMSSH.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = NMSSH.xcframework; path = Carthage/Build/NMSSH.xcframework; sourceTree = "<group>"; };
 		76E5A00827F88EB6000FD208 /* CleanroomLogger.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CleanroomLogger.xcframework; path = Carthage/Build/CleanroomLogger.xcframework; sourceTree = "<group>"; };
 		76E5A00927F88EB6000FD208 /* CocoaAsyncSocket.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CocoaAsyncSocket.xcframework; path = Carthage/Build/CocoaAsyncSocket.xcframework; sourceTree = "<group>"; };
@@ -271,7 +279,6 @@
 		84651A711E599A3C00D17601 /* BatteryService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BatteryService.swift; sourceTree = "<group>"; };
 		84651A731E59F9C900D17601 /* MenuView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MenuView.swift; sourceTree = "<group>"; };
 		84651A751E5AEBE100D17601 /* SftpService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SftpService.swift; sourceTree = "<group>"; };
-		84651A7A1E5CA69300D17601 /* OSXFUSE.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OSXFUSE.framework; path = ../../../../Library/Frameworks/OSXFUSE.framework; sourceTree = "<group>"; };
 		8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NotificationsService.swift; sourceTree = "<group>"; };
 		8468BDFF1DEB7F97003B9925 /* NetworkUtils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NetworkUtils.swift; sourceTree = "<group>"; };
 		847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TelephonyService.swift; sourceTree = "<group>"; };
@@ -299,7 +306,6 @@
 		849961F31D5728EE002B893A /* Test_Assertions.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = Test_Assertions.m; path = MYUtilities/Test_Assertions.m; sourceTree = "<group>"; };
 		849962111D572B1F002B893A /* Logging.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Logging.h; path = MYUtilities/Logging.h; sourceTree = "<group>"; };
 		849962121D572B1F002B893A /* Logging.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = Logging.m; path = MYUtilities/Logging.m; sourceTree = "<group>"; };
-		849962271D574530002B893A /* CocoaAsyncSocket.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CocoaAsyncSocket.framework; path = Soduto/CocoaAsyncSocket/build/Debug/CocoaAsyncSocket.framework; sourceTree = "<group>"; };
 		84A16BDF1E9EBADD00DE2C0B /* Sequence.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Sequence.swift; sourceTree = "<group>"; };
 		84B933EE1E281AB40071DEFF /* CertificateUtils.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CertificateUtils.m; sourceTree = "<group>"; };
 		84B9340D1E2A56EA0071DEFF /* CertificateUtils.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CertificateUtils.h; sourceTree = "<group>"; };
@@ -331,6 +337,9 @@
 				76E5A01427F8975F000FD208 /* libcrypto.a in Frameworks */,
 				76E5A01527F8975F000FD208 /* libssl.a in Frameworks */,
 				76E5A01327F8975F000FD208 /* libssh2.a in Frameworks */,
+				76E5A03F27F8A112000FD208 /* Reachability.xcframework in Frameworks */,
+				76E5A03D27F8A110000FD208 /* CocoaAsyncSocket.xcframework in Frameworks */,
+				76E5A03A27F8A10E000FD208 /* CleanroomLogger.xcframework in Frameworks */,
 				843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -347,9 +356,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				76E5A00B27F88EB6000FD208 /* NMSSH.xcframework in Frameworks */,
-				76E5A00C27F88EB6000FD208 /* CleanroomLogger.xcframework in Frameworks */,
-				76E5A00D27F88EB6000FD208 /* CocoaAsyncSocket.xcframework in Frameworks */,
-				76E5A00E27F88EB6000FD208 /* Reachability.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -659,19 +665,7 @@
 				76E5A00927F88EB6000FD208 /* CocoaAsyncSocket.xcframework */,
 				76E5A00727F88EB6000FD208 /* NMSSH.xcframework */,
 				76E5A00A27F88EB6000FD208 /* Reachability.xcframework */,
-				76E59FBD27F84DCD000FD208 /* SwiftSH.xcframework */,
-				76E59FBB27F84C05000FD208 /* OpenSSL.xcframework */,
-				76E59FB727F8422C000FD208 /* Reachability.framework */,
-				76E59FB527F841A8000FD208 /* CocoaAsyncSocket.framework */,
-				76E59FAF27F83EF0000FD208 /* libcrypto.a */,
-				76E59FB027F83EF0000FD208 /* libssh2.a */,
-				76E59FB127F83EF0000FD208 /* libssl.a */,
-				76E59FA027F837FC000FD208 /* CleanroomLogger.framework */,
-				76E59F9C27F8351B000FD208 /* NMSSH.framework */,
-				76E59F9B27F8350B000FD208 /* NMSSH.framework.dSYM */,
-				84651A7A1E5CA69300D17601 /* OSXFUSE.framework */,
 				843E17881E26B56A001D0444 /* ServiceManagement.framework */,
-				849962271D574530002B893A /* CocoaAsyncSocket.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -705,6 +699,7 @@
 				843E178A1E26B613001D0444 /* Embed Login Items */,
 				84D071481EB9076F004D383A /* Embed XPC Services */,
 				84D071671EB91D2C004D383A /* Embed Helper Executables */,
+				76E5A03C27F8A10E000FD208 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
