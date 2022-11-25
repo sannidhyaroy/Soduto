@@ -32,6 +32,10 @@
 		76B5805F2930EF31003453FD /* CleanroomLogger.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */; };
 		76B580612930EF31003453FD /* NMSSH.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; };
 		76B580622930EF31003453FD /* Reachability.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805E2930EF31003453FD /* Reachability.xcframework */; };
+		76C80E3F29314B3B0023D0E3 /* CleanroomLogger.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		76C80E4029314BA50023D0E3 /* CocoaAsyncSocket.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		76C80E4129314BE30023D0E3 /* Reachability.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805E2930EF31003453FD /* Reachability.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		76C80E4229314BE80023D0E3 /* NMSSH.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		840538201ED62282003798AA /* WelcomeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8405381F1ED62282003798AA /* WelcomeWindowController.swift */; };
 		840FC2F91DEF6AF400AC4824 /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */; };
 		84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */; };
@@ -56,7 +60,7 @@
 		843B670A1DF2CEC400289EC9 /* DownloadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843B67091DF2CEC400289EC9 /* DownloadTask.swift */; };
 		843B670C1DF3087800289EC9 /* URL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843B670B1DF3087800289EC9 /* URL.swift */; };
 		843E170E1E25851D001D0444 /* IO.m in Sources */ = {isa = PBXBuildFile; fileRef = 843E170D1E25851D001D0444 /* IO.m */; };
-		843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 843E17881E26B56A001D0444 /* ServiceManagement.framework */; };
+		843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 843E17881E26B56A001D0444 /* ServiceManagement.framework */; settings = {ATTRIBUTES = (Required, ); }; };
 		8440FCF71E6CA68300E5BFA9 /* FileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8440FCF61E6CA68300E5BFA9 /* FileSystem.swift */; };
 		8440FD071E6CA6CA00E5BFA9 /* LocalFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8440FD061E6CA6CA00E5BFA9 /* LocalFileSystem.swift */; };
 		844AF28F1ED6185100422B7F /* DevicesList.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 844AF28E1ED6185100422B7F /* DevicesList.storyboard */; };
@@ -186,6 +190,10 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
+				76C80E4229314BE80023D0E3 /* NMSSH.xcframework in Embed Frameworks */,
+				76C80E4129314BE30023D0E3 /* Reachability.xcframework in Embed Frameworks */,
+				76C80E4029314BA50023D0E3 /* CocoaAsyncSocket.xcframework in Embed Frameworks */,
+				76C80E3F29314B3B0023D0E3 /* CleanroomLogger.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
