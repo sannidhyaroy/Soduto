@@ -18,24 +18,21 @@ brew install --cask soduto
 
 ## Building
 
-* Install [Homebrew](https://brew.sh/):
+* Clone this repo and update submodules
 
-    `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+  `git clone && git submodule update --init`
+
+* Install [Carthage](https://github.com/Carthage/Carthage#installing-carthage):
+
+    `brew install carthage`
     
-* Add Homebrew to your PATH in `~/.profile`:
+* Fetch and build frameworks using Carthage:
     
-    ```
-    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.profile
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-    ```
+    `carthage update --platform macOS --use-xcframeworks`
 
-* Install `libtool` and `automake` using Homebrew:
+* Compile universal openssl and libssh2 library using [iSSH2](https://github.com/Frugghi/iSSH2):
 
-    `brew install libtool automake`
-
-* Checkout Soduto repository with dependent submodules: 
-
-    `git clone --recurse-submodules https://github.com/soduto/Soduto.git Soduto`
+    `./build_lib.sh`
 
 * Open project `Soduto.xcodeproj` with XCode
 * Build target `Soduto`
