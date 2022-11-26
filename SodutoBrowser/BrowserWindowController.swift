@@ -312,7 +312,7 @@ class BrowserWindowController: NSWindowController {
     }
     
     fileprivate func fileItems(at indexPaths: Set<IndexPath>) -> [FileItem] {
-        return indexPaths.flatMap { return self.fileItem(at: $0) }
+        return indexPaths.compactMap { return self.fileItem(at: $0) }
     }
     
     fileprivate func indexPath(for url: URL) -> IndexPath? {
@@ -838,7 +838,7 @@ class BrowserWindowController: NSWindowController {
     }
     
     @IBAction func deleteSelectedFiles(_ sender: Any?) {
-        let fileItems: [FileItem] = self.collectionView.selectionIndexPaths.flatMap { fileItem(at: $0) }
+        let fileItems: [FileItem] = self.collectionView.selectionIndexPaths.compactMap { fileItem(at: $0) }
         deleteFiles(fileItems)
     }
     
@@ -991,7 +991,7 @@ extension BrowserWindowController: NSCollectionViewDelegate {
         
         let operations = copyFiles(fileItems, to: dropURL)
         
-        return operations.flatMap { return $0.destination?.lastPathComponent }
+        return operations.compactMap { return $0.destination?.lastPathComponent }
     }
     
     

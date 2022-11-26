@@ -76,7 +76,7 @@ protocol FileSystemDelegate: class {
 
 protocol FileSystem: class {
     
-    weak var delegate: FileSystemDelegate? { get set }
+    var delegate: FileSystemDelegate? { get set }
     
     var name: String { get }
     var rootUrl: URL { get }

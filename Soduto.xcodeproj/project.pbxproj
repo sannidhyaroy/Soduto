@@ -814,10 +814,9 @@
 			};
 			buildConfigurationList = 8433015B1D2D8CB8008934BB /* Build configuration list for PBXProject "Soduto" */;
 			compatibilityVersion = "Xcode 3.2";
-			developmentRegion = English;
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				English,
 				en,
 				Base,
 			);

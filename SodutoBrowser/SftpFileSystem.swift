@@ -92,13 +92,13 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
             do {
                 let rawContents = self.browseSession.sftp.contentsOfDirectory(atPath: url.path)
                 guard let contents = rawContents as? [NMSFTPFile] else { throw SftpError.invalidDirectoryContent(at: url) }
-                let fileItems = contents.flatMap { return FileItem(sftpFile: $0, parentUrl: url, user: self.browseSession.username ?? "") }
+                let fileItems = contents.compactMap { return FileItem(sftpFile: $0, parentUrl: url, user: self.browseSession.username ?? "") }
                 let freeSpace = self.browseSession.channel.freeSpace(at: url.path)
                 DispatchQueue.main.async { completionHandler(fileItems, freeSpace, nil) }
             }
             catch {
-                print("\(self.browseSession.lastError)")
-                print("\(self.browseSession.sftp.lastError)")
+                print("\(String(describing: self.browseSession.lastError))")
+                print("\(String(describing: self.browseSession.sftp.lastError))")
                 DispatchQueue.main.async { completionHandler(nil, nil, error) }
             }
         }
