@@ -94,7 +94,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     private func checkOneAppInstanceRunning() {
         let lockFileName = FileManager.default.compatTemporaryDirectory.appendingPathComponent(self.config.hostDeviceId).appendingPathExtension("lock").path
-        if !FileManager.default.fileExists(atPath: lockFileName) {
+        if !tryLock(lockFileName) {
             let alert = NSAlert()
             alert.addButton(withTitle: "OK")
             alert.informativeText = NSLocalizedString("Another instance of the app is already running. Exiting", comment: "")
