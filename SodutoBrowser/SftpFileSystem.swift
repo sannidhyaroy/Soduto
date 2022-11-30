@@ -413,7 +413,7 @@ extension FileItem {
         if name.hasPrefix(".") { flags.insert(.isHidden) }
         
         let fileType: String = flags.contains(.isDirectory) ? String(kUTTypeDirectory) : url.pathExtension
-        let icon = NSWorkspace.shared.icon(forFileType: fileType)
+        let icon = flags.contains(.isDirectory) ? NSImage(named: NSImage.Name.folder)! : NSWorkspace.shared.icon(forFileType: fileType)
         
         self.init(url: url, name: name, icon: icon, flags: flags)
     }

@@ -67,6 +67,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: FindMyPhoneService())
 //        self.serviceManager.add(service: RemoteKeyboardService())
         
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wakeUpListener(_:)), name: NSWorkspace.didWakeNotification, object: nil)
+        
         self.connectionProvider.start()
         
         showWelcomeWindow()
@@ -116,6 +118,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         controller.dismissHandler = { [weak self] _ in self?.welcomeWindowController = nil }
         controller.showWindow(nil)
         self.welcomeWindowController = controller
+    }
+    
+    // MARK: WakeUP Function
+    
+    @objc private func wakeUpListener(_ aNotification: Notification) {
+//        self.connectionProvider.stop()
+//        self.connectionProvider.start()
+        self.statusBarMenuController.refreshDeviceLists()
     }
     
 }

@@ -166,7 +166,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
 
         var rect = NSRect(x: 0, y: 0, width: 24, height: 13)
         let image = NSImage(size: CGSize(width: 56, height: 13), flipped: false) { _ in
-            let mainIcon = #imageLiteral(resourceName: "batteryStatusIcon")
+            let mainIcon = batteryStatus.isCharging ? #imageLiteral(resourceName: "batteryStatusChargingIconInverted") : (batteryStatus.isCritical ? #imageLiteral(resourceName: "batteryCriticalIcon") : #imageLiteral(resourceName: "batteryStatusIcon"))
             assert(mainIcon.size == rect.size)
             mainIcon.draw(in: rect)
 
@@ -176,29 +176,31 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             percentage.draw(in: NSRect(x: 26, y: 2, width: 28, height: 10), withAttributes: attr)
             
             let fullWidth: CGFloat = 16
-            let chargedWidth: CGFloat = fullWidth * CGFloat(batteryStatus.currentCharge) / 100.0
-            NSColor.black.set()
-            NSRect(x: 2, y: 2, width: chargedWidth, height: 8).fill()
-            
-            if batteryStatus.isCharging {
-                let chargingIcon = #imageLiteral(resourceName: "batteryStatusChargingIcon")
-                let mask = NSImage(size: chargingIcon.size, flipped: false) { [rect] _ in
-                    NSColor.white.setFill()
-                    rect.fill()
-                    chargingIcon.draw(in: rect)
-                    return true
-                }
-                if let context = NSGraphicsContext.current,
-                    let cgMask = mask.cgImage(forProposedRect: &rect, context: context, hints: nil),
-                    let cgMask2 = CGImage(maskWidth: cgMask.width, height: cgMask.height, bitsPerComponent: cgMask.bitsPerComponent, bitsPerPixel: cgMask.bitsPerPixel, bytesPerRow: cgMask.bytesPerRow, provider: cgMask.dataProvider!, decode: nil, shouldInterpolate: false) {
-                    
-                    chargingIcon.draw(in: rect, from: rect, operation: NSCompositingOperation.destinationOut, fraction: 1.0)
-                    
-                    context.cgContext.clip(to: rect, mask: cgMask2)
-                    NSColor.black.setFill()
-                    rect.fill()
-                }
+            if (!batteryStatus.isCharging && !batteryStatus.isCritical) {
+                let chargedWidth: CGFloat = fullWidth * CGFloat(batteryStatus.currentCharge) / 100.0
+                NSColor.black.set()
+                NSRect(x: 2, y: 2, width: chargedWidth, height: 8).fill()
             }
+            
+//            if batteryStatus.isCharging {
+//                let chargingIcon = #imageLiteral(resourceName: "batteryStatusChargingIcon")
+//                let mask = NSImage(size: chargingIcon.size, flipped: false) { [rect] _ in
+//                    NSColor.white.setFill()
+//                    rect.fill()
+//                    chargingIcon.draw(in: rect)
+//                    return true
+//                }
+//                if let context = NSGraphicsContext.current,
+//                    let cgMask = mask.cgImage(forProposedRect: &rect, context: context, hints: nil),
+//                    let cgMask2 = CGImage(maskWidth: cgMask.width, height: cgMask.height, bitsPerComponent: cgMask.bitsPerComponent, bitsPerPixel: cgMask.bitsPerPixel, bytesPerRow: cgMask.bytesPerRow, provider: cgMask.dataProvider!, decode: nil, shouldInterpolate: false) {
+//
+//                    chargingIcon.draw(in: rect, from: rect, operation: NSCompositingOperation.destinationOut, fraction: 1.0)
+//
+//                    context.cgContext.clip(to: rect, mask: cgMask2)
+//                    NSColor.black.setFill()
+//                    rect.fill()
+//                }
+//            }
             
             return true
         }
