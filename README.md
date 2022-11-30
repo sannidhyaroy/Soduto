@@ -1,8 +1,8 @@
-# Soduto
+# Soduto (forked repo)
 
 ## What is it?
 
-Soduto is a KDEConnect compatible application for macOS. It allows better integration between your phones, desktops and tablets. 
+Soduto is a KDEConnect compatible application for macOS. It allows better integration between your phones, desktops and tablets. Since Zorin Connect is based on GSConnect which is an implementation of KDE Connect, Soduto is also compatible with Zorin Connect application.
 For more information take a look at [soduto.com](https://www.soduto.com)
 
 ## Installation
