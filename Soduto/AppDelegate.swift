@@ -7,11 +7,14 @@
 //
 
 import Cocoa
+import Foundation
 import CleanroomLogger
+import UserNotifications
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
+    let un = UNUserNotificationCenter.current()
     @IBOutlet weak var statusBarMenuController: StatusBarMenuController!
     var welcomeWindowController: WelcomeWindowController?
 
@@ -66,8 +69,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: BatteryService())
         self.serviceManager.add(service: FindMyPhoneService())
 //        self.serviceManager.add(service: RemoteKeyboardService())
+        un.delegate = self
         
-        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wakeUpListener(_:)), name: NSWorkspace.didWakeNotification, object: nil)
+//        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wakeUpListener(_:)), name: NSWorkspace.didWakeNotification, object: nil)
         
         self.connectionProvider.start()
         
@@ -122,10 +126,59 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     // MARK: WakeUP Function
     
-    @objc private func wakeUpListener(_ aNotification: Notification) {
+//    @objc private func wakeUpListener(_ aNotification: Notification) {
 //        self.connectionProvider.stop()
 //        self.connectionProvider.start()
-        self.statusBarMenuController.refreshDeviceLists()
-    }
+//        self.statusBarMenuController.refreshDeviceLists()
+//
+//        // Function execution test
+//        if #available(macOS 11.0, *) {
+//            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
+//                if authorized {
+//                    print("Authorized to send notifications!")
+//                } else if !authorized {
+//                    print("Not authorized to send notifications")
+//                } else {
+//                    print(error?.localizedDescription as Any)
+//                }
+//            }
+//            un.getNotificationSettings { (settings) in
+//                if settings.authorizationStatus == .authorized {
+//                    let content = UNMutableNotificationContent()
+//
+//                    content.title = "Soduto"
+//                    content.subtitle = "Checking in"
+//                    content.body = "Soduto has received a Wake Up call from Finder!"
+//                    content.sound = UNNotificationSound.default()
+//
+//                    let id = "WakeUpNotification"
+//                    //                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+//                    let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
+//                    self.un.add(request){ (error) in
+//                        if error != nil {print(error?.localizedDescription as Any)}
+//                    }
+//                }
+//            }
+//        } else {
+//                    let wakeupnotification = NSUserNotification()
+//                    wakeupnotification.title = "Soduto"
+//                    wakeupnotification.subtitle = "Checking in"
+//                    wakeupnotification.informativeText = "Soduto has received a Wake Up call from Finder!"
+//                    wakeupnotification.contentImage = #imageLiteral(resourceName: "macOSIcon")
+//                    NSUserNotificationCenter.default.deliver(wakeupnotification)
+//
+//        }
+//    }
     
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        if #available(macOS 11.0, *) {
+            return completionHandler([.list, .sound])
+        } else {
+            // Fallback on earlier versions
+            print("UNNotification system not compatible with macOS Catalina or earlier! Use NSUserNotification instead!")
+        }
+    }
 }

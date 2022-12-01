@@ -273,10 +273,75 @@
                                         </customSpacing>
                                     </stackView>
                                     <stackView distribution="fill" orientation="horizontal" alignment="top" spacing="30" horizontalStackHuggingPriority="249.99998474121094" verticalStackHuggingPriority="249.99998474121094" detachesHiddenViews="YES" translatesAutoresizingMaskIntoConstraints="NO" id="CfD-FE-gne">
-                                        <rect key="frame" x="0.0" y="0.0" width="180" height="64"/>
+                                        <rect key="frame" x="0.0" y="0.0" width="390" height="64"/>
                                         <subviews>
-                                            <customView translatesAutoresizingMaskIntoConstraints="NO" id="Xtj-Lj-W1T" userLabel="KDE Connect - Android">
+                                            <customView translatesAutoresizingMaskIntoConstraints="NO" id="Cub-ES-b30" userLabel="KDE Connect - Android">
                                                 <rect key="frame" x="0.0" y="0.0" width="180" height="64"/>
+                                                <subviews>
+                                                    <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" horizontalCompressionResistancePriority="250" verticalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="tqw-3Y-9u4">
+                                                        <rect key="frame" x="0.0" y="0.0" width="64" height="64"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" secondItem="tqw-3Y-9u4" secondAttribute="height" multiplier="1:1" id="ztM-1X-RgB"/>
+                                                        </constraints>
+                                                        <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="kdeConnectIcon" id="aWH-Y3-4Ef"/>
+                                                    </imageView>
+                                                    <customView translatesAutoresizingMaskIntoConstraints="NO" id="EEA-rA-ZzD">
+                                                        <rect key="frame" x="72" y="0.0" width="108" height="64"/>
+                                                        <subviews>
+                                                            <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="tUO-dw-Hwe">
+                                                                <rect key="frame" x="-6" y="-7" width="95" height="27"/>
+                                                                <buttonCell key="cell" type="push" title="Visit website" bezelStyle="rounded" alignment="center" controlSize="small" borderStyle="border" inset="2" id="xsv-3B-lMK">
+                                                                    <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                                                                    <font key="font" metaFont="smallSystem"/>
+                                                                </buttonCell>
+                                                                <connections>
+                                                                    <action selector="goToKdeConnectAndroidWebsite:" target="cxx-fR-3E7" id="K87-K6-7P3"/>
+                                                                </connections>
+                                                            </button>
+                                                            <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="RiH-hO-WH2">
+                                                                <rect key="frame" x="-2" y="48" width="112" height="16"/>
+                                                                <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="KDE Connect" id="ect-hb-cW1">
+                                                                    <font key="font" metaFont="system"/>
+                                                                    <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                                                    <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                                                                </textFieldCell>
+                                                            </textField>
+                                                            <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2Me-Ym-ePE">
+                                                                <rect key="frame" x="-2" y="32" width="112" height="14"/>
+                                                                <textFieldCell key="cell" controlSize="small" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="for Android/iOS" id="7Ip-Xg-hce">
+                                                                    <font key="font" metaFont="smallSystem"/>
+                                                                    <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
+                                                                    <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                                                                </textFieldCell>
+                                                            </textField>
+                                                        </subviews>
+                                                        <constraints>
+                                                            <constraint firstAttribute="trailing" secondItem="2Me-Ym-ePE" secondAttribute="trailing" id="33J-1g-o8Y"/>
+                                                            <constraint firstAttribute="trailing" secondItem="RiH-hO-WH2" secondAttribute="trailing" id="BhW-9K-YnE"/>
+                                                            <constraint firstItem="RiH-hO-WH2" firstAttribute="leading" secondItem="EEA-rA-ZzD" secondAttribute="leading" id="Qif-AF-OMC"/>
+                                                            <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="tUO-dw-Hwe" secondAttribute="trailing" constant="20" symbolic="YES" id="UUY-nz-jDz"/>
+                                                            <constraint firstItem="RiH-hO-WH2" firstAttribute="top" secondItem="EEA-rA-ZzD" secondAttribute="top" id="fLh-yO-QLz"/>
+                                                            <constraint firstItem="tUO-dw-Hwe" firstAttribute="leading" secondItem="EEA-rA-ZzD" secondAttribute="leading" id="gtV-Sy-Aun"/>
+                                                            <constraint firstItem="2Me-Ym-ePE" firstAttribute="top" secondItem="RiH-hO-WH2" secondAttribute="bottom" constant="2" id="hGu-c8-1Nb"/>
+                                                            <constraint firstItem="2Me-Ym-ePE" firstAttribute="leading" secondItem="EEA-rA-ZzD" secondAttribute="leading" id="kEz-YB-wkS"/>
+                                                            <constraint firstAttribute="bottom" secondItem="tUO-dw-Hwe" secondAttribute="bottom" id="onX-7X-TrZ"/>
+                                                        </constraints>
+                                                    </customView>
+                                                </subviews>
+                                                <constraints>
+                                                    <constraint firstItem="tqw-3Y-9u4" firstAttribute="leading" secondItem="Cub-ES-b30" secondAttribute="leading" id="6WU-ZJ-90F"/>
+                                                    <constraint firstItem="tqw-3Y-9u4" firstAttribute="top" secondItem="Cub-ES-b30" secondAttribute="top" id="AXS-pM-jmC"/>
+                                                    <constraint firstAttribute="trailing" secondItem="EEA-rA-ZzD" secondAttribute="trailing" id="G7a-tm-CZM"/>
+                                                    <constraint firstAttribute="bottom" secondItem="tqw-3Y-9u4" secondAttribute="bottom" id="LNS-ws-vJb"/>
+                                                    <constraint firstAttribute="width" constant="180" id="XoO-Og-Vxj"/>
+                                                    <constraint firstAttribute="height" constant="64" id="aue-wT-csU"/>
+                                                    <constraint firstItem="EEA-rA-ZzD" firstAttribute="top" secondItem="Cub-ES-b30" secondAttribute="top" id="cdS-Db-Zxa"/>
+                                                    <constraint firstAttribute="bottom" secondItem="EEA-rA-ZzD" secondAttribute="bottom" id="gxf-mO-fHS"/>
+                                                    <constraint firstItem="EEA-rA-ZzD" firstAttribute="leading" secondItem="tqw-3Y-9u4" secondAttribute="trailing" constant="8" id="tjA-DX-tc3"/>
+                                                </constraints>
+                                            </customView>
+                                            <customView translatesAutoresizingMaskIntoConstraints="NO" id="Xtj-Lj-W1T" userLabel="Zorin Connect - Android">
+                                                <rect key="frame" x="210" y="0.0" width="180" height="64"/>
                                                 <subviews>
                                                     <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" horizontalCompressionResistancePriority="250" verticalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="mWP-ed-VT9">
                                                         <rect key="frame" x="0.0" y="0.0" width="64" height="64"/>
@@ -295,12 +360,12 @@
                                                                     <font key="font" metaFont="smallSystem"/>
                                                                 </buttonCell>
                                                                 <connections>
-                                                                    <action selector="goToKdeConnectAndroidWebsite:" target="cxx-fR-3E7" id="g4p-4p-bSD"/>
+                                                                    <action selector="goToZorinConnectAndroidWebsite:" target="cxx-fR-3E7" id="pFo-3F-zzK"/>
                                                                 </connections>
                                                             </button>
                                                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="SQr-GK-bF7">
                                                                 <rect key="frame" x="-2" y="48" width="112" height="16"/>
-                                                                <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="KDE Connect" id="81K-go-Xxc">
+                                                                <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Zorin Connect" id="81K-go-Xxc">
                                                                     <font key="font" metaFont="system"/>
                                                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                                                     <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
@@ -343,8 +408,10 @@
                                         </subviews>
                                         <visibilityPriorities>
                                             <integer value="1000"/>
+                                            <integer value="1000"/>
                                         </visibilityPriorities>
                                         <customSpacing>
+                                            <real value="3.4028234663852886e+38"/>
                                             <real value="3.4028234663852886e+38"/>
                                         </customSpacing>
                                     </stackView>
@@ -581,7 +648,8 @@ Don't worry if you couldn't setup all your devices right now — you can always 
         </scene>
     </scenes>
     <resources>
-        <image name="androidIcon" width="64" height="64"/>
+        <image name="androidIcon" width="512" height="512"/>
+        <image name="kdeConnectIcon" width="64" height="64"/>
         <image name="linuxIcon" width="64" height="64"/>
         <image name="macOSIcon" width="64" height="64"/>
         <image name="statusBarScreenshot" width="520" height="125"/>
