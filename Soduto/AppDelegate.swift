@@ -177,6 +177,11 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         if response.notification.request.content.categoryIdentifier == "IncomingCall" {
             userNotificationManager.handleMuteAction(for: response)
+        } else if response.notification.request.content.categoryIdentifier == "DownloadFinished" {
+            userNotificationManager.handleOpenDownloadedFileAction(for: response)
+        }
+        else {
+            print("Unknown notification category identifier action!")
         }
     }
     

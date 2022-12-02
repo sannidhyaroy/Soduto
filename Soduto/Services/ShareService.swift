@@ -9,6 +9,7 @@
 import Foundation
 import Cocoa
 import CleanroomLogger
+import UserNotifications
 
 /// Service providing capability to send end receive files, links, etc
 ///
@@ -23,6 +24,8 @@ import CleanroomLogger
 /// If the content transferred is a url, it can be sent in a field "url" (string).
 /// In that case, this plugin opens that url in the default browser.
 public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotificationActionHandler, NSDraggingDestination {
+    
+    let un = UNUserNotificationCenter.current()
     
     // MARK: Types
     
@@ -179,6 +182,13 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         NSWorkspace.shared.open(url)
     }
     
+    public static func handleOpenDownloadedFileAction(for notification: UNNotificationResponse, context: UserNotificationContext) {
+        guard let urlString = notification.notification.request.content.userInfo[NotificationProperty.downloadedFileUrl.rawValue] as? String else { return }
+        guard let url = URL(string: urlString) else { return }
+        
+        NSWorkspace.shared.open(url)
+    }
+    
     
     // MARK: NSDraggingDestination
     
@@ -298,6 +308,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             if let fileName = fileName {
                 let url = try URL(forDownloadedFile: fileName)
                 self.downloadFile(downloadTask: task, fileName: fileName, destUrl: url)
+                self.showDownloadStartNotification(fileName: fileName, downloadTask: task)
             }
             else {
 //                askFileLocation()
@@ -375,6 +386,58 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         throw ShareError.partFileRenameFailed
     }
     
+    private func showDownloadStartNotification(fileName: String?, downloadTask task: DownloadTask) {
+        assert((try? task.connection.identity?.getDeviceName()) != nil, "Download task expected to have assigned a connection with proper identity info")
+        
+        let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
+        let title = "Receiving file"
+        let info: String
+        info = deviceName != nil ? "Receiving File from device '\(deviceName!)'" : "Receiving File from an unknown device"
+        
+        if #available(macOS 11.0, *) {
+            un.getNotificationSettings { (settings) in
+                if settings.authorizationStatus == .authorized {
+                    let notification = UNMutableNotificationContent()
+                    let notificationId = "\(self.id).download.\(task.id)"
+                    notification.title = title
+                    notification.body = info
+                    notification.sound = UNNotificationSound.default()
+                    
+                    let notificationIconPath = Bundle.main.path(forResource: "AirDrop", ofType: ".png")
+                    if (notificationIconPath != nil) {
+                        let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
+                        do {
+                            let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
+                            notification.attachments = [attachment]
+                        }
+                        catch let error {
+                            print(error.localizedDescription)
+                        }
+                    }
+                    let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+                    self.un.add(request){ (error) in
+                        if error != nil {print(error?.localizedDescription as Any)}
+                    }
+                    let seconds = 5.0
+                    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+                        // Put your code which should be executed with a delay here
+                        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
+                    }
+                } else {
+                    Log.debug?.message("Soduto isn't authorized to send notifications!")
+                }
+            }
+        } else {
+            let notification = NSUserNotification(actionHandlerClass: ShareService.self)
+            notification.title = title
+            notification.informativeText = info
+            notification.soundName = NSUserNotificationDefaultSoundName
+            notification.hasActionButton = false
+            notification.identifier = "\(self.id).download.\(task.id)"
+            NSUserNotificationCenter.default.scheduleNotification(notification)
+            }
+    }
+    
     private func showDownloadFinishNotification(fileName: String?, downloadTask task: DownloadTask, succeeded: Bool, finalUrl: URL? = nil) {
         assert((try? task.connection.identity?.getDeviceName()) != nil, "Download task expected to have assigned a connection with proper identity info")
         
@@ -388,23 +451,69 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             info = deviceName != nil ? "File sent from device '\(deviceName!)'" : ""
         }
         
-        let notification = NSUserNotification(actionHandlerClass: ShareService.self)
-        if let url = finalUrl {
-            var userInfo = notification.userInfo
-            userInfo?[NotificationProperty.downloadedFileUrl.rawValue] = url.absoluteString as AnyObject
-            notification.userInfo = userInfo
-        }
-        notification.title = title
-        notification.informativeText = info
-        notification.soundName = NSUserNotificationDefaultSoundName
-        notification.hasActionButton = succeeded && finalUrl != nil
-        notification.actionButtonTitle = "Open"
-        notification.identifier = "\(self.id).download.\(task.id)"
-        NSUserNotificationCenter.default.scheduleNotification(notification)
-        
-        if !succeeded {
-            _ = Timer.compatScheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
-                NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+        if #available(macOS 11.0, *) {
+            un.getNotificationSettings { (settings) in
+                if settings.authorizationStatus == .authorized {
+                    let notification = UNMutableNotificationContent()
+                    let notificationId = "\(self.id).download.\(task.id)"
+                    if let url = finalUrl {
+                        var userInfo = notification.userInfo
+                        userInfo[NotificationProperty.downloadedFileUrl.rawValue] = url.absoluteString as AnyObject
+                        notification.userInfo = userInfo
+                    }
+                    notification.title = title
+                    notification.body = info
+                    notification.sound = UNNotificationSound.default()
+                    
+                    let notificationIconPath = Bundle.main.path(forResource: "AirDrop", ofType: ".png")
+                    if (notificationIconPath != nil) {
+                        let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
+                        do {
+                            let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
+                            notification.attachments = [attachment]
+                        }
+                        catch let error {
+                            print(error.localizedDescription)
+                        }
+                    }
+                    if (succeeded && finalUrl != nil) {
+                        notification.categoryIdentifier = "DownloadFinished"
+                        let openfile = UNNotificationAction(identifier: "openfile", title: "Open")
+                        let category = UNNotificationCategory(identifier: "DownloadFinished", actions: [openfile], intentIdentifiers: [], options: [])
+                        self.un.setNotificationCategories([category])
+                    }
+                    let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+                    self.un.add(request){ (error) in
+                        if error != nil {print(error?.localizedDescription as Any)}
+                    }
+                    let seconds = 5.0
+                    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+                        // Put your code which should be executed with a delay here
+                        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
+                    }
+                } else {
+                    Log.debug?.message("Soduto isn't authorized to send notifications!")
+                }
+            }
+        } else {
+            let notification = NSUserNotification(actionHandlerClass: ShareService.self)
+            if let url = finalUrl {
+                var userInfo = notification.userInfo
+                userInfo?[NotificationProperty.downloadedFileUrl.rawValue] = url.absoluteString as AnyObject
+                notification.userInfo = userInfo
+            }
+            notification.title = title
+            notification.informativeText = info
+            notification.soundName = NSUserNotificationDefaultSoundName
+            notification.hasActionButton = succeeded && finalUrl != nil
+            notification.actionButtonTitle = "Open"
+            notification.identifier = "\(self.id).download.\(task.id)"
+            NSUserNotificationCenter.default.scheduleNotification(notification)
+            
+            if !succeeded {
+                _ = Timer.compatScheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+                    NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+                }
             }
         }
     }

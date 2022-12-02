@@ -93,6 +93,12 @@ public class UserNotificationManager: NSObject, NSUserNotificationCenterDelegate
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
     }
     
+    public func handleOpenDownloadedFileAction(for notification: UNNotificationResponse) {
+        ShareService.handleOpenDownloadedFileAction(for: notification, context: self.context)
+        let id = notification.notification.request.identifier
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+    }
+    
     
     // MARK: Private methods
     
