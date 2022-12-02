@@ -173,6 +173,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
 }
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        if response.notification.request.content.categoryIdentifier == "IncomingCall" {
+            userNotificationManager.handleMuteAction(for: response)
+        }
+    }
+    
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         if #available(macOS 11.0, *) {
             return completionHandler([.list, .sound])

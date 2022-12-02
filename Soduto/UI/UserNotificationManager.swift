@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import UserNotifications
 
 public struct UserNotificationContext {
     
@@ -84,6 +85,12 @@ public class UserNotificationManager: NSObject, NSUserNotificationCenterDelegate
         else {
             self.monitorSlowNotification(notification)
         }
+    }
+    
+    public func handleMuteAction(for notification: UNNotificationResponse) {
+        TelephonyService.handleMuteAction(for: notification, context: self.context)
+        let id = notification.notification.request.identifier
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
     }
     
     

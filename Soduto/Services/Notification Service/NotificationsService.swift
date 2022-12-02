@@ -160,16 +160,9 @@ public class NotificationsService: Service, UserNotificationActionHandler {
             let isCancelable = try dataPacket.getClearableFlag()
             let dontPresent = isAnswer || isSilent
             
+            let notificationIconPath = Bundle.main.path(forResource: "\(appName)", ofType: ".png")
+            
             if #available(macOS 11.0, *){
-                un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                    if authorized {
-                        print("Authorized to send notifications!")
-                    } else if !authorized {
-                        print("Not authorized to send notifications")
-                    } else {
-                        print(error?.localizedDescription as Any)
-                    }
-                }
                 un.getNotificationSettings { (settings) in
                     if settings.authorizationStatus == .authorized {
                         let notification = UNMutableNotificationContent()
@@ -185,15 +178,15 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                             notification.sound = UNNotificationSound.default()
                         }
                         let id = notificationId
-                        
-                        let notificationIconPath = Bundle.main.path(forResource: "\(appName)", ofType: ".png")
-                        let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
-                        do {
-                            let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
-                            notification.attachments = [attachment]
-                        }
-                        catch let error {
-                            print(error.localizedDescription)
+                        if (notificationIconPath != nil) {
+                            let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
+                            do {
+                                let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
+                                notification.attachments = [attachment]
+                            }
+                            catch let error {
+                                print(error.localizedDescription)
+                            }
                         }
                         //let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
                         let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
@@ -201,6 +194,9 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                             if error != nil {print(error?.localizedDescription as Any)}
                         }
                     }
+                    else {
+                       Log.debug?.message("Soduto isn't authorized to send notifications!")
+                   }
                 }
             } else {
                 let notification = NSUserNotification.init(actionHandlerClass: type(of: self))
@@ -212,15 +208,18 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                 notification.userInfo = userInfo
                 notification.title = "\(appName) | \(device.name)"
                 notification.informativeText = ticker
+                if (notificationIconPath != nil) {
+                    notification.contentImage = NSImage(contentsOf: URL(fileURLWithPath: notificationIconPath!))
+                }
                 if !dontPresent {
                     notification.soundName = NSUserNotificationDefaultSoundName
                 }
                 notification.hasActionButton = false
                 notification.identifier = notificationId
                 NSUserNotificationCenter.default.scheduleNotification(notification)
+            }
                 
                 self.addNotificationId(notificationId, from: device)
-            }
         }
         catch {
             Log.error?.message("Error while showing notification: \(error)")
@@ -235,17 +234,22 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     }
     
     private func hideNotification(for id: NotificationId, from device: Device) {
-        for notification in NSUserNotificationCenter.default.deliveredNotifications {
-            if notification.identifier == id {
-                NSUserNotificationCenter.default.removeDeliveredNotification(notification)
-                break
+        if #available(macOS 11.0, *) {
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+//            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+        } else {
+            for notification in NSUserNotificationCenter.default.deliveredNotifications {
+                if notification.identifier == id {
+                    NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+                    break
+                }
             }
-        }
-        
-        for notification in NSUserNotificationCenter.default.scheduledNotifications {
-            if notification.identifier == id {
-                NSUserNotificationCenter.default.removeScheduledNotification(notification)
-                break
+            
+            for notification in NSUserNotificationCenter.default.scheduledNotifications {
+                if notification.identifier == id {
+                    NSUserNotificationCenter.default.removeScheduledNotification(notification)
+                    break
+                }
             }
         }
         

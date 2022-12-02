@@ -33,7 +33,7 @@ public class BatteryService: Service {
     public struct BatteryStatus {
         var currentCharge: Int
         var isCharging: Bool
-        var isCritical: Bool { return !isCharging && currentCharge <= 2 }
+        var isCritical: Bool { return !isCharging && currentCharge <= 10 }
     }
     
     public enum BatteryStatusError: Error {

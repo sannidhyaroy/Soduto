@@ -9,6 +9,7 @@
 import Foundation
 import Cocoa
 import CleanroomLogger
+import UserNotifications
 
 /// Show notifications for phone call or SMS events. Also allows to send SMS
 ///
@@ -26,6 +27,8 @@ import CleanroomLogger
 ///
 /// If the incoming package contains "isCancel" set to true, the package is ignored.
 public class TelephonyService: Service, UserNotificationActionHandler {
+    
+    let un = UNUserNotificationCenter.current()
     
     // MARK: Types
     
@@ -157,6 +160,14 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         }
     }
     
+    public static func handleMuteAction(for notification: UNNotificationResponse, context: UserNotificationContext) {
+        guard let userInfo = notification.notification.request.content.userInfo as [AnyHashable: Any]? else { return }
+        guard let deviceId = userInfo[NotificationProperty.deviceId.rawValue] as? String else { return }
+        guard let device = context.deviceManager.device(withId: deviceId) else { return }
+        guard device.pairingStatus == .Paired else { return }
+        device.send(DataPacket.mutePhonePacket())
+    }
+    
     
     // MARK: Private methods
     
@@ -189,21 +200,61 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             let contactName = try dataPacket.getContactName() ?? phoneNumber
             let thumbnail = (try? dataPacket.getPhoneThumbnail() ?? nil) ?? nil
             
-            let notification = NSUserNotification(actionHandlerClass: type(of: self))
-            var userInfo = notification.userInfo
-            userInfo?[NotificationProperty.deviceId.rawValue] = device.id as AnyObject
-            userInfo?[NotificationProperty.event.rawValue] = DataPacket.TelephonyEvent.ringing.rawValue as AnyObject
-            notification.userInfo = userInfo
-            notification.title = "Incoming call from \(contactName)"
-            notification.subtitle = device.name
-            notification.contentImage = thumbnail
-            notification.soundName = NSUserNotificationDefaultSoundName
-            notification.hasActionButton = true
-            notification.actionButtonTitle = "Mute call"
-            notification.identifier = notificationId
-            NSUserNotificationCenter.default.scheduleNotification(notification)
-            
-            Log.debug?.message("Ringing notification shown: \(String(describing: notification.identifier))")
+            if #available(macOS 11.0, *) {
+                un.getNotificationSettings { (settings) in
+                    if settings.authorizationStatus == .authorized {
+                        let notification = UNMutableNotificationContent()
+                        var userInfo = notification.userInfo
+                        userInfo[NotificationProperty.deviceId.rawValue] = device.id as AnyObject
+                        userInfo[NotificationProperty.event.rawValue] = DataPacket.TelephonyEvent.ringing.rawValue as AnyObject
+                        notification.userInfo = userInfo
+                        notification.title = "Incoming call from \(contactName)"
+                        notification.subtitle = device.name
+                        
+                        let notificationIconPath = Bundle.main.path(forResource: "Phone", ofType: ".png")
+                        if (notificationIconPath != nil) {
+                            let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
+                            do {
+                                let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
+                                notification.attachments = [attachment]
+                            }
+                            catch let error {
+                                print(error.localizedDescription)
+                            }
+                        }
+                        
+                        notification.sound = UNNotificationSound.default()
+                        notification.categoryIdentifier = "IncomingCall"
+                        let id = notificationId
+                        let mutecall = UNNotificationAction(identifier: "mutecall", title: "Mute call")
+                        let category = UNNotificationCategory(identifier: "IncomingCall", actions: [mutecall], intentIdentifiers: [], options: [])
+                        //let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+                        let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
+                        self.un.setNotificationCategories([category])
+                        self.un.add(request){ (error) in
+                            if error != nil {print(error?.localizedDescription as Any)}
+                        }
+                    } else {
+                        Log.debug?.message("Soduto isn't authorized to send notifications!")
+                    }
+                }
+            } else {
+                let notification = NSUserNotification(actionHandlerClass: type(of: self))
+                var userInfo = notification.userInfo
+                userInfo?[NotificationProperty.deviceId.rawValue] = device.id as AnyObject
+                userInfo?[NotificationProperty.event.rawValue] = DataPacket.TelephonyEvent.ringing.rawValue as AnyObject
+                notification.userInfo = userInfo
+                notification.title = "Incoming call from \(contactName)"
+                notification.subtitle = device.name
+                notification.contentImage = thumbnail
+                notification.soundName = NSUserNotificationDefaultSoundName
+                notification.hasActionButton = true
+                notification.actionButtonTitle = "Mute call"
+                notification.identifier = notificationId
+                NSUserNotificationCenter.default.scheduleNotification(notification)
+                
+                Log.debug?.message("Ringing notification shown: \(String(describing: notification.identifier))")
+            }
         }
         catch {
             Log.error?.message("Error while showing ringing notification: \(error)")
@@ -289,17 +340,22 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         
         guard let id = self.notificationId(for: dataPacket, from: device) else { return }
         
-        for notification in NSUserNotificationCenter.default.deliveredNotifications {
-            if notification.identifier == id {
-                NSUserNotificationCenter.default.removeDeliveredNotification(notification)
-                break
+        if #available(macOS 11.0, *) {
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+//            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+        } else {
+            for notification in NSUserNotificationCenter.default.deliveredNotifications {
+                if notification.identifier == id {
+                    NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+                    break
+                }
             }
-        }
-        
-        for notification in NSUserNotificationCenter.default.scheduledNotifications {
-            if notification.identifier == id {
-                NSUserNotificationCenter.default.removeScheduledNotification(notification)
-                break
+            
+            for notification in NSUserNotificationCenter.default.scheduledNotifications {
+                if notification.identifier == id {
+                    NSUserNotificationCenter.default.removeScheduledNotification(notification)
+                    break
+                }
             }
         }
         

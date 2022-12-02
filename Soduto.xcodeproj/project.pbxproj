@@ -36,6 +36,7 @@
 		312E77072938A93F00F29BFA /* Instagram.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FC2938A93F00F29BFA /* Instagram.png */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
 		312E77092938A93F00F29BFA /* Facebook.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FE2938A93F00F29BFA /* Facebook.png */; };
+		319CBA282939662400DAE301 /* Phone.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA272939662400DAE301 /* Phone.png */; };
 		761FBEF3293211C50034FD44 /* NMSSH.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF4293212030034FD44 /* CleanroomLogger.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -237,6 +238,7 @@
 		312E76FC2938A93F00F29BFA /* Instagram.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Instagram.png; sourceTree = "<group>"; };
 		312E76FD2938A93F00F29BFA /* Messages.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messages.png; sourceTree = "<group>"; };
 		312E76FE2938A93F00F29BFA /* Facebook.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Facebook.png; sourceTree = "<group>"; };
+		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		76B580552930EE1B003453FD /* libcrypto.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libcrypto.a; path = Libraries/lib/libcrypto.a; sourceTree = "<group>"; };
 		76B580562930EE1B003453FD /* libssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssl.a; path = Libraries/lib/libssl.a; sourceTree = "<group>"; };
 		76B580572930EE1B003453FD /* libssh2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssh2.a; path = Libraries/lib/libssh2.a; sourceTree = "<group>"; };
@@ -718,6 +720,7 @@
 				84651A751E5AEBE100D17601 /* SftpService.swift */,
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
 				847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */,
+				319CBA272939662400DAE301 /* Phone.png */,
 				312E770B2938AB7400F29BFA /* Notification Service */,
 			);
 			path = Services;
@@ -894,6 +897,7 @@
 				312E77032938A93F00F29BFA /* Discord.png in Resources */,
 				312E77052938A93F00F29BFA /* Twitter.png in Resources */,
 				023382B31F8D58AC00A832DD /* AboutWindow.storyboard in Resources */,
+				319CBA282939662400DAE301 /* Phone.png in Resources */,
 				312E77022938A93F00F29BFA /* Spike.png in Resources */,
 				843301691D2D8CB8008934BB /* MainMenu.xib in Resources */,
 				024B435F1F23BEEB00037A33 /* PreferencesWindow.storyboard in Resources */,
