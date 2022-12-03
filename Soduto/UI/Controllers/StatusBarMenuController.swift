@@ -8,6 +8,7 @@
 
 import Foundation
 import AppKit
+import ServiceManagement
 
 public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate, NSDraggingDestination {
     
@@ -34,7 +35,11 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         let statusBarIcon = #imageLiteral(resourceName: "statusBarIcon")
         statusBarIcon.isTemplate = true
         
-        self.statusBarItem.image = statusBarIcon
+        if #available(macOS 10.14, *) {
+            self.statusBarItem.button?.image = statusBarIcon
+        } else {
+            self.statusBarItem.image = statusBarIcon
+        }
         self.statusBarItem.menu = self.statusBarMenu
         
         let dragTypes: [NSPasteboard.PasteboardType] = [
@@ -118,7 +123,22 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         
         if menu == self.statusBarMenu {
             self.refreshMenuDeviceList()
-            self.launchOnLoginItem.state = (self.config?.launchOnLogin ?? false) ? NSControl.StateValue.on : NSControl.StateValue.off
+            if #available(macOS 13.0, *) {
+                let loginItem = SMAppService.loginItem(identifier: "com.soduto.SodutoLauncher")
+                switch (loginItem.status.rawValue) {
+                case 0:
+                    self.launchOnLoginItem.state = NSControl.StateValue.off
+                    break
+                case 1:
+                    self.launchOnLoginItem.state = NSControl.StateValue.on
+                    break
+                default:
+                    self.launchOnLoginItem.state = NSControl.StateValue.mixed
+                    break
+                }
+            } else {
+                self.launchOnLoginItem.state = (self.config?.launchOnLogin ?? false) ? NSControl.StateValue.on : NSControl.StateValue.off
+            }
         }
     }
     

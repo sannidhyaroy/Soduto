@@ -134,6 +134,39 @@ public class NotificationsService: Service, UserNotificationActionHandler {
         }
     }
     
+    //MARK: Custom Notification Push method
+    
+    public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
+        if #available(macOS 11.0, *) {
+            un.getNotificationSettings { (settings) in
+                if settings.authorizationStatus == .authorized {
+                    let notification = UNMutableNotificationContent()
+                    notification.title = title
+                    notification.body = body
+                    if sound {
+                        notification.sound = UNNotificationSound.default()
+                    }
+                    let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
+                    self.un.add(request){ (error) in
+                        if error != nil {print(error?.localizedDescription as Any)}
+                    }
+                }
+                else {
+                   Log.debug?.message("Soduto isn't authorized to send notifications!")
+               }
+            }
+        } else {
+            let notification = NSUserNotification()
+            notification.title = title
+            notification.informativeText = body
+            if sound {
+                notification.soundName = NSUserNotificationDefaultSoundName
+            }
+            notification.identifier = id
+            NSUserNotificationCenter.default.deliver(notification)
+        }
+    }
+    
     
     // MARK: Private methods
     

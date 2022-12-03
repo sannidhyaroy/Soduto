@@ -71,7 +71,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
 //        self.serviceManager.add(service: RemoteKeyboardService())
         un.delegate = self
         
-//        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wakeUpListener(_:)), name: NSWorkspace.didWakeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wakeUpListener(_:)), name: NSWorkspace.didWakeNotification, object: nil)
         
         self.connectionProvider.start()
         
@@ -126,12 +126,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     // MARK: WakeUP Function
     
-//    @objc private func wakeUpListener(_ aNotification: Notification) {
-//        self.connectionProvider.stop()
-//        self.connectionProvider.start()
-//        self.statusBarMenuController.refreshDeviceLists()
-//
-//        // Function execution test
+    @objc private func wakeUpListener(_ aNotification: Notification) {
+        self.connectionProvider.restart()
+        // Function execution test
 //        if #available(macOS 11.0, *) {
 //            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
 //                if authorized {
@@ -168,7 +165,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
 //                    NSUserNotificationCenter.default.deliver(wakeupnotification)
 //
 //        }
-//    }
+    }
     
 }
 
