@@ -7,21 +7,20 @@
 //
 
 import Cocoa
+import UserNotifications
+import UniformTypeIdentifiers
+
+let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
 
 class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     
-    //MARK: Service Properties
-    
-//    private var devices: [Device.Id:Device] = [:]
-//    private var validDevices: [Device] { return self.devices.values.filter { $0.isReachable && $0.pairingStatus == .Paired } }
-    
-    var nameArray = ["Pixel 6 Pro", "Asus Vivobook", "Sannidhya's iPad", "Satyajit's iPhone"]
+    let un = UNUserNotificationCenter.current()
+    var validDevices = sharedUserDefaults?.object(forKey: SharedUserDefaults.Keys.devicesToShow) as? [String] ?? ["Sample Device 1", "Sample Device 2", "Sample Device 3"]
     
     //MARK: - NSTableViewDataSource
     
     func numberOfRows(in tableView: NSTableView) -> Int {
-//        self.validDevices.count
-        nameArray.count
+        self.validDevices.count
     }
     
     //MARK: -NSTableViewDelegate
@@ -31,13 +30,11 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
             return nil
         }
         
-//        let rowString = "\(row)"
-        
         if tableColumn.identifier == .labelColumn,
-                  let cell = tableView.makeView(withIdentifier: .labelIdentifier, owner: self) as? ButtonLabelCell
+           let cell = tableView.makeView(withIdentifier: .labelIdentifier, owner: self) as? ButtonLabelCell
         {
             // Insert code for button column
-            cell.configure(nameArray[row])
+            cell.configure(self.validDevices[row], tag: row)
             return cell
         }
         else {
@@ -46,14 +43,14 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
     }
     
     //MARK: -NSViewController
-
+    
     override var nibName: NSNib.Name? {
         return NSNib.Name("ShareViewController")
     }
-
+    
     override func loadView() {
         super.loadView()
-    
+        
         // Insert code here to customize the view
         let item = self.extensionContext!.inputItems[0] as! NSExtensionItem
         if let attachments = item.attachments {
@@ -61,29 +58,86 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         } else {
             NSLog("No Attachments")
         }
-//        guard self.validDevices.count > 0 else { self.extensionContext!.cancelRequest(withError: NSError()) }
     }
-
-    @IBAction func send(_ sender: AnyObject?) {
-        let outputItem = NSExtensionItem()
-        // Complete implementation by setting the appropriate value on the output item
     
-        let outputItems = [outputItem]
-        self.extensionContext!.completeRequest(returningItems: outputItems, completionHandler: nil)
-}
-
+    @IBAction func send(_ sender: AnyObject?) {
+        var contentType: String
+        if let content = extensionContext!.inputItems[0] as? NSExtensionItem {
+            if #available(macOSApplicationExtension 11.0, *) {
+                contentType = UTType.url.identifier
+            } else {
+                // Fallback on earlier versions
+                contentType = kUTTypeURL as String
+            }
+            
+            if let contents = content.attachments {
+                let pressedBtnTag = sender?.tag
+                sharedUserDefaults?.set(pressedBtnTag, forKey: SharedUserDefaults.Keys.buttonTag)
+                // look for content files
+                for attachment in contents {
+                    if attachment.hasItemConformingToTypeIdentifier(contentType) {
+                        attachment.loadItem(forTypeIdentifier: contentType, options: nil, completionHandler: { (data, error) in
+                            if let url = URL(dataRepresentation: data as! Data, relativeTo: nil){
+                                sharedUserDefaults?.set(url, forKey: SharedUserDefaults.Keys.fileurl)
+                                self.uploadFile()
+                            }
+                        })
+                    } else {
+                        self.ShowCustomNotification(title: "Soduto Share", body: "Invalid content type selected to share", sound: true, id: "InvalidContent")
+                    }
+                }
+            }
+        }
+        // Complete implementation by setting the appropriate value on the output item
+        
+        self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+    }
+    
     @IBAction func cancel(_ sender: AnyObject?) {
         let cancelError = NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError, userInfo: nil)
         self.extensionContext!.cancelRequest(withError: cancelError)
     }
-
+    
+    private func uploadFile() {
+        let notificationName = CFNotificationName("com.Soduto.Share" as CFString)
+        let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
+        
+        CFNotificationCenterPostNotification(notificationCenter, notificationName, nil, nil, false)
+    }
+    
+    public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
+        if #available(macOS 11.0, *) {
+            un.getNotificationSettings { (settings) in
+                if settings.authorizationStatus == .authorized {
+                    let notification = UNMutableNotificationContent()
+                    notification.title = title
+                    notification.body = body
+                    if sound {
+                        notification.sound = UNNotificationSound.default
+                    }
+                    let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
+                    self.un.add(request){ (error) in
+                        if error != nil {print(error?.localizedDescription as Any)}
+                    }
+                }
+                else {
+                    print("Soduto isn't authorized to send notifications!")
+                }
+            }
+        } else {
+            let notification = NSUserNotification()
+            notification.title = title
+            notification.informativeText = body
+            if sound {
+                notification.soundName = NSUserNotificationDefaultSoundName
+            }
+            notification.identifier = id
+            NSUserNotificationCenter.default.deliver(notification)
+        }
+    }
 }
 
 extension NSUserInterfaceItemIdentifier {
     static let labelColumn = NSUserInterfaceItemIdentifier("LabelColumn")
-//    static let button = NSUserInterfaceItemIdentifier("Button")
     static let labelIdentifier = NSUserInterfaceItemIdentifier("LabelIdentifier")
-    
-//    static let buttonColumn = NSUserInterfaceItemIdentifier("ButtonColumn")
-//    static let buttonIdentifier = NSUserInterfaceItemIdentifier("ButtonIdentifier")
 }

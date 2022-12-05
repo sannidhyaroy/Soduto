@@ -36,12 +36,13 @@
 		312E77072938A93F00F29BFA /* Instagram.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FC2938A93F00F29BFA /* Instagram.png */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
 		312E77092938A93F00F29BFA /* Facebook.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FE2938A93F00F29BFA /* Facebook.png */; };
+		31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
+		31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		319CBA282939662400DAE301 /* Phone.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA272939662400DAE301 /* Phone.png */; };
 		319CBA2A2939F07D00DAE301 /* AirDrop.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA292939F07D00DAE301 /* AirDrop.png */; };
 		31F3A152293B5EA300550088 /* icon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 31F3A151293B5EA300550088 /* icon.icns */; };
 		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		31F3A164293B9AC600550088 /* ShareViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = 31F3A163293B9AC500550088 /* ShareViewController.xib */; };
-		31F3A168293BD98400550088 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareViewController.swift */; };
 		31F3A1AF293BDAF400550088 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareViewController.swift */; };
 		31F3A1B3293BDFBD00550088 /* Soduto Share.png in Resources */ = {isa = PBXBuildFile; fileRef = 31F3A1B5293BDFBD00550088 /* Soduto Share.png */; };
 		31F3A1B6293BE76900550088 /* ButtonLabelCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A165293BB1D400550088 /* ButtonLabelCell.swift */; };
@@ -265,6 +266,7 @@
 		312E76FC2938A93F00F29BFA /* Instagram.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Instagram.png; sourceTree = "<group>"; };
 		312E76FD2938A93F00F29BFA /* Messages.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messages.png; sourceTree = "<group>"; };
 		312E76FE2938A93F00F29BFA /* Facebook.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Facebook.png; sourceTree = "<group>"; };
+		31864DCE293C3CE100334902 /* SharedUserDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUserDefaults.swift; sourceTree = SOURCE_ROOT; };
 		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
 		31F3A14F293B5EA300550088 /* Soduto Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Soduto Share.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -575,6 +577,7 @@
 				8433016A1D2D8CB8008934BB /* Info.plist */,
 				84FA45E51DDDE87F00EF3992 /* AppDelegate.swift */,
 				8438A9251E45145F00922155 /* StatusBarApplication.swift */,
+				31864DCE293C3CE100334902 /* SharedUserDefaults.swift */,
 				843301651D2D8CB8008934BB /* Assets.xcassets */,
 				8456F4A41D7DE31A006EFE19 /* Core */,
 				849961B31D572664002B893A /* MyUtilities */,
@@ -1039,6 +1042,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				31F3A1AF293BDAF400550088 /* ShareViewController.swift in Sources */,
+				31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */,
 				31F3A1B6293BE76900550088 /* ButtonLabelCell.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1067,7 +1071,6 @@
 				84651A721E599A3C00D17601 /* BatteryService.swift in Sources */,
 				849237EC1DE5FC9600D95BBA /* PairingInterfaceController.swift in Sources */,
 				849961C31D57287F002B893A /* Test.m in Sources */,
-				31F3A168293BD98400550088 /* ShareViewController.swift in Sources */,
 				31F3A1B7293BEEB800550088 /* ButtonLabelCell.swift in Sources */,
 				849961C11D57287F002B893A /* CollectionUtils.m in Sources */,
 				84FA45D91DDDCB3D00EF3992 /* DataPacket.swift in Sources */,
@@ -1110,6 +1113,7 @@
 				84FA45E61DDDE87F00EF3992 /* AppDelegate.swift in Sources */,
 				84651A741E59F9C900D17601 /* MenuView.swift in Sources */,
 				84FA45ED1DDF525200EF3992 /* PingService.swift in Sources */,
+				31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

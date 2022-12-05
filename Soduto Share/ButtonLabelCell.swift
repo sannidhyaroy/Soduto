@@ -13,8 +13,8 @@ class ButtonLabelCell: NSTableCellView {
     @IBOutlet private weak var button: NSButton!
 //    @IBOutlet private weak var label: NSTextField!
     
-    func configure(_ string: String) {
+    func configure(_ string: String, tag: Int) {
         button.title = string
-//        label.stringValue = string
+        button.tag = tag
     }
 }

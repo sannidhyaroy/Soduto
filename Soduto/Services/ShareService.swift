@@ -27,6 +27,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     
     let un = UNUserNotificationCenter.current()
     let notificationIconPath = Bundle.main.path(forResource: "AirDrop", ofType: ".png")
+    let connectedDevices = AppDelegate.shared().validDevices
     
     // MARK: Types
     
@@ -289,6 +290,12 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         guard let dataPacket = self.dataPacket(forFileUrl: url) else { return }
         device.send(dataPacket)
         self.showUploadStartNotification(to: device)
+    }
+    public func shareFile(url: URL, to deviceNum: Int) {
+        guard let dataPacket = dataPacket(forFileUrl: url) else { return }
+        let selectedDevice: Device = self.connectedDevices[deviceNum]
+        selectedDevice.send(dataPacket)
+        self.showUploadStartNotification(to: selectedDevice)
     }
     
     private func downloadFile(_ fileName: String?, usingTask task: DownloadTask, from device: Device) {
