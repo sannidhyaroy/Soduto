@@ -16,5 +16,6 @@ struct SharedUserDefaults {
         static let uploadFile = ""
         static let fileurl = ""
         static let buttonTag = ""
+        static let kSandboxKey = ""
     }
 }

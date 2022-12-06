@@ -88,8 +88,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
                                         ) in
             
             guard let buttonTag = sharedUserDefaults?.integer(forKey: SharedUserDefaults.Keys.buttonTag) else { return }
-            guard let url = sharedUserDefaults?.url(forKey: SharedUserDefaults.Keys.fileurl) else { return }
-            ShareService().shareFile(url: url, to: buttonTag)
+            guard let data = sharedUserDefaults?.data(forKey: SharedUserDefaults.Keys.kSandboxKey) else { return }
+            do {
+                var isStale = false
+                let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
+                ShareService().shareFile(url: url!, to: buttonTag)
+            } catch {
+                NotificationsService().ShowCustomNotification(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
+            }
         },
                                         notificationName,
                                         nil,
@@ -133,6 +139,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             alert.runModal()
             NSApp.terminate(self)
         }
+    }
+    
+    private static var isInExtension: Bool
+    {
+        if Bundle.main.bundleIdentifier?.hasSuffix("Soduto-Share") ?? false {
+            return true
+        }
+        return false
     }
     
     private func showWelcomeWindow() {

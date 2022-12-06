@@ -14,8 +14,10 @@ let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
 
 class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     
+    @IBOutlet private weak var infoText: NSTextField!
+    @IBOutlet private weak var tableScroll: NSScrollView!
     let un = UNUserNotificationCenter.current()
-    var validDevices = sharedUserDefaults?.object(forKey: SharedUserDefaults.Keys.devicesToShow) as? [String] ?? ["Sample Device 1", "Sample Device 2", "Sample Device 3"]
+    var validDevices = sharedUserDefaults?.object(forKey: SharedUserDefaults.Keys.devicesToShow) as? [String] ?? []
     
     //MARK: - NSTableViewDataSource
     
@@ -52,6 +54,11 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         super.loadView()
         
         // Insert code here to customize the view
+        
+        if (self.validDevices.isEmpty) {
+            infoText.isHidden = false
+            tableScroll.isHidden = true
+        }
         let item = self.extensionContext!.inputItems[0] as! NSExtensionItem
         if let attachments = item.attachments {
             NSLog("Attachments = %@", attachments as NSArray)
@@ -77,8 +84,8 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
                 for attachment in contents {
                     if attachment.hasItemConformingToTypeIdentifier(contentType) {
                         attachment.loadItem(forTypeIdentifier: contentType, options: nil, completionHandler: { (data, error) in
-                            if let url = URL(dataRepresentation: data as! Data, relativeTo: nil){
-                                sharedUserDefaults?.set(url, forKey: SharedUserDefaults.Keys.fileurl)
+                            if let url = URL(dataRepresentation: data as! Data, relativeTo: nil) {
+                                self.saveBookmark(url: url)
                                 self.uploadFile()
                             }
                         })
@@ -103,6 +110,19 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
         
         CFNotificationCenterPostNotification(notificationCenter, notificationName, nil, nil, false)
+    }
+    
+    func saveBookmark(url: URL) {
+        do {
+            let bookmarkData = try url.bookmarkData(
+                options: .minimalBookmark,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            sharedUserDefaults?.set(bookmarkData, forKey: SharedUserDefaults.Keys.kSandboxKey)
+        } catch {
+            print("Failed to save bookmark data for \(url)", error)
+        }
     }
     
     public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
