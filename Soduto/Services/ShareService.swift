@@ -296,6 +296,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let selectedDevice: Device = self.connectedDevices[deviceNum]
         selectedDevice.send(dataPacket)
         self.showUploadStartNotification(to: selectedDevice)
+        AppDelegate.shared().updateValidDevices()
     }
     
     private func downloadFile(_ fileName: String?, usingTask task: DownloadTask, from device: Device) {

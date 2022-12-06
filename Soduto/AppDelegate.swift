@@ -77,29 +77,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.updateValidDevices()
         let notificationName = "com.Soduto.Share" as CFString
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
-        CFNotificationCenterAddObserver(notificationCenter,
-                                        nil,
-                                        { (
-                                            center: CFNotificationCenter?,
-                                            observer: UnsafeMutableRawPointer?,
-                                            name: CFNotificationName?,
-                                            object: UnsafeRawPointer?,
-                                            userInfo: CFDictionary?
-                                        ) in
-            
-            guard let buttonTag = sharedUserDefaults?.integer(forKey: SharedUserDefaults.Keys.buttonTag) else { return }
-            guard let data = sharedUserDefaults?.data(forKey: SharedUserDefaults.Keys.kSandboxKey) else { return }
-            do {
-                var isStale = false
-                let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-                ShareService().shareFile(url: url!, to: buttonTag)
-            } catch {
-                NotificationsService().ShowCustomNotification(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
-            }
-        },
-                                        notificationName,
-                                        nil,
-                                        CFNotificationSuspensionBehavior.deliverImmediately)
+        uploadObserver(notificationCenter, notificationName)
         
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wakeUpListener(_:)), name: NSWorkspace.didWakeNotification, object: nil)
         
@@ -172,7 +150,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     // MARK: Extension Support
     
-    private func updateValidDevices() {
+    public func updateValidDevices() {
         self.validDevices = deviceManager.pairedDevices
         validDeviceNames.removeAll(keepingCapacity: false)
         for device in self.validDevices {
@@ -183,6 +161,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     static func shared() -> AppDelegate {
         return NSApplication.shared.delegate as! AppDelegate
+    }
+    
+    fileprivate func uploadObserver(_ notificationCenter: CFNotificationCenter?, _ notificationName: CFString) {
+        CFNotificationCenterAddObserver(notificationCenter,
+                                        nil,
+                                        { (
+                                            center: CFNotificationCenter?,
+                                            observer: UnsafeMutableRawPointer?,
+                                            name: CFNotificationName?,
+                                            object: UnsafeRawPointer?,
+                                            userInfo: CFDictionary?
+                                        ) in
+            
+            guard let buttonTag = sharedUserDefaults?.integer(forKey: SharedUserDefaults.Keys.buttonTag) else { return }
+            guard let data = sharedUserDefaults?.data(forKey: SharedUserDefaults.Keys.kSandboxKey) else { return }
+            do {
+                var isStale = false
+                let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
+                ShareService().shareFile(url: url!, to: buttonTag)
+            } catch {
+                NotificationsService().ShowCustomNotification(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
+            }
+        },
+                                        notificationName,
+                                        nil,
+                                        CFNotificationSuspensionBehavior.deliverImmediately)
     }
 }
 
