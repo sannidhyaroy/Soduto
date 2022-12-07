@@ -43,7 +43,7 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
     private static var portsManagementLock = NSLock()
     private static var usedPorts: [UInt16] = []
     
-    private let connection: Connection
+    public let connection: Connection
     private let payload: InputStream
     private let payloadSize: Int64?
     private let delegateQueue: DispatchQueue

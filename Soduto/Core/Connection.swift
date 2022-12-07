@@ -351,6 +351,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     
     public func uploadTask(_ task: UploadTask, finishedWithSuccess payloadSent: Bool) {
         Log.debug?.message("uploadTask(<\(task)> finishedWithSuccess:<\(payloadSent)>)")
+        ShareService().showUploadFinishNotification(uploadTask: task, succeeded: payloadSent)
         
         assert(self.packetsSending.index(where: { $0.uploadTask === task }) != nil, "Data packet is not in the packetsSending list.")
         guard let index = self.packetsSending.index(where: { $0.uploadTask === task }) else { return }

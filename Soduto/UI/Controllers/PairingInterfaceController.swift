@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import UserNotifications
 
 public class PairingInterfaceController: UserNotificationActionHandler {
     
@@ -29,21 +30,49 @@ public class PairingInterfaceController: UserNotificationActionHandler {
     }
     
     public static func showPairingNotification(for device: Device) {
-        let notification = NSUserNotification(actionHandlerClass: PairingInterfaceController.self)
-        var userInfo = notification.userInfo
-        userInfo?[deviceIdProperty] = device.id
-        notification.userInfo = userInfo
-        notification.title = device.name
-        notification.informativeText = "Do you want to pair this device?"
-        notification.soundName = NSUserNotificationDefaultSoundName
-        notification.hasActionButton = true
-        notification.actionButtonTitle = "Pair"
-        notification.otherButtonTitle = "Decline"
-        notification.identifier = "com.soduto.pairinginterfacecontroller.device.\(device.id)"
-        NSUserNotificationCenter.default.scheduleNotification(notification)
-        
-        _ = Timer.compatScheduledTimer(withTimeInterval: DefaultPairingHandler.pairingTimoutInterval, repeats: false) { _ in
-            NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+        if #available(macOS 11.0, *) {
+            let un = UNUserNotificationCenter.current()
+            un.getNotificationSettings { (settings) in
+                if settings.authorizationStatus == .authorized {
+                    let notification = UNMutableNotificationContent()
+                    let notificationId = "com.soduto.pairinginterfacecontroller.device.\(device.id)"
+                    var userInfo = notification.userInfo
+                    userInfo[deviceIdProperty] = device.id
+                    notification.userInfo = userInfo
+                    notification.title = device.name
+                    notification.body = "Do you want to pair this device?"
+                    notification.sound = UNNotificationSound.default()
+                    notification.categoryIdentifier = "PairDevice"
+                    let pair = UNNotificationAction(identifier: "pair", title: "Pair")
+                    let decline = UNNotificationAction(identifier: "decline", title: "Decline")
+                    let category = UNNotificationCategory(identifier: "PairDevice", actions: [pair, decline], intentIdentifiers: [], options: [])
+                    let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+                    un.setNotificationCategories([category])
+                    un.add(request){ (error) in
+                        if error != nil {print(error?.localizedDescription as Any)}
+                    }
+                    _ = Timer.compatScheduledTimer(withTimeInterval: DefaultPairingHandler.pairingTimoutInterval, repeats: false) { _ in
+                        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
+                    }
+                }
+            }
+        } else {
+            let notification = NSUserNotification(actionHandlerClass: PairingInterfaceController.self)
+            var userInfo = notification.userInfo
+            userInfo?[deviceIdProperty] = device.id
+            notification.userInfo = userInfo
+            notification.title = device.name
+            notification.informativeText = "Do you want to pair this device?"
+            notification.soundName = NSUserNotificationDefaultSoundName
+            notification.hasActionButton = true
+            notification.actionButtonTitle = "Pair"
+            notification.otherButtonTitle = "Decline"
+            notification.identifier = "com.soduto.pairinginterfacecontroller.device.\(device.id)"
+            NSUserNotificationCenter.default.scheduleNotification(notification)
+            
+            _ = Timer.compatScheduledTimer(withTimeInterval: DefaultPairingHandler.pairingTimoutInterval, repeats: false) { _ in
+                NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+            }
         }
     }
     
