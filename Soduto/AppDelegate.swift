@@ -176,6 +176,17 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             userNotificationManager.handleMuteAction(for: response)
         } else if response.notification.request.content.categoryIdentifier == "DownloadFinished" {
             userNotificationManager.handleOpenDownloadedFileAction(for: response)
+        } else if response.notification.request.content.categoryIdentifier == "PairDevice" {
+            switch response.actionIdentifier {
+            case "pair":
+                userNotificationManager.handlePairAction(for: response, self.deviceManager)
+                break
+            case "decline":
+                userNotificationManager.handleDeclineAction(for: response, self.deviceManager)
+                break
+            default:
+                break
+            }
         }
         else {
             print("Unknown notification category identifier action!")
