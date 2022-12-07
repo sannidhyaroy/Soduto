@@ -485,6 +485,61 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             }
     }
     
+    public func showUploadFinishNotification(uploadTask task: UploadTask, succeeded: Bool) {
+        assert((try? task.connection.identity?.getDeviceName()) != nil, "Upload task expected to have assigned a connection with proper identity info")
+        
+        let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
+        let title = succeeded ? "File sent" : "File transfer failed"
+        let info = deviceName != nil ? "File sent to '\(deviceName!)'" : " File sent to an unknown device"
+        let notificationId = "\(self.id).upload.\(deviceName!)"
+        
+        if #available(macOS 11.0, *) {
+            un.getNotificationSettings { (settings) in
+                if settings.authorizationStatus == .authorized {
+                    let notification = UNMutableNotificationContent()
+                    notification.title = title
+                    notification.body = info
+                    notification.sound = UNNotificationSound.default()
+                    if (self.notificationIconPath != nil) {
+                        let notificationIconURL = URL(fileURLWithPath: self.notificationIconPath!)
+                        do {
+                            let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
+                            notification.attachments = [attachment]
+                        }
+                        catch let error {
+                            print(error.localizedDescription)
+                        }
+                    }
+                    let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+                    self.un.add(request){ (error) in
+                        if error != nil {print(error?.localizedDescription as Any)}
+                    }
+                    let seconds = 5.0
+                    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+                        // Put your code which should be executed with a delay here
+                        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
+                    }
+                } else {
+                    Log.debug?.message("Soduto isn't authorized to push notifications!")
+                }
+            }
+        } else {
+            let notification = NSUserNotification(actionHandlerClass: ShareService.self)
+            notification.title = title
+            notification.informativeText = info
+            notification.soundName = NSUserNotificationDefaultSoundName
+            notification.hasActionButton = false
+            notification.identifier = notificationId
+            NSUserNotificationCenter.default.scheduleNotification(notification)
+            
+            if !succeeded {
+                _ = Timer.compatScheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+                    NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+                }
+            }
+        }
+    }
+    
     private func showDownloadFinishNotification(fileName: String?, downloadTask task: DownloadTask, succeeded: Bool, finalUrl: URL? = nil) {
         assert((try? task.connection.identity?.getDeviceName()) != nil, "Download task expected to have assigned a connection with proper identity info")
         
@@ -492,10 +547,10 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let title = succeeded ? "File received" : "File transfer failed"
         let info: String
         if let fileName = finalUrl?.lastPathComponent ?? fileName {
-            info = deviceName != nil ? "Received '\(fileName)' from '\(deviceName!)'" : "Received file: '\(fileName)'"
+            info = deviceName != nil ? "Received '\(fileName)' from '\(deviceName!)'" : "Received '\(fileName)' from an unknown device"
         }
         else {
-            info = deviceName != nil ? "File received from '\(deviceName!)'" : ""
+            info = deviceName != nil ? "File received from '\(deviceName!)'" : "File received from an unknown device"
         }
         let notificationId = "\(self.id).download.\(task.id)"
         

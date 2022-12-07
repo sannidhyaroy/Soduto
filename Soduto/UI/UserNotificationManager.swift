@@ -97,26 +97,32 @@ public class UserNotificationManager: NSObject, NSUserNotificationCenterDelegate
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
     }
     
+    public func handleReplySMSAction(for notification: UNNotificationResponse) {
+        TelephonyService.handleReplySMSAction(for: notification, context: self.context)
+        let id = notification.notification.request.identifier
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+    }
+    
     public func handleOpenDownloadedFileAction(for notification: UNNotificationResponse) {
         ShareService.handleOpenDownloadedFileAction(for: notification, context: self.context)
         let id = notification.notification.request.identifier
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
     }
     
-    public func handlePairAction(for notification: UNNotificationResponse, _ deviceManager: DeviceManager) {
+    public func handlePairAction(for notification: UNNotificationResponse) {
         guard let deviceId = notification.notification.request.content.userInfo[UserNotificationManager.deviceIdProperty] as? Device.Id else {
             fatalError("User info with device id property expected to be provided for pairing notification")
         }
-        deviceManager.device(withId: deviceId)?.acceptPairing()
+        self.context.deviceManager.device(withId: deviceId)?.acceptPairing()
         let id = notification.notification.request.identifier
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
     }
     
-    public func handleDeclineAction(for notification: UNNotificationResponse, _ deviceManager: DeviceManager) {
+    public func handleDeclineAction(for notification: UNNotificationResponse) {
         guard let deviceId = notification.notification.request.content.userInfo[UserNotificationManager.deviceIdProperty] as? Device.Id else {
             fatalError("User info with device id property expected to be provided for pairing notification")
         }
-        deviceManager.device(withId: deviceId)?.declinePairing()
+        self.context.deviceManager.device(withId: deviceId)?.declinePairing()
         let id = notification.notification.request.identifier
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
     }

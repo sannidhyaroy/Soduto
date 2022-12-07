@@ -179,14 +179,16 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         } else if response.notification.request.content.categoryIdentifier == "PairDevice" {
             switch response.actionIdentifier {
             case "pair":
-                userNotificationManager.handlePairAction(for: response, self.deviceManager)
+                userNotificationManager.handlePairAction(for: response)
                 break
             case "decline":
-                userNotificationManager.handleDeclineAction(for: response, self.deviceManager)
+                userNotificationManager.handleDeclineAction(for: response)
                 break
             default:
                 break
             }
+        } else if response.notification.request.content.categoryIdentifier == "SMSReceived" {
+            userNotificationManager.handleReplySMSAction(for: response)
         }
         else {
             print("Unknown notification category identifier action!")
