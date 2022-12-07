@@ -11,14 +11,10 @@ import Foundation
 import CleanroomLogger
 import UserNotifications
 
-let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
-
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     let un = UNUserNotificationCenter.current()
-    var validDevices: [Device] = []
-    var validDeviceNames = [String]()
     @IBOutlet weak var statusBarMenuController: StatusBarMenuController!
     var welcomeWindowController: WelcomeWindowController?
 
@@ -74,10 +70,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: FindMyPhoneService())
 //        self.serviceManager.add(service: RemoteKeyboardService())
         un.delegate = self
-        self.updateValidDevices()
-        let notificationName = "com.Soduto.Share" as CFString
-        let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
-        uploadObserver(notificationCenter, notificationName)
         
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wakeUpListener(_:)), name: NSWorkspace.didWakeNotification, object: nil)
         
@@ -96,7 +88,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     func deviceManager(_ manager: DeviceManager, didChangeDeviceState device: Device) {
         self.statusBarMenuController.refreshDeviceLists()
         self.welcomeWindowController?.refreshDeviceLists()
-        self.updateValidDevices()
     }
     
     func deviceManager(_ manager: DeviceManager, didReceivePairingRequest request: PairingRequest, forDevice device: Device) {
@@ -111,20 +102,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         let lockFileName = FileManager.default.compatTemporaryDirectory.appendingPathComponent(self.config.hostDeviceId).appendingPathExtension("lock").path
         if !tryLock(lockFileName) {
             let alert = NSAlert()
-            alert.addButton(withTitle: "Quit Soduto")
-            alert.informativeText = NSLocalizedString("Another instance of the app is already running!", comment: "")
+            alert.addButton(withTitle: "OK")
+            alert.informativeText = NSLocalizedString("Another instance of the app is already running. Exiting", comment: "")
             alert.messageText = Bundle.main.bundleIdentifier?.components(separatedBy: ".").last ?? ""
             alert.runModal()
             NSApp.terminate(self)
         }
-    }
-    
-    private static var isInExtension: Bool
-    {
-        if Bundle.main.bundleIdentifier?.hasSuffix("Soduto-Share") ?? false {
-            return true
-        }
-        return false
     }
     
     private func showWelcomeWindow() {
@@ -145,49 +128,45 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     @objc private func wakeUpListener(_ aNotification: Notification) {
         self.connectionProvider.restart()
-        self.updateValidDevices()
+        // Function execution test
+//        if #available(macOS 11.0, *) {
+//            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
+//                if authorized {
+//                    print("Authorized to send notifications!")
+//                } else if !authorized {
+//                    print("Not authorized to send notifications")
+//                } else {
+//                    print(error?.localizedDescription as Any)
+//                }
+//            }
+//            un.getNotificationSettings { (settings) in
+//                if settings.authorizationStatus == .authorized {
+//                    let content = UNMutableNotificationContent()
+//
+//                    content.title = "Soduto"
+//                    content.subtitle = "Checking in"
+//                    content.body = "Soduto has received a Wake Up call from Finder!"
+//                    content.sound = UNNotificationSound.default()
+//
+//                    let id = "WakeUpNotification"
+//                    //                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+//                    let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
+//                    self.un.add(request){ (error) in
+//                        if error != nil {print(error?.localizedDescription as Any)}
+//                    }
+//                }
+//            }
+//        } else {
+//                    let wakeupnotification = NSUserNotification()
+//                    wakeupnotification.title = "Soduto"
+//                    wakeupnotification.subtitle = "Checking in"
+//                    wakeupnotification.informativeText = "Soduto has received a Wake Up call from Finder!"
+//                    wakeupnotification.contentImage = #imageLiteral(resourceName: "macOSIcon")
+//                    NSUserNotificationCenter.default.deliver(wakeupnotification)
+//
+//        }
     }
     
-    // MARK: Extension Support
-    
-    public func updateValidDevices() {
-        self.validDevices = deviceManager.pairedDevices
-        validDeviceNames.removeAll(keepingCapacity: false)
-        for device in self.validDevices {
-            self.validDeviceNames.append(device.name)
-        }
-        sharedUserDefaults?.set(self.validDeviceNames, forKey: SharedUserDefaults.Keys.devicesToShow)
-    }
-    
-    static func shared() -> AppDelegate {
-        return NSApplication.shared.delegate as! AppDelegate
-    }
-    
-    fileprivate func uploadObserver(_ notificationCenter: CFNotificationCenter?, _ notificationName: CFString) {
-        CFNotificationCenterAddObserver(notificationCenter,
-                                        nil,
-                                        { (
-                                            center: CFNotificationCenter?,
-                                            observer: UnsafeMutableRawPointer?,
-                                            name: CFNotificationName?,
-                                            object: UnsafeRawPointer?,
-                                            userInfo: CFDictionary?
-                                        ) in
-            
-            guard let buttonTag = sharedUserDefaults?.integer(forKey: SharedUserDefaults.Keys.buttonTag) else { return }
-            guard let data = sharedUserDefaults?.data(forKey: SharedUserDefaults.Keys.kSandboxKey) else { return }
-            do {
-                var isStale = false
-                let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-                ShareService().shareFile(url: url!, to: buttonTag)
-            } catch {
-                NotificationsService().ShowCustomNotification(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
-            }
-        },
-                                        notificationName,
-                                        nil,
-                                        CFNotificationSuspensionBehavior.deliverImmediately)
-    }
 }
 
 extension AppDelegate: UNUserNotificationCenterDelegate {

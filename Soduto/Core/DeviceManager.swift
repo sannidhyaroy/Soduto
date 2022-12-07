@@ -18,7 +18,6 @@ public protocol DeviceManagerDelegate: class {
 public protocol DeviceDataSource: class {
     var unpairedDevices: [Device] { get }
     var pairedDevices: [Device] { get }
-    var pairedRechableDevices: [Device] { get }
     var unavailableDevices: [Device] { get }
 }
 
@@ -49,11 +48,6 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     
     public var pairedDevices: [Device] {
         let filtered = self.devices.filter { $0.value.pairingStatus == PairingStatus.Paired }
-        return filtered.map { $0.value }
-    }
-    
-    public var pairedRechableDevices: [Device] {
-        let filtered = self.devices.filter { $0.value.isReachable && $0.value.pairingStatus == PairingStatus.Paired }
         return filtered.map { $0.value }
     }
     
