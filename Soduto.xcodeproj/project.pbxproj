@@ -36,6 +36,7 @@
 		312E77072938A93F00F29BFA /* Instagram.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FC2938A93F00F29BFA /* Instagram.png */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
 		312E77092938A93F00F29BFA /* Facebook.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FE2938A93F00F29BFA /* Facebook.png */; };
+		3144827D2940AF3200CCA098 /* Message.png in Resources */ = {isa = PBXBuildFile; fileRef = 3144827C2940AF3200CCA098 /* Message.png */; };
 		31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		319CBA282939662400DAE301 /* Phone.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA272939662400DAE301 /* Phone.png */; };
@@ -266,6 +267,7 @@
 		312E76FC2938A93F00F29BFA /* Instagram.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Instagram.png; sourceTree = "<group>"; };
 		312E76FD2938A93F00F29BFA /* Messages.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messages.png; sourceTree = "<group>"; };
 		312E76FE2938A93F00F29BFA /* Facebook.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Facebook.png; sourceTree = "<group>"; };
+		3144827C2940AF3200CCA098 /* Message.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Message.png; sourceTree = "<group>"; };
 		31864DCE293C3CE100334902 /* SharedUserDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUserDefaults.swift; sourceTree = SOURCE_ROOT; };
 		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
@@ -783,6 +785,7 @@
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
 				847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */,
 				319CBA272939662400DAE301 /* Phone.png */,
+				3144827C2940AF3200CCA098 /* Message.png */,
 				319CBA292939F07D00DAE301 /* AirDrop.png */,
 				312E770B2938AB7400F29BFA /* Notification Service */,
 			);
@@ -991,6 +994,7 @@
 				312E77012938A93F00F29BFA /* Messenger.png in Resources */,
 				8461F35C1EC0FBC500E99C17 /* LoadingView.xib in Resources */,
 				843301661D2D8CB8008934BB /* Assets.xcassets in Resources */,
+				3144827D2940AF3200CCA098 /* Message.png in Resources */,
 				312E77032938A93F00F29BFA /* Discord.png in Resources */,
 				312E77052938A93F00F29BFA /* Twitter.png in Resources */,
 				023382B31F8D58AC00A832DD /* AboutWindow.storyboard in Resources */,

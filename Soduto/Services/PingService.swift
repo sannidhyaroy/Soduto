@@ -134,6 +134,9 @@ public class PingService: Service {
                     self.un.add(pingrequest){ (error) in
                         if error != nil {print(error?.localizedDescription as Any)}
                     }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
+                        self.un.removeDeliveredNotifications(withIdentifiers: [id])
+                    }
                 }
             }
         } else {
