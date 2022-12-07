@@ -3,3 +3,4 @@ xcuserdata
 Carthage
 Libraries
 Cartfile.resolved
+Builds/*
