@@ -35,6 +35,12 @@ brew install --cask soduto
     `./build_lib.sh`
 
 * Open project `Soduto.xcodeproj` with XCode
+* Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `App Groups` section, copy the `App Group key`.
+* Open the `SharedUserDefaults.swift` file & paste the key in the `suiteName` variable.
+
+    `static let suiteName = "<your key here>"`
+
+* Make sure you have the same `App Group key` for `Soduto Share`.
 * Build target `Soduto`
 
 ## Debugging
