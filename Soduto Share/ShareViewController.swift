@@ -17,6 +17,7 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
     @IBOutlet private weak var infoText: NSTextField!
     @IBOutlet private weak var tableScroll: NSScrollView!
     let un = UNUserNotificationCenter.current()
+    var touchButtonTag = 0
     var validDevices = sharedUserDefaults?.object(forKey: SharedUserDefaults.Keys.devicesToShow) as? [String] ?? []
     
     //MARK: - NSTableViewDataSource
@@ -46,24 +47,31 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
     
     //MARK: -NSTouchBar
     
-    @available(OSX 10.12.1, *)
+    @available(macOS 10.12.1, *)
     override func makeTouchBar() -> NSTouchBar? {
         
         let touchBarIdenitifier = NSTouchBar.CustomizationIdentifier("com.Soduto.TouchBar")
-        let touchBarButtonIdentifier = NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.button")
-        
+        let touchBarButtonIdentifier = NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.cancelButton")
+        var touchBarAllowedIdentifiers = [touchBarButtonIdentifier]
+        if !(self.validDevices.isEmpty) {
+            var i = 0
+            for _ in validDevices {
+                touchBarAllowedIdentifiers.append(NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.device" + String(i)))
+                i += 1
+            }
+        }
         let touchBar = NSTouchBar()
         touchBar.delegate = self
         touchBar.customizationIdentifier = touchBarIdenitifier
-        touchBar.defaultItemIdentifiers = [touchBarButtonIdentifier, .fixedSpaceLarge, .otherItemsProxy]
-        touchBar.customizationAllowedItemIdentifiers = [touchBarButtonIdentifier]
+        touchBar.defaultItemIdentifiers = touchBarAllowedIdentifiers
+        touchBar.customizationAllowedItemIdentifiers = touchBarAllowedIdentifiers
         
         return touchBar
     }
     
-    @available(OSX 10.12.1, *)
+    @available(macOS 10.12.1, *)
     func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
-        if identifier.rawValue == "com.Soduto.TouchBar.button" {
+        if identifier.rawValue == "com.Soduto.TouchBar.cancelButton" {
             let cancel = NSCustomTouchBarItem(identifier: identifier)
             cancel.customizationLabel = "Cancel"
             if #available(macOSApplicationExtension 11.0, *) {
@@ -76,9 +84,19 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
                 return cancel
             }
         }
+        if !(self.validDevices.isEmpty) {
+            let button = NSCustomTouchBarItem(identifier: identifier)
+            button.customizationLabel = self.validDevices[self.touchButtonTag]
+            let label = NSButton.init(title: self.validDevices[self.touchButtonTag], target: self, action: #selector(self.send(_:)))
+            label.tag = self.touchButtonTag
+            button.view = label
+            self.touchButtonTag += 1
+            return button
+        }
         return nil
     }
     
+    @available(macOS 10.12.1, *)
     deinit {
         self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar)))
     }
@@ -171,6 +189,8 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
             print("Failed to save bookmark data for \(url)", error)
         }
     }
+    
+    // MARK: Notification System
     
     public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
         if #available(macOS 11.0, *) {
