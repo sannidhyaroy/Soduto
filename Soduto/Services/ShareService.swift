@@ -292,10 +292,14 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         self.showUploadStartNotification(to: device)
     }
     public func shareFile(url: URL, to deviceNum: Int) {
-        guard let dataPacket = dataPacket(forFileUrl: url) else { return }
+        var dataPacket = self.dataPacket(forFileUrl: url)
         let selectedDevice: Device = self.connectedDevices[deviceNum]
-        selectedDevice.send(dataPacket)
-        self.showUploadStartNotification(to: selectedDevice)
+        if dataPacket == nil {
+            dataPacket = self.dataPacket(forUrl: url)
+        } else {
+            self.showUploadStartNotification(to: selectedDevice)
+        }
+        selectedDevice.send(dataPacket!)
         AppDelegate.shared().updateValidDevices()
     }
     
