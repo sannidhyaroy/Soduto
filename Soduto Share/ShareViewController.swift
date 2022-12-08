@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 
 let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
 
-class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSTouchBarDelegate {
     
     @IBOutlet private weak var infoText: NSTextField!
     @IBOutlet private weak var tableScroll: NSScrollView!
@@ -44,6 +44,45 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         }
     }
     
+    //MARK: -NSTouchBar
+    
+    @available(OSX 10.12.1, *)
+    override func makeTouchBar() -> NSTouchBar? {
+        
+        let touchBarIdenitifier = NSTouchBar.CustomizationIdentifier("com.Soduto.TouchBar")
+        let touchBarButtonIdentifier = NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.button")
+        
+        let touchBar = NSTouchBar()
+        touchBar.delegate = self
+        touchBar.customizationIdentifier = touchBarIdenitifier
+        touchBar.defaultItemIdentifiers = [touchBarButtonIdentifier, .fixedSpaceLarge, .otherItemsProxy]
+        touchBar.customizationAllowedItemIdentifiers = [touchBarButtonIdentifier]
+        
+        return touchBar
+    }
+    
+    @available(OSX 10.12.1, *)
+    func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
+        if identifier.rawValue == "com.Soduto.TouchBar.button" {
+            let cancel = NSCustomTouchBarItem(identifier: identifier)
+            cancel.customizationLabel = "Cancel"
+            if #available(macOSApplicationExtension 11.0, *) {
+                let label = NSButton.init(title: "Cancel", image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)!, target: self, action: #selector(self.cancel(_:)))
+                cancel.view = label
+                return cancel
+            } else {
+                let label = NSButton.init(title: "Cancel", target: self, action: #selector(self.cancel(_:)))
+                cancel.view = label
+                return cancel
+            }
+        }
+        return nil
+    }
+    
+    deinit {
+        self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar)))
+    }
+    
     //MARK: -NSViewController
     
     override var nibName: NSNib.Name? {
@@ -64,6 +103,14 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
             NSLog("Attachments = %@", attachments as NSArray)
         } else {
             NSLog("No Attachments")
+        }
+    }
+    
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        if #available(OSX 10.12.1, *) {
+            self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar))) // unbind first
+            self.view.window?.bind(NSBindingName(rawValue: #keyPath(touchBar)), to: self, withKeyPath: #keyPath(touchBar), options: nil)
         }
     }
     
