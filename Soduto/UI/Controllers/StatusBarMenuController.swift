@@ -184,7 +184,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         guard let service = serviceManager.services.first(where: { $0 is BatteryService }) as? BatteryService else { return nil }
         guard let batteryStatus = service.statuses.first(where: { $0.key == device.id })?.value else { return nil }
 
-        var rect = NSRect(x: 0, y: 0, width: 24, height: 13)
+        let rect = NSRect(x: 0, y: 0, width: 24, height: 13)
         let image = NSImage(size: CGSize(width: 56, height: 13), flipped: false) { _ in
             let mainIcon = batteryStatus.isCharging ? #imageLiteral(resourceName: "batteryStatusChargingIconInverted") : (batteryStatus.isCritical ? #imageLiteral(resourceName: "batteryCriticalIcon") : #imageLiteral(resourceName: "batteryStatusIcon"))
             assert(mainIcon.size == rect.size)

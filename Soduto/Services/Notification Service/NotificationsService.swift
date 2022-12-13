@@ -134,6 +134,23 @@ public class NotificationsService: Service, UserNotificationActionHandler {
         }
     }
     
+    public func handleUNNotificationAction(for response: UNNotificationResponse, context: UserNotificationContext) {
+        guard let deviceId = response.notification.request.content.userInfo[UserInfoProperty.deviceId.rawValue] as? String else { return }
+        guard let notificationId = response.notification.request.content.userInfo[UserInfoProperty.notificationId.rawValue] as? NotificationId else { return }
+        guard let isCancelable = response.notification.request.content.userInfo[UserInfoProperty.isCancelable.rawValue] as? NSNumber else { return }
+        guard let device = context.deviceManager.device(withId: deviceId) else { return }
+        guard device.pairingStatus == .Paired else { return }
+        
+        if isCancelable.boolValue {
+            device.send(DataPacket.notificationCancelPacket(forId: notificationId))
+        }
+        
+        for service in context.serviceManager.services {
+            guard let notificationsService = service as? NotificationsService else { continue }
+            notificationsService.removeNotificationId(notificationId, from: device)
+        }
+    }
+    
     //MARK: Custom Notification Push method
     
     public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
@@ -221,8 +238,13 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                                 print(error.localizedDescription)
                             }
                         }
+                        notification.categoryIdentifier = "IncomingNotification"
+                        let dismiss = UNNotificationAction(identifier: "DismissNotification", title: "Dismiss")
+                        let category = UNNotificationCategory(identifier: "IncomingNotification", actions: [dismiss], intentIdentifiers: [], options: [])
+                        
                         //let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
                         let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
+                        self.un.setNotificationCategories([category])
                         self.un.add(request){ (error) in
                             if error != nil {print(error?.localizedDescription as Any)}
                         }
@@ -343,6 +365,7 @@ fileprivate extension DataPacket {
     // MARK: Properties
     
     static let notificationPacketType = "kdeconnect.notification"
+    static let notificationRequestPacketType = "kdeconnect.notification.request"
     
     var isNotificationPacket: Bool { return self.type == DataPacket.notificationPacketType }
     
@@ -356,7 +379,7 @@ fileprivate extension DataPacket {
     }
     
     static func notificationCancelPacket(forId id: String) -> DataPacket {
-        return DataPacket(type: notificationPacketType, body: [
+        return DataPacket(type: notificationRequestPacketType, body: [
             NotificationProperty.cancel.rawValue: id as AnyObject
         ])
     }

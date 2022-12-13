@@ -173,22 +173,24 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         if response.notification.request.content.categoryIdentifier == "IncomingCall" {
-            userNotificationManager.handleMuteAction(for: response)
+            userNotificationManager.handleNotificationAction(for: response, do: "MuteCall")
         } else if response.notification.request.content.categoryIdentifier == "DownloadFinished" {
-            userNotificationManager.handleOpenDownloadedFileAction(for: response)
+            userNotificationManager.handleNotificationAction(for: response, do: "OpenDownloadedFile")
         } else if response.notification.request.content.categoryIdentifier == "PairDevice" {
             switch response.actionIdentifier {
             case "pair":
-                userNotificationManager.handlePairAction(for: response)
+                userNotificationManager.handleNotificationAction(for: response, do: "PairRequest")
                 break
             case "decline":
-                userNotificationManager.handleDeclineAction(for: response)
+                userNotificationManager.handleNotificationAction(for: response, do: "DeclinePairRequest")
                 break
             default:
                 break
             }
         } else if response.notification.request.content.categoryIdentifier == "SMSReceived" {
-            userNotificationManager.handleReplySMSAction(for: response)
+            userNotificationManager.handleNotificationAction(for: response, do: "ReplySMS")
+        } else if response.notification.request.content.categoryIdentifier == "IncomingNotification" {
+            userNotificationManager.handleNotificationAction(for: response, do: "DismissNotification")
         }
         else {
             print("Unknown notification category identifier action!")

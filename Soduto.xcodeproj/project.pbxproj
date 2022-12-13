@@ -413,6 +413,7 @@
 		312E770B2938AB7400F29BFA /* Notification Service */ = {
 			isa = PBXGroup;
 			children = (
+				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
 				312E76F82938A93E00F29BFA /* Discord.png */,
 				312E76FE2938A93F00F29BFA /* Facebook.png */,
 				312E76FC2938A93F00F29BFA /* Instagram.png */,
@@ -424,7 +425,6 @@
 				312E76FB2938A93F00F29BFA /* Telegram.png */,
 				312E76FA2938A93F00F29BFA /* Twitter.png */,
 				312E76F52938A93E00F29BFA /* WhatsApp.png */,
-				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
 			);
 			path = "Notification Service";
 			sourceTree = "<group>";
