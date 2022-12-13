@@ -190,7 +190,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         } else if response.notification.request.content.categoryIdentifier == "SMSReceived" {
             userNotificationManager.handleNotificationAction(for: response, do: "ReplySMS")
         } else if response.notification.request.content.categoryIdentifier == "IncomingNotification" {
-            userNotificationManager.handleNotificationAction(for: response, do: "DismissNotification")
+            userNotificationManager.handleNotificationAction(for: response, do: "NotificationActionHandler")
         }
         else {
             print("Unknown notification category identifier action!")

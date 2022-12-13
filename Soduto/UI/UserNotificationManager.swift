@@ -114,7 +114,7 @@ public class UserNotificationManager: NSObject, NSUserNotificationCenterDelegate
             }
             self.context.deviceManager.device(withId: deviceId)?.declinePairing()
             break
-        case "DismissNotification":
+        case "NotificationActionHandler":
             NotificationsService().handleUNNotificationAction(for: notification, context: self.context)
             break
         default:

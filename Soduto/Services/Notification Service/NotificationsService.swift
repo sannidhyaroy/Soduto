@@ -27,6 +27,7 @@ import UserNotifications
 /// "id" (string): A unique notification id.
 /// "appName" (string): The app that generated the notification
 /// "ticker" (string): The title or headline of the notification.
+/// "actions" (string array): The available notification actions of the notification.
 /// "isClearable" (boolean): True if we can request to dismiss the notification.
 /// "isCancel" (boolean): True if the notification was dismissed in the peer device.
 /// "requestAnswer" (boolean): True if this is an answer to a "request" package.
@@ -141,8 +142,10 @@ public class NotificationsService: Service, UserNotificationActionHandler {
         guard let device = context.deviceManager.device(withId: deviceId) else { return }
         guard device.pairingStatus == .Paired else { return }
         
-        if isCancelable.boolValue {
+        if isCancelable.boolValue && response.actionIdentifier == "DismissNotification" {
             device.send(DataPacket.notificationCancelPacket(forId: notificationId))
+        } else if response.actionIdentifier != "DismissNotification" {
+            device.send(DataPacket.notificationActionPacket(forAction: response.actionIdentifier, forKey: notificationId))
         }
         
         for service in context.serviceManager.services {
@@ -205,6 +208,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
             guard let appName = try dataPacket.getAppName() else { return }
             guard appName != "KDE Connect" else { return } // Ignore notifications shown be KDE Connect
             guard let ticker = try dataPacket.getTicker() else { return }
+            let actions = try dataPacket.getActions()
             let isAnswer = try dataPacket.getAnswerFlag()
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
@@ -239,10 +243,14 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                             }
                         }
                         notification.categoryIdentifier = "IncomingNotification"
-                        let dismiss = UNNotificationAction(identifier: "DismissNotification", title: "Dismiss")
-                        let category = UNNotificationCategory(identifier: "IncomingNotification", actions: [dismiss], intentIdentifiers: [], options: [])
-                        
-                        //let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+                        var notificationActions = [UNNotificationAction]()
+                        if !actions!.isEmpty {
+                            for action in actions! {
+                                notificationActions.append(UNNotificationAction(identifier: action, title: action))
+                            }
+                        }
+                        notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))
+                        let category = UNNotificationCategory(identifier: "IncomingNotification", actions: notificationActions, intentIdentifiers: [], options: [])
                         let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
                         self.un.setNotificationCategories([category])
                         self.un.add(request){ (error) in
@@ -340,6 +348,7 @@ fileprivate extension DataPacket {
         case invalidId
         case invalidAppName
         case invalidTicker
+        case invalidActions
         case invalidClearableFlag
         case invalidCancelFlag
         case invalidAnswerFlag
@@ -348,17 +357,21 @@ fileprivate extension DataPacket {
     
     enum NotificationProperty: String {
         // all notifications request properties
-        case request = "request"             // (boolean): True if we are requesting for current notifications
+        case request = "request"             /// (boolean): True if we are requesting for current notifications
         // cancel request properties (to notification originating device)
-        case cancel = "cancel"               // (string): An id of notification to be canceled on originating device
+        case cancel = "cancel"               /// (string): An id of notification to be canceled on originating device
+        // action request properties (to notification originating device)
+        case key = "key"                     /// (string): An id of notification to request action to be performed on originating device
+        case action = "action"               /// (string): The action request to be performed on originating device
         // notification info properties (from notification originating device)
-        case id = "id"                       // (string): A unique notification id.
-        case appName = "appName"             // (string): The app that generated the notification
-        case ticker = "ticker"               // (string): The title or headline of the notification.
-        case isClearable = "isClearable"     // (boolean): True if we can request to dismiss the notification.
-        case isCancel = "isCancel"           // (boolean): True if the notification was dismissed in the peer device.
-        case requestAnswer = "requestAnswer" // (boolean): True if this is an answer to a "request" package.
-        case silent = "silent"               // (boolean): True if this notification should be silent.
+        case id = "id"                       /// (string): A unique notification id.
+        case appName = "appName"             /// (string): The app that generated the notification
+        case ticker = "ticker"               /// (string): The title or headline of the notification.
+        case actions = "actions"             /// (string array): The available actions of the notification.
+        case isClearable = "isClearable"     /// (boolean): True if we can request to dismiss the notification.
+        case isCancel = "isCancel"           /// (boolean): True if the notification was dismissed in the peer device.
+        case requestAnswer = "requestAnswer" /// (boolean): True if this is an answer to a "request" package.
+        case silent = "silent"               /// (boolean): True if this notification should be silent.
     }
     
     
@@ -366,8 +379,11 @@ fileprivate extension DataPacket {
     
     static let notificationPacketType = "kdeconnect.notification"
     static let notificationRequestPacketType = "kdeconnect.notification.request"
+    static let notificationActionPackageType = "kdeconnect.notification.action"
     
     var isNotificationPacket: Bool { return self.type == DataPacket.notificationPacketType }
+    var isNotificationRequestPacket: Bool { return self.type == DataPacket.notificationRequestPacketType }
+    var isNotificationActionPacket: Bool { return self.type == DataPacket.notificationActionPackageType }
     
     
     // MARK: Public static methods
@@ -382,6 +398,10 @@ fileprivate extension DataPacket {
         return DataPacket(type: notificationRequestPacketType, body: [
             NotificationProperty.cancel.rawValue: id as AnyObject
         ])
+    }
+    
+    static func notificationActionPacket(forAction action: String, forKey key: String) -> DataPacket {
+        return DataPacket(type: notificationActionPackageType, body: [NotificationProperty.action.rawValue: action as AnyObject, NotificationProperty.key.rawValue: key as AnyObject])
     }
     
     
@@ -419,6 +439,13 @@ fileprivate extension DataPacket {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.ticker.rawValue) else { return nil }
         guard let value = body[NotificationProperty.ticker.rawValue] as? String else { throw NotificationError.invalidTicker }
+        return value
+    }
+    
+    func getActions() throws -> [String]? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.actions.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.actions.rawValue] as? [String] else { throw NotificationError.invalidActions }
         return value
     }
     
