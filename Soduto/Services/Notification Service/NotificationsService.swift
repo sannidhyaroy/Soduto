@@ -258,10 +258,10 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                         }
                         notification.categoryIdentifier = "IncomingNotification"
                         var notificationActions = [UNNotificationAction]()
-                        if (replyId != nil) {
+                        if replyId != nil {
                             notificationActions.append(UNTextInputNotificationAction(identifier: "ReplyNotification", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your message here..."))
                         }
-                        if !actions!.isEmpty {
+                        if actions != nil {
                             for action in actions! {
                                 notificationActions.append(UNNotificationAction(identifier: action, title: action))
                             }
