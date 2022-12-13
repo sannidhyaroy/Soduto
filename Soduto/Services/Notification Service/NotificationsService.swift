@@ -55,6 +55,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     enum UserInfoProperty: String {
         case deviceId = "com.soduto.services.notifications.deviceId"
         case notificationId = "com.soduto.services.notifications.notificationId"
+        case requestReplyId = "com.soduto.services.notifications.requestReplyId"
         case isCancelable = "com.soduto.services.notifications.isCancelable"
     }
     
@@ -144,8 +145,19 @@ public class NotificationsService: Service, UserNotificationActionHandler {
         
         if isCancelable.boolValue && response.actionIdentifier == "DismissNotification" {
             device.send(DataPacket.notificationCancelPacket(forId: notificationId))
-        } else if response.actionIdentifier != "DismissNotification" {
+        } else if response.actionIdentifier != "DismissNotification" && response.actionIdentifier != "ReplyNotification"{
             device.send(DataPacket.notificationActionPacket(forAction: response.actionIdentifier, forKey: notificationId))
+        }
+        if response is UNTextInputNotificationResponse {
+            // Cast the response to UNTextInputNotificationResponse
+            let textInputResponse = response as! UNTextInputNotificationResponse
+            let message = textInputResponse.userText
+            guard let requestReplyId = response.notification.request.content.userInfo[UserInfoProperty.requestReplyId.rawValue] as? String else { return }
+            if message != "" {
+                device.send(DataPacket.notificationReplyPacket(forId: requestReplyId, message: message))
+            } else {
+                self.ShowCustomNotification(title: "Soduto", body: "Notification Reply message was empty!", sound: true, id: "NotificationReplyEmpty")
+            }
         }
         
         for service in context.serviceManager.services {
@@ -208,6 +220,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
             guard let appName = try dataPacket.getAppName() else { return }
             guard appName != "KDE Connect" else { return } // Ignore notifications shown be KDE Connect
             guard let ticker = try dataPacket.getTicker() else { return }
+            let replyId = try dataPacket.getReplyRequestId()
             let actions = try dataPacket.getActions()
             let isAnswer = try dataPacket.getAnswerFlag()
             let isSilent = try dataPacket.getSilentFlag()
@@ -223,6 +236,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                         var userInfo = notification.userInfo
                         userInfo[UserInfoProperty.deviceId.rawValue] = device.id as AnyObject
                         userInfo[UserInfoProperty.notificationId.rawValue] = packetNotificationId as AnyObject
+                        userInfo[UserInfoProperty.requestReplyId.rawValue] = replyId as AnyObject
                         userInfo[UserInfoProperty.isCancelable.rawValue] = NSNumber(value: isCancelable)
                         userInfo[UserNotificationManager.Property.dontPresent.rawValue] = NSNumber(value: dontPresent)
                         notification.userInfo = userInfo
@@ -244,6 +258,9 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                         }
                         notification.categoryIdentifier = "IncomingNotification"
                         var notificationActions = [UNNotificationAction]()
+                        if (replyId != nil) {
+                            notificationActions.append(UNTextInputNotificationAction(identifier: "ReplyNotification", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your message here..."))
+                        }
                         if !actions!.isEmpty {
                             for action in actions! {
                                 notificationActions.append(UNNotificationAction(identifier: action, title: action))
@@ -266,6 +283,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                 var userInfo = notification.userInfo
                 userInfo?[UserInfoProperty.deviceId.rawValue] = device.id as AnyObject
                 userInfo?[UserInfoProperty.notificationId.rawValue] = packetNotificationId as AnyObject
+                userInfo?[UserInfoProperty.requestReplyId.rawValue] = replyId as AnyObject
                 userInfo?[UserInfoProperty.isCancelable.rawValue] = NSNumber(value: isCancelable)
                 userInfo?[UserNotificationManager.Property.dontPresent.rawValue] = NSNumber(value: dontPresent)
                 notification.userInfo = userInfo
@@ -345,6 +363,7 @@ fileprivate extension DataPacket {
         case wrongType
         case invalidRequest
         case invalidCancelRequest
+        case invalidReplyIdRequest
         case invalidId
         case invalidAppName
         case invalidTicker
@@ -363,6 +382,9 @@ fileprivate extension DataPacket {
         // action request properties (to notification originating device)
         case key = "key"                     /// (string): An id of notification to request action to be performed on originating device
         case action = "action"               /// (string): The action request to be performed on originating device
+        // reply request properties (to notification originating device)
+        case requestReplyId = "requestReplyId"
+        case message = "message"
         // notification info properties (from notification originating device)
         case id = "id"                       /// (string): A unique notification id.
         case appName = "appName"             /// (string): The app that generated the notification
@@ -379,6 +401,7 @@ fileprivate extension DataPacket {
     
     static let notificationPacketType = "kdeconnect.notification"
     static let notificationRequestPacketType = "kdeconnect.notification.request"
+    static let notificationReplyPacketType = "kdeconnect.notification.reply"
     static let notificationActionPackageType = "kdeconnect.notification.action"
     
     var isNotificationPacket: Bool { return self.type == DataPacket.notificationPacketType }
@@ -400,6 +423,10 @@ fileprivate extension DataPacket {
         ])
     }
     
+    static func notificationReplyPacket(forId uuid: String, message: String) -> DataPacket {
+        return DataPacket(type: notificationReplyPacketType, body: [NotificationProperty.requestReplyId.rawValue: uuid as AnyObject, NotificationProperty.message.rawValue: message as AnyObject])
+    }
+    
     static func notificationActionPacket(forAction action: String, forKey key: String) -> DataPacket {
         return DataPacket(type: notificationActionPackageType, body: [NotificationProperty.action.rawValue: action as AnyObject, NotificationProperty.key.rawValue: key as AnyObject])
     }
@@ -418,6 +445,13 @@ fileprivate extension DataPacket {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.cancel.rawValue) else { return nil }
         guard let value = body[NotificationProperty.cancel.rawValue] as? String else { throw NotificationError.invalidCancelRequest }
+        return value
+    }
+    
+    func getReplyRequestId() throws -> String? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.requestReplyId.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.requestReplyId.rawValue] as? String else { throw NotificationError.invalidReplyIdRequest }
         return value
     }
     
