@@ -91,38 +91,36 @@ public class UserNotificationManager: NSObject, NSUserNotificationCenterDelegate
     
     // MARK: Action Handlers
     
-    public func handleMuteAction(for notification: UNNotificationResponse) {
-        TelephonyService.handleMuteAction(for: notification, context: self.context)
-        let id = notification.notification.request.identifier
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
-    }
-    
-    public func handleReplySMSAction(for notification: UNNotificationResponse) {
-        TelephonyService.handleReplySMSAction(for: notification, context: self.context)
-        let id = notification.notification.request.identifier
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
-    }
-    
-    public func handleOpenDownloadedFileAction(for notification: UNNotificationResponse) {
-        ShareService.handleOpenDownloadedFileAction(for: notification, context: self.context)
-        let id = notification.notification.request.identifier
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
-    }
-    
-    public func handlePairAction(for notification: UNNotificationResponse) {
-        guard let deviceId = notification.notification.request.content.userInfo[UserNotificationManager.deviceIdProperty] as? Device.Id else {
-            fatalError("User info with device id property expected to be provided for pairing notification")
+    public func handleNotificationAction(for notification: UNNotificationResponse, do action: String) {
+        switch action {
+        case "MuteCall":
+            TelephonyService.handleMuteAction(for: notification, context: self.context)
+            break
+        case "ReplySMS":
+            TelephonyService.handleReplySMSAction(for: notification, context: self.context)
+            break
+        case "OpenDownloadedFile":
+            ShareService.handleOpenDownloadedFileAction(for: notification, context: self.context)
+            break
+        case "PairRequest":
+            guard let deviceId = notification.notification.request.content.userInfo[UserNotificationManager.deviceIdProperty] as? Device.Id else {
+                fatalError("User info with device id property expected to be provided for pairing notification")
+            }
+            self.context.deviceManager.device(withId: deviceId)?.acceptPairing()
+            break
+        case "DeclinePairRequest":
+            guard let deviceId = notification.notification.request.content.userInfo[UserNotificationManager.deviceIdProperty] as? Device.Id else {
+                fatalError("User info with device id property expected to be provided for pairing notification")
+            }
+            self.context.deviceManager.device(withId: deviceId)?.declinePairing()
+            break
+        case "NotificationActionHandler":
+            NotificationsService().handleUNNotificationAction(for: notification, context: self.context)
+            break
+        default:
+            print("Unknown Notification Action Request")
+            break
         }
-        self.context.deviceManager.device(withId: deviceId)?.acceptPairing()
-        let id = notification.notification.request.identifier
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
-    }
-    
-    public func handleDeclineAction(for notification: UNNotificationResponse) {
-        guard let deviceId = notification.notification.request.content.userInfo[UserNotificationManager.deviceIdProperty] as? Device.Id else {
-            fatalError("User info with device id property expected to be provided for pairing notification")
-        }
-        self.context.deviceManager.device(withId: deviceId)?.declinePairing()
         let id = notification.notification.request.identifier
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
     }

@@ -21,7 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     var validDeviceNames = [String]()
     @IBOutlet weak var statusBarMenuController: StatusBarMenuController!
     var welcomeWindowController: WelcomeWindowController?
-
+    
     let config = Configuration()
     let connectionProvider: ConnectionProvider
     let deviceManager: DeviceManager
@@ -33,15 +33,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     override init() {
         UserDefaults.standard.register(defaults: [AppDelegate.logLevelConfigurationKey: LogSeverity.info.rawValue])
         
-        #if DEBUG
-            Log.enable(configuration: XcodeLogConfiguration(minimumSeverity: .debug, debugMode: true))
-        #else
-            let formatter = FieldBasedLogFormatter(fields: [.severity(.simple), .delimiter(.spacedPipe), .payload])
-            if let osRecorder = OSLogRecorder(formatters: [formatter]) {
-                let severity: LogSeverity = LogSeverity(rawValue: UserDefaults.standard.integer(forKey: AppDelegate.logLevelConfigurationKey)) ?? .info
-                Log.enable(configuration: BasicLogConfiguration(minimumSeverity: severity, recorders: [osRecorder]))
-            }
-        #endif
+#if DEBUG
+        Log.enable(configuration: XcodeLogConfiguration(minimumSeverity: .debug, debugMode: true))
+#else
+        let formatter = FieldBasedLogFormatter(fields: [.severity(.simple), .delimiter(.spacedPipe), .payload])
+        if let osRecorder = OSLogRecorder(formatters: [formatter]) {
+            let severity: LogSeverity = LogSeverity(rawValue: UserDefaults.standard.integer(forKey: AppDelegate.logLevelConfigurationKey)) ?? .info
+            Log.enable(configuration: BasicLogConfiguration(minimumSeverity: severity, recorders: [osRecorder]))
+        }
+#endif
         
         
         self.connectionProvider = ConnectionProvider(config: config)
@@ -72,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: PingService())
         self.serviceManager.add(service: BatteryService())
         self.serviceManager.add(service: FindMyPhoneService())
-//        self.serviceManager.add(service: RemoteKeyboardService())
+        //        self.serviceManager.add(service: RemoteKeyboardService())
         un.delegate = self
         self.updateValidDevices()
         let notificationName = "com.Soduto.Share" as CFString
@@ -85,11 +85,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         
         showWelcomeWindow()
     }
-
+    
     func applicationWillTerminate(_ aNotification: Notification) {
         // Insert code here to tear down your application
     }
-
+    
     
     // MARK: DeviceManagerDelegate
     
@@ -194,22 +194,24 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         if response.notification.request.content.categoryIdentifier == "IncomingCall" {
-            userNotificationManager.handleMuteAction(for: response)
+            userNotificationManager.handleNotificationAction(for: response, do: "MuteCall")
         } else if response.notification.request.content.categoryIdentifier == "DownloadFinished" {
-            userNotificationManager.handleOpenDownloadedFileAction(for: response)
+            userNotificationManager.handleNotificationAction(for: response, do: "OpenDownloadedFile")
         } else if response.notification.request.content.categoryIdentifier == "PairDevice" {
             switch response.actionIdentifier {
             case "pair":
-                userNotificationManager.handlePairAction(for: response)
+                userNotificationManager.handleNotificationAction(for: response, do: "PairRequest")
                 break
             case "decline":
-                userNotificationManager.handleDeclineAction(for: response)
+                userNotificationManager.handleNotificationAction(for: response, do: "DeclinePairRequest")
                 break
             default:
                 break
             }
         } else if response.notification.request.content.categoryIdentifier == "SMSReceived" {
-            userNotificationManager.handleReplySMSAction(for: response)
+            userNotificationManager.handleNotificationAction(for: response, do: "ReplySMS")
+        } else if response.notification.request.content.categoryIdentifier == "IncomingNotification" {
+            userNotificationManager.handleNotificationAction(for: response, do: "NotificationActionHandler")
         }
         else {
             print("Unknown notification category identifier action!")

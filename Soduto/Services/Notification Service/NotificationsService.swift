@@ -54,6 +54,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     enum UserInfoProperty: String {
         case deviceId = "com.soduto.services.notifications.deviceId"
         case notificationId = "com.soduto.services.notifications.notificationId"
+        case requestReplyId = "com.soduto.services.notifications.requestReplyId"
         case isCancelable = "com.soduto.services.notifications.isCancelable"
     }
     
@@ -134,6 +135,36 @@ public class NotificationsService: Service, UserNotificationActionHandler {
         }
     }
     
+    public func handleUNNotificationAction(for response: UNNotificationResponse, context: UserNotificationContext) {
+        guard let deviceId = response.notification.request.content.userInfo[UserInfoProperty.deviceId.rawValue] as? String else { return }
+        guard let notificationId = response.notification.request.content.userInfo[UserInfoProperty.notificationId.rawValue] as? NotificationId else { return }
+        guard let isCancelable = response.notification.request.content.userInfo[UserInfoProperty.isCancelable.rawValue] as? NSNumber else { return }
+        guard let device = context.deviceManager.device(withId: deviceId) else { return }
+        guard device.pairingStatus == .Paired else { return }
+        
+        if isCancelable.boolValue && response.actionIdentifier == "DismissNotification" {
+            device.send(DataPacket.notificationCancelPacket(forId: notificationId))
+        } else if response.actionIdentifier != "DismissNotification" && response.actionIdentifier != "ReplyNotification"{
+            device.send(DataPacket.notificationActionPacket(forAction: response.actionIdentifier, forKey: notificationId))
+        }
+        if response is UNTextInputNotificationResponse {
+            // Cast the response to UNTextInputNotificationResponse
+            let textInputResponse = response as! UNTextInputNotificationResponse
+            let message = textInputResponse.userText
+            guard let requestReplyId = response.notification.request.content.userInfo[UserInfoProperty.requestReplyId.rawValue] as? String else { return }
+            if message != "" {
+                device.send(DataPacket.notificationReplyPacket(forId: requestReplyId, message: message))
+            } else {
+                self.ShowCustomNotification(title: "Soduto", body: "Notification Reply message was empty!", sound: true, id: "NotificationReplyEmpty")
+            }
+        }
+        
+        for service in context.serviceManager.services {
+            guard let notificationsService = service as? NotificationsService else { continue }
+            notificationsService.removeNotificationId(notificationId, from: device)
+        }
+    }
+    
     //MARK: Custom Notification Push method
     
     public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
@@ -152,8 +183,8 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                     }
                 }
                 else {
-                   Log.debug?.message("Soduto isn't authorized to send notifications!")
-               }
+                    Log.debug?.message("Soduto isn't authorized to send notifications!")
+                }
             }
         } else {
             let notification = NSUserNotification()
@@ -188,6 +219,8 @@ public class NotificationsService: Service, UserNotificationActionHandler {
             guard let appName = try dataPacket.getAppName() else { return }
             guard appName != "KDE Connect" else { return } // Ignore notifications shown be KDE Connect
             guard let ticker = try dataPacket.getTicker() else { return }
+            let replyId = try dataPacket.getReplyRequestId()
+            let actions = try dataPacket.getActions()
             let isAnswer = try dataPacket.getAnswerFlag()
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
@@ -202,6 +235,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                         var userInfo = notification.userInfo
                         userInfo[UserInfoProperty.deviceId.rawValue] = device.id as AnyObject
                         userInfo[UserInfoProperty.notificationId.rawValue] = packetNotificationId as AnyObject
+                        userInfo[UserInfoProperty.requestReplyId.rawValue] = replyId as AnyObject
                         userInfo[UserInfoProperty.isCancelable.rawValue] = NSNumber(value: isCancelable)
                         userInfo[UserNotificationManager.Property.dontPresent.rawValue] = NSNumber(value: dontPresent)
                         notification.userInfo = userInfo
@@ -221,21 +255,34 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                                 print(error.localizedDescription)
                             }
                         }
-                        //let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+                        notification.categoryIdentifier = "IncomingNotification"
+                        var notificationActions = [UNNotificationAction]()
+                        if replyId != nil {
+                            notificationActions.append(UNTextInputNotificationAction(identifier: "ReplyNotification", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your message here..."))
+                        }
+                        if actions != nil {
+                            for action in actions! {
+                                notificationActions.append(UNNotificationAction(identifier: action, title: action))
+                            }
+                        }
+                        notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))
+                        let category = UNNotificationCategory(identifier: "IncomingNotification", actions: notificationActions, intentIdentifiers: [], options: [])
                         let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
+                        self.un.setNotificationCategories([category])
                         self.un.add(request){ (error) in
                             if error != nil {print(error?.localizedDescription as Any)}
                         }
                     }
                     else {
-                       Log.debug?.message("Soduto isn't authorized to send notifications!")
-                   }
+                        Log.debug?.message("Soduto isn't authorized to send notifications!")
+                    }
                 }
             } else {
                 let notification = NSUserNotification.init(actionHandlerClass: type(of: self))
                 var userInfo = notification.userInfo
                 userInfo?[UserInfoProperty.deviceId.rawValue] = device.id as AnyObject
                 userInfo?[UserInfoProperty.notificationId.rawValue] = packetNotificationId as AnyObject
+                userInfo?[UserInfoProperty.requestReplyId.rawValue] = replyId as AnyObject
                 userInfo?[UserInfoProperty.isCancelable.rawValue] = NSNumber(value: isCancelable)
                 userInfo?[UserNotificationManager.Property.dontPresent.rawValue] = NSNumber(value: dontPresent)
                 notification.userInfo = userInfo
@@ -251,8 +298,8 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                 notification.identifier = notificationId
                 NSUserNotificationCenter.default.scheduleNotification(notification)
             }
-                
-                self.addNotificationId(notificationId, from: device)
+            
+            self.addNotificationId(notificationId, from: device)
         }
         catch {
             Log.error?.message("Error while showing notification: \(error)")
@@ -269,7 +316,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     private func hideNotification(for id: NotificationId, from device: Device) {
         if #available(macOS 11.0, *) {
             UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
-//            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+            //            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
         } else {
             for notification in NSUserNotificationCenter.default.deliveredNotifications {
                 if notification.identifier == id {
@@ -315,9 +362,11 @@ fileprivate extension DataPacket {
         case wrongType
         case invalidRequest
         case invalidCancelRequest
+        case invalidReplyIdRequest
         case invalidId
         case invalidAppName
         case invalidTicker
+        case invalidActions
         case invalidClearableFlag
         case invalidCancelFlag
         case invalidAnswerFlag
@@ -326,25 +375,37 @@ fileprivate extension DataPacket {
     
     enum NotificationProperty: String {
         // all notifications request properties
-        case request = "request"             // (boolean): True if we are requesting for current notifications
+        case request = "request"             /// (boolean): True if we are requesting for current notifications
         // cancel request properties (to notification originating device)
-        case cancel = "cancel"               // (string): An id of notification to be canceled on originating device
+        case cancel = "cancel"               /// (string): An id of notification to be canceled on originating device
+        // action request properties (to notification originating device)
+        case key = "key"                     /// (string): An id of notification to request action to be performed on originating device
+        case action = "action"               /// (string): The action request to be performed on originating device
+        // reply request properties (to notification originating device)
+        case requestReplyId = "requestReplyId"
+        case message = "message"
         // notification info properties (from notification originating device)
-        case id = "id"                       // (string): A unique notification id.
-        case appName = "appName"             // (string): The app that generated the notification
-        case ticker = "ticker"               // (string): The title or headline of the notification.
-        case isClearable = "isClearable"     // (boolean): True if we can request to dismiss the notification.
-        case isCancel = "isCancel"           // (boolean): True if the notification was dismissed in the peer device.
-        case requestAnswer = "requestAnswer" // (boolean): True if this is an answer to a "request" package.
-        case silent = "silent"               // (boolean): True if this notification should be silent.
+        case id = "id"                       /// (string): A unique notification id.
+        case appName = "appName"             /// (string): The app that generated the notification
+        case ticker = "ticker"               /// (string): The title or headline of the notification.
+        case actions = "actions"             /// (string array): The available actions of the notification.
+        case isClearable = "isClearable"     /// (boolean): True if we can request to dismiss the notification.
+        case isCancel = "isCancel"           /// (boolean): True if the notification was dismissed in the peer device.
+        case requestAnswer = "requestAnswer" /// (boolean): True if this is an answer to a "request" package.
+        case silent = "silent"               /// (boolean): True if this notification should be silent.
     }
     
     
     // MARK: Properties
     
     static let notificationPacketType = "kdeconnect.notification"
+    static let notificationRequestPacketType = "kdeconnect.notification.request"
+    static let notificationReplyPacketType = "kdeconnect.notification.reply"
+    static let notificationActionPackageType = "kdeconnect.notification.action"
     
     var isNotificationPacket: Bool { return self.type == DataPacket.notificationPacketType }
+    var isNotificationRequestPacket: Bool { return self.type == DataPacket.notificationRequestPacketType }
+    var isNotificationActionPacket: Bool { return self.type == DataPacket.notificationActionPackageType }
     
     
     // MARK: Public static methods
@@ -356,9 +417,17 @@ fileprivate extension DataPacket {
     }
     
     static func notificationCancelPacket(forId id: String) -> DataPacket {
-        return DataPacket(type: notificationPacketType, body: [
+        return DataPacket(type: notificationRequestPacketType, body: [
             NotificationProperty.cancel.rawValue: id as AnyObject
         ])
+    }
+    
+    static func notificationReplyPacket(forId uuid: String, message: String) -> DataPacket {
+        return DataPacket(type: notificationReplyPacketType, body: [NotificationProperty.requestReplyId.rawValue: uuid as AnyObject, NotificationProperty.message.rawValue: message as AnyObject])
+    }
+    
+    static func notificationActionPacket(forAction action: String, forKey key: String) -> DataPacket {
+        return DataPacket(type: notificationActionPackageType, body: [NotificationProperty.action.rawValue: action as AnyObject, NotificationProperty.key.rawValue: key as AnyObject])
     }
     
     
@@ -375,6 +444,13 @@ fileprivate extension DataPacket {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.cancel.rawValue) else { return nil }
         guard let value = body[NotificationProperty.cancel.rawValue] as? String else { throw NotificationError.invalidCancelRequest }
+        return value
+    }
+    
+    func getReplyRequestId() throws -> String? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.requestReplyId.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.requestReplyId.rawValue] as? String else { throw NotificationError.invalidReplyIdRequest }
         return value
     }
     
@@ -396,6 +472,13 @@ fileprivate extension DataPacket {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.ticker.rawValue) else { return nil }
         guard let value = body[NotificationProperty.ticker.rawValue] as? String else { throw NotificationError.invalidTicker }
+        return value
+    }
+    
+    func getActions() throws -> [String]? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.actions.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.actions.rawValue] as? [String] else { throw NotificationError.invalidActions }
         return value
     }
     
