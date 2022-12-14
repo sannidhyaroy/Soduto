@@ -247,7 +247,16 @@ class BrowserWindowController: NSWindowController {
             cells.append(cell)
         }
         
-        self.pathControl.setPathComponentCells(cells)
+        // setPathComponentCells was deprecated in macOS 10.14, so we're using pathItems property instead
+        let pathItems = cells.map { (cell) -> NSPathControlItem in
+            let item = NSPathControlItem()
+            item.title = cell.title
+            item.image = cell.image
+            return item
+        }
+        
+        //self.pathControl.setPathComponentCells(cells)
+        self.pathControl.pathItems = pathItems
     }
     
     private func updateProgress() {

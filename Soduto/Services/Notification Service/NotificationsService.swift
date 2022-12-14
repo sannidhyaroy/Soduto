@@ -94,7 +94,23 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     public func setup(for device: Device) {
         // Ask device for current notifications
         guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
-        device.send(DataPacket.notificationRequestPacket())
+        /// Fix Me: Keeps sending the same notification alerts, hence we'll keep this disabled.
+//        device.send(DataPacket.notificationRequestPacket())
+    }
+    
+    public func refresh() {
+        let devices = AppDelegate.shared().validDevices
+        for device in devices {
+            guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { return }
+            self.notificationIds.removeAll()
+            if #available(macOS 11.0, *) {
+                un.removeAllDeliveredNotifications()
+                un.removeAllPendingNotificationRequests()
+            } else {
+                NSUserNotificationCenter.default.removeAllDeliveredNotifications()
+            }
+            device.send(DataPacket.notificationRequestPacket())
+        }
     }
     
     public func cleanup(for device: Device) {
@@ -411,7 +427,7 @@ fileprivate extension DataPacket {
     // MARK: Public static methods
     
     static func notificationRequestPacket() -> DataPacket {
-        return DataPacket(type: notificationPacketType, body: [
+        return DataPacket(type: notificationRequestPacketType, body: [
             NotificationProperty.request.rawValue: NSNumber(value: true)
         ])
     }

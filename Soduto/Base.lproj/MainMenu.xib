@@ -43,7 +43,13 @@
                         <action selector="toggleLaunchOnLogin:" target="vQj-dd-GoX" id="tjq-3a-oye"/>
                     </connections>
                 </menuItem>
-                <menuItem title="Open Soduto Preferences..." id="NNU-ep-Fgn" userLabel="Open Soduto Preferences">
+                <menuItem title="Refresh Notifications" id="g9u-5c-WAz">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="refreshNotifications:" target="vQj-dd-GoX" id="m7k-Z8-c4v"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Soduto Preferences..." id="NNU-ep-Fgn" userLabel="Open Soduto Preferences">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="openPreferences:" target="vQj-dd-GoX" id="rrW-aH-Gim"/>
