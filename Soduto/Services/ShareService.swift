@@ -510,7 +510,9 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
                 if settings.authorizationStatus == .authorized {
                     let notification = UNMutableNotificationContent()
                     notification.title = title
-                    notification.body = info
+                    if succeeded {
+                        notification.body = info
+                    }
                     notification.sound = UNNotificationSound.default()
                     if (self.notificationIconPath != nil) {
                         let notificationIconURL = URL(fileURLWithPath: self.notificationIconPath!)
