@@ -58,6 +58,10 @@ public class NotificationsService: Service, UserNotificationActionHandler {
         case isCancelable = "com.soduto.services.notifications.isCancelable"
     }
     
+    enum ActionId: ServiceAction.Id {
+        case refresh
+    }
+    
     
     // MARK: Service properties
     
@@ -92,10 +96,10 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     }
     
     public func setup(for device: Device) {
-        // Ask device for current notifications
-        guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
-        /// Fix Me: Keeps sending the same notification alerts, hence we'll keep this disabled.
-//        device.send(DataPacket.notificationRequestPacket())
+        /// Ask device for current notifications
+        /// Fix Me: Keeps sending the same notification alerts continously, hence we'll keep this disabled. Updating existing notifications should happen in background and not show any alerts.
+        //        guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
+        //        device.send(DataPacket.notificationRequestPacket())
     }
     
     public func refresh() {
@@ -122,12 +126,23 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     }
     
     public func actions(for device: Device) -> [ServiceAction] {
-        // no actions supported
-        return []
+        guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { return [] }
+        guard device.pairingStatus == .Paired else { return [] }
+        
+        return [
+            ServiceAction(id: ActionId.refresh.rawValue, group: "setup", title: "Request Notifications", description: "Send notification request to the remote device", service: self, device: device)
+        ]
     }
     
     public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
-        // no actions supported
+        guard let actionId = ActionId(rawValue: id) else { return }
+        guard device.pairingStatus == .Paired else { return }
+        
+        switch actionId {
+        case .refresh:
+            device.send(DataPacket.notificationRequestPacket())
+            break
+        }
     }
     
     
