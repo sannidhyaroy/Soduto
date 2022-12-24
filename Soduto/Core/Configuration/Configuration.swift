@@ -282,7 +282,18 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
     }
     
     public var hostDeviceType: DeviceType {
-        return .Desktop
+        switch deviceTypeInt {
+        case 0:
+            return .Desktop
+        case 1:
+            return .Laptop
+        case 2:
+            return .Phone
+        case 3:
+            return .Tablet
+        default:
+            return .Unknown
+        }
     }
     
     public var hostDeviceId: Device.Id {

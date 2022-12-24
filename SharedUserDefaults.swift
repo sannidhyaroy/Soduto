@@ -10,6 +10,7 @@ import Foundation
 
 struct SharedUserDefaults {
     static let suiteName = "P8CGT2P7HB.com.soduto.Soduto"
+    static let preferencesSuite = "com.soduto.Soduto.Preferences.Keys"
     
     struct Keys {
         static let devicesToShow = ""
@@ -17,6 +18,10 @@ struct SharedUserDefaults {
         static let fileurl = ""
         static let buttonTag = ""
         static let kSandboxKey = ""
+    }
+    
+    struct Preferences {
         static let disableSharePopUp = ""
+        static let deviceType = ""
     }
 }
