@@ -17,5 +17,6 @@ struct SharedUserDefaults {
         static let fileurl = ""
         static let buttonTag = ""
         static let kSandboxKey = ""
+        static let disableSharePopUp = ""
     }
 }

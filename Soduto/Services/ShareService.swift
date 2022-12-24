@@ -304,20 +304,20 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     }
     
     private func downloadFile(_ fileName: String?, usingTask task: DownloadTask, from device: Device) {
-        // FIXME: handle nil fileName correctly. The commented approach is wrong because download easily 
+        // FIXME: handle nil fileName correctly. The commented approach is wrong because download easily
         // expires - needs to start downloading in background while asking for file name
         
-//        let askFileLocation = {
-//            NSApp.activate(ignoringOtherApps: true)
-//            let panel = NSSavePanel()
-//            panel.message = "Select save location for download received form device \"\(device.name)\""
-//            panel.nameFieldStringValue = fileName ?? ""
-//            panel.begin { result in
-//                guard result == NSFileHandlingPanelOKButton else { return }
-//                guard let url = panel.url else { return }
-//                self.downloadFile(downloadTask: task, fileName: url.lastPathComponent, destUrl: url)
-//            }
-//        }
+        //        let askFileLocation = {
+        //            NSApp.activate(ignoringOtherApps: true)
+        //            let panel = NSSavePanel()
+        //            panel.message = "Select save location for download received form device \"\(device.name)\""
+        //            panel.nameFieldStringValue = fileName ?? ""
+        //            panel.begin { result in
+        //                guard result == NSFileHandlingPanelOKButton else { return }
+        //                guard let url = panel.url else { return }
+        //                self.downloadFile(downloadTask: task, fileName: url.lastPathComponent, destUrl: url)
+        //            }
+        //        }
         
         do {
             if let fileName = fileName {
@@ -326,13 +326,13 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
                 self.showDownloadStartNotification(fileName: fileName, downloadTask: task)
             }
             else {
-//                askFileLocation()
+                //                askFileLocation()
                 self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
             }
         }
         catch {
             // Failed to retrieve appropriate download destination - ask user to select
-//            askFileLocation()
+            //            askFileLocation()
             self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
         }
     }
@@ -397,7 +397,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             }
             finalUrl = finalUrl.alternativeForDuplicate()
         }
-
+        
         throw ShareError.partFileRenameFailed
     }
     
@@ -444,7 +444,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             notification.hasActionButton = false
             notification.identifier = notificationId
             NSUserNotificationCenter.default.deliver(notification)
-            }
+        }
     }
     
     private func showDownloadStartNotification(fileName: String?, downloadTask task: DownloadTask) {
@@ -494,7 +494,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             notification.hasActionButton = false
             notification.identifier = notificationId
             NSUserNotificationCenter.default.deliver(notification)
-            }
+        }
     }
     
     public func showUploadFinishNotification(uploadTask task: UploadTask, succeeded: Bool) {
@@ -639,20 +639,20 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         if filePackets.count > 0 {
             packets = filePackets
             title = packets.count == 1 ?
-                String(format: NSLocalizedString("Upload file to:", comment: "Drag destinations menu title"), packets.count) :
-                String(format: NSLocalizedString("Upload %d file(s) to:", comment: "Drag destinations menu title"), packets.count)
+            String(format: NSLocalizedString("Upload file to:", comment: "Drag destinations menu title"), packets.count) :
+            String(format: NSLocalizedString("Upload %d file(s) to:", comment: "Drag destinations menu title"), packets.count)
         }
         else if urlPackets.count > 0 {
             packets = urlPackets
             title = packets.count == 1 ?
-                String(format: NSLocalizedString("Open link on:", comment: "Drag destinations menu title"), packets.count) :
-                String(format: NSLocalizedString("Open %d link(s) on:", comment: "Drag destinations menu title"), packets.count)
+            String(format: NSLocalizedString("Open link on:", comment: "Drag destinations menu title"), packets.count) :
+            String(format: NSLocalizedString("Open %d link(s) on:", comment: "Drag destinations menu title"), packets.count)
         }
         else if textPackets.count > 0 {
             packets = textPackets
             title = packets.count == 1 ?
-                String(format: NSLocalizedString("Send text snippet to:", comment: "Drag destinations menu title"), packets.count) :
-                String(format: NSLocalizedString("Send %d text snippet(s) to:", comment: "Drag destinations menu title"), packets.count)
+            String(format: NSLocalizedString("Send text snippet to:", comment: "Drag destinations menu title"), packets.count) :
+            String(format: NSLocalizedString("Send %d text snippet(s) to:", comment: "Drag destinations menu title"), packets.count)
         }
         else {
             return false
@@ -665,6 +665,15 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let titleItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
+        
+        if disableSharePopUp && self.validDevices.count == 1 {
+            guard validDevices.first?.isReachable ?? false && validDevices.first?.pairingStatus == .Paired else { return false }
+            for packet in packets {
+                validDevices.first?.send(packet)
+                self.showUploadStartNotification(to: validDevices.first!)
+            }
+            return true
+        }
         
         for device in self.validDevices {
             let keyEquivalent: String = menu.items.count <= 10 ? "\(menu.items.count % 10)" : ""

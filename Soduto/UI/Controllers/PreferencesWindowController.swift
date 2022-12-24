@@ -50,7 +50,6 @@ public class PreferencesWindowController: NSWindowController {
         
         super.showWindow(sender)
     }
-    
 }
 
 

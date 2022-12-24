@@ -9,6 +9,8 @@
 import Foundation
 import Cocoa
 
+var disableSharePopUp = UserDefaults.standard.bool(forKey: SharedUserDefaults.Keys.disableSharePopUp)
+
 class DevicePreferencesViewController: NSViewController {
     
     // MARK: Properties
@@ -17,6 +19,8 @@ class DevicePreferencesViewController: NSViewController {
     var config: HostConfiguration?
     
     @IBOutlet weak var hostNameLabel: NSTextField!
+    
+    @IBOutlet weak var disableSharePopUpCheckbox: NSButton!
     
     private weak var deviceListController: DeviceListController?
     
@@ -49,6 +53,7 @@ class DevicePreferencesViewController: NSViewController {
         
         self.deviceListController?.deviceDataSource = self.deviceDataSource
         self.deviceListController?.refreshDeviceList()
+        self.loadPreferences()
         self.view.layoutSubtreeIfNeeded()
     }
     
@@ -58,6 +63,17 @@ class DevicePreferencesViewController: NSViewController {
         }
     }
     
+    public func loadPreferences() {
+        if disableSharePopUpCheckbox != nil {
+            self.disableSharePopUpCheckbox.state = disableSharePopUp ? NSButton.StateValue.on : NSButton.StateValue.off
+        }
+    }
     
-    
+    @IBAction func sharePopUp (_ sender: Any?) {
+        let checkBoxState = disableSharePopUpCheckbox.state
+        let state: Bool = (checkBoxState == .on) ? true : false
+        UserDefaults.standard.set(state, forKey: SharedUserDefaults.Keys.disableSharePopUp)
+        sharedUserDefaults?.synchronize()
+        disableSharePopUp = state
+    }
 }
