@@ -128,7 +128,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         if menu == self.statusBarMenu {
             self.refreshMenuDeviceList()
             if #available(macOS 13.0, *) {
-                let loginItem = SMAppService.loginItem(identifier: "com.soduto.SodutoLauncher")
+                let loginItem = SMAppService.mainApp
                 switch (loginItem.status.rawValue) {
                 case 0:
                     self.launchOnLoginItem.state = NSControl.StateValue.off
