@@ -24,6 +24,7 @@
                 <outlet property="statusBarMenu" destination="LIO-WS-395" id="8BX-ha-3Ci"/>
             </connections>
         </customObject>
+        <customObject id="nCU-Jx-Rml" customClass="SPUStandardUpdaterController"/>
         <menu id="LIO-WS-395">
             <items>
                 <menuItem title="Devices" enabled="NO" id="NHO-Gf-5Mq" userLabel="Paired Devices title">
@@ -50,6 +51,13 @@
                     </connections>
                 </menuItem>
                 <menuItem isSeparatorItem="YES" id="NAb-Li-52a"/>
+                <menuItem title="Check for Updates" id="LHF-X7-9lM">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="checkForUpdates:" target="nCU-Jx-Rml" id="rWP-wI-Ogh"/>
+                        <binding destination="nCU-Jx-Rml" name="target" keyPath="self" id="8kS-ux-8io"/>
+                    </connections>
+                </menuItem>
                 <menuItem title="Quit" id="LmP-mI-dDc" userLabel="Quit">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
