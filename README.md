@@ -1,20 +1,27 @@
-# Soduto
-
-## What is it?
-
-Soduto is a KDEConnect compatible application for macOS. It allows better integration between your phones, desktops and tablets.
-For more information take a look at [soduto.com](https://www.soduto.com)
+<div align="center">
+  <img src="Soduto/Assets.xcassets/AppIcon.appiconset/1024.png" alt="Soduto Logo" width="200"/>
+  <h1 style="font-weight: 700; font-size: 4em; margin: 0; padding-top: 0;">Soduto</h1>
+  <div style="margin-bottom: 1em">
+  <a href="https://github.com/sannidhyaroy/soduto/blob/nightly/LICENSE"><img src="https://img.shields.io/github/license/sannidhyaroy/soduto.svg" alt="GNU Licensed"></a>
+  <a href="https://github.com/sannidhyaroy/soduto/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/sannidhyaroy/soduto"></a>
+  <a href="https://github.com/sannidhyaroy/soduto/commits/nightly"><img src="https://img.shields.io/github/last-commit/sannidhyaroy/soduto/nightly" alt="Last Commit"></a>
+  <a href="https://github.com/sannidhyaroy/soduto/releases/latest"><img alt="GitHub Release Date" src="https://img.shields.io/github/release-date/sannidhyaroy/soduto"></a>
+  </div>
+  <p>
+  Soduto is a KDE Connect compatible application for macOS. It allows better integration between your phones, desktops and tablets. For more information take a look at <a href="https://www.soduto.com">soduto.com</a>
+  </p>
+</div>
 
 ## Installation
 
-Soduto application can be downloaded from [soduto.com](https://www.soduto.com). To install, open the downloaded .dmg file and drag 
-Soduto.app onto Applications folder.
+The official build of Soduto can be downloaded from [soduto.com](https://www.soduto.com). To install, open the downloaded `.dmg` file and drag `Soduto.app` onto Applications folder.
 
 There is also a (unofficial) Homebrew formulae, that can install Soduto with such command:
 
 ```bash
 brew install --cask soduto
 ```
+Since, Soduto is open-sourced, there are many forks of it on GitHub. You can download my forked version of Soduto from the [Releases Page](https://github.com/sannidhyaroy/soduto/releases/latest) of this Repository.
 
 ## Building
 
