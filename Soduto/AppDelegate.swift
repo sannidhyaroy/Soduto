@@ -10,6 +10,7 @@ import Cocoa
 import Foundation
 import CleanroomLogger
 import UserNotifications
+import Sparkle
 
 let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
 
@@ -20,6 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     var validDevices: [Device] = []
     var validDeviceNames = [String]()
     @IBOutlet weak var statusBarMenuController: StatusBarMenuController!
+    @IBOutlet weak var checkForUpdatesMenuItem: NSMenuItem!
     var welcomeWindowController: WelcomeWindowController?
     
     let config = Configuration()
@@ -27,6 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     let deviceManager: DeviceManager
     let serviceManager = ServiceManager()
     let userNotificationManager: UserNotificationManager
+    let updaterController: SPUStandardUpdaterController
     
     static let logLevelConfigurationKey = "com.soduto.logLevel"
     
@@ -47,6 +50,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.connectionProvider = ConnectionProvider(config: config)
         self.deviceManager = DeviceManager(config: config, serviceManager: self.serviceManager)
         self.userNotificationManager = UserNotificationManager(config: self.config, serviceManager: self.serviceManager, deviceManager: self.deviceManager)
+        self.updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         
         super.init()
         
@@ -63,6 +67,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.statusBarMenuController.serviceManager = self.serviceManager
         self.statusBarMenuController.config = self.config
         self.deviceManager.delegate = self
+        
+        self.checkForUpdatesMenuItem.target = updaterController
+        self.checkForUpdatesMenuItem.action = #selector(SPUStandardUpdaterController.checkForUpdates(_:))
         
         self.serviceManager.add(service: NotificationsService())
         self.serviceManager.add(service: ClipboardService())

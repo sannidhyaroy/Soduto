@@ -34,5 +34,11 @@
 	<string>Soduto.StatusBarApplication</string>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUPublicEDKey</key>
+	<string>n0eebZ3Df6AWfesZYWLU1rD+dAsF2iHb6Kn/BXzdGa8=</string>
+	<key>SUFeedURL</key>
+	<string>https://soduto.noton.tk/appcast.xml</string>
 </dict>
 </plist>

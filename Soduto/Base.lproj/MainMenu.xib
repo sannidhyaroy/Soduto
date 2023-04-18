@@ -13,6 +13,7 @@
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="Soduto" customModuleProvider="target">
             <connections>
+                <outlet property="checkForUpdatesMenuItem" destination="zow-ql-WNV" id="HmR-Ch-c5g"/>
                 <outlet property="statusBarMenuController" destination="vQj-dd-GoX" id="7Z5-SX-5qh"/>
             </connections>
         </customObject>
@@ -30,28 +31,29 @@
                     <modifierMask key="keyEquivalentModifierMask"/>
                 </menuItem>
                 <menuItem isSeparatorItem="YES" id="XN7-yK-oPR"/>
-                <menuItem title="About Soduto" id="sNE-CC-2Jm">
-                    <modifierMask key="keyEquivalentModifierMask"/>
-                    <connections>
-                        <action selector="showAboutWindow:" target="vQj-dd-GoX" id="Z8y-Zi-KJK"/>
-                    </connections>
-                </menuItem>
-                <menuItem isSeparatorItem="YES" id="Zv9-hp-heD"/>
-                <menuItem title="Preferences..." id="NNU-ep-Fgn" userLabel="Open Soduto Preferences">
-                    <modifierMask key="keyEquivalentModifierMask"/>
-                    <connections>
-                        <action selector="openPreferences:" target="vQj-dd-GoX" id="rrW-aH-Gim"/>
-                    </connections>
-                </menuItem>
                 <menuItem title="Launch on Login" id="tU8-jY-Cw3">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="toggleLaunchOnLogin:" target="vQj-dd-GoX" id="tjq-3a-oye"/>
                     </connections>
                 </menuItem>
-                <menuItem isSeparatorItem="YES" id="NAb-Li-52a"/>
-                <menuItem title="Quit" id="LmP-mI-dDc" userLabel="Quit">
+                <menuItem isSeparatorItem="YES" id="Zv9-hp-heD"/>
+                <menuItem title="Check for Updates" id="zow-ql-WNV">
                     <modifierMask key="keyEquivalentModifierMask"/>
+                </menuItem>
+                <menuItem title="Preferences" keyEquivalent="," id="NNU-ep-Fgn" userLabel="Open Soduto Preferences">
+                    <connections>
+                        <action selector="openPreferences:" target="vQj-dd-GoX" id="rrW-aH-Gim"/>
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="NAb-Li-52a"/>
+                <menuItem title="About" id="sNE-CC-2Jm">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="showAboutWindow:" target="vQj-dd-GoX" id="Z8y-Zi-KJK"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Quit" keyEquivalent="q" id="LmP-mI-dDc" userLabel="Quit">
                     <connections>
                         <action selector="quit:" target="vQj-dd-GoX" id="tJd-Y3-QP5"/>
                     </connections>
