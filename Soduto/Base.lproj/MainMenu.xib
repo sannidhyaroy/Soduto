@@ -31,26 +31,13 @@
                     <modifierMask key="keyEquivalentModifierMask"/>
                 </menuItem>
                 <menuItem isSeparatorItem="YES" id="XN7-yK-oPR"/>
-                <menuItem title="About Soduto" id="sNE-CC-2Jm">
-                    <modifierMask key="keyEquivalentModifierMask"/>
-                    <connections>
-                        <action selector="showAboutWindow:" target="vQj-dd-GoX" id="Z8y-Zi-KJK"/>
-                    </connections>
-                </menuItem>
-                <menuItem isSeparatorItem="YES" id="Zv9-hp-heD"/>
-                <menuItem title="Preferences..." id="NNU-ep-Fgn" userLabel="Open Soduto Preferences">
-                    <modifierMask key="keyEquivalentModifierMask"/>
-                    <connections>
-                        <action selector="openPreferences:" target="vQj-dd-GoX" id="rrW-aH-Gim"/>
-                    </connections>
-                </menuItem>
                 <menuItem title="Launch on Login" id="tU8-jY-Cw3">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="toggleLaunchOnLogin:" target="vQj-dd-GoX" id="tjq-3a-oye"/>
                     </connections>
                 </menuItem>
-                <menuItem isSeparatorItem="YES" id="NAb-Li-52a"/>
+                <menuItem isSeparatorItem="YES" id="Zv9-hp-heD"/>
                 <menuItem title="Check for Updates" id="LHF-X7-9lM">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
@@ -58,8 +45,19 @@
                         <binding destination="nCU-Jx-Rml" name="target" keyPath="self" id="8kS-ux-8io"/>
                     </connections>
                 </menuItem>
-                <menuItem title="Quit" id="LmP-mI-dDc" userLabel="Quit">
+                <menuItem title="Preferences" keyEquivalent="," id="NNU-ep-Fgn" userLabel="Open Soduto Preferences">
+                    <connections>
+                        <action selector="openPreferences:" target="vQj-dd-GoX" id="rrW-aH-Gim"/>
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="NAb-Li-52a"/>
+                <menuItem title="About" id="sNE-CC-2Jm">
                     <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="showAboutWindow:" target="vQj-dd-GoX" id="Z8y-Zi-KJK"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Quit" keyEquivalent="q" id="LmP-mI-dDc" userLabel="Quit">
                     <connections>
                         <action selector="quit:" target="vQj-dd-GoX" id="tJd-Y3-QP5"/>
                     </connections>
