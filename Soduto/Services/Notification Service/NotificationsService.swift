@@ -243,7 +243,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     
     private func showNotification(for dataPacket: DataPacket, from device: Device) {
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
-        
+
         do {
             guard let packetNotificationId = try dataPacket.getId() else { return }
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
@@ -256,9 +256,9 @@ public class NotificationsService: Service, UserNotificationActionHandler {
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
             let dontPresent = isAnswer || isSilent
-            
+
             let notificationIconPath = Bundle.main.path(forResource: "\(appName)", ofType: ".png")
-            
+
             if #available(macOS 11.0, *){
                 un.getNotificationSettings { (settings) in
                     if settings.authorizationStatus == .authorized {
@@ -293,7 +293,14 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                         }
                         if actions != nil {
                             for action in actions! {
-                                notificationActions.append(UNNotificationAction(identifier: action, title: action))
+                                /// Don't show if there's a copy action and instead copy it to clipboard automatically
+                                if action.starts(with: "Copy") && appName == "Messages" {
+                                    let otp = action.replacingOccurrences(of: "\"", with: "").split(separator: " ")[1]
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(String(otp), forType: .string)
+                                } else {
+                                    notificationActions.append(UNNotificationAction(identifier: action, title: action))
+                                }
                             }
                         }
                         notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))
@@ -329,13 +336,14 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                 notification.identifier = notificationId
                 NSUserNotificationCenter.default.scheduleNotification(notification)
             }
-            
+
             self.addNotificationId(notificationId, from: device)
         }
         catch {
             Log.error?.message("Error while showing notification: \(error)")
         }
     }
+
     
     private func hideNotification(for dataPacket: DataPacket, from device: Device) {
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
