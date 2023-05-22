@@ -159,6 +159,9 @@ public class BatteryService: Service {
             self.hideNotification(for: device)
             notificationSentForPercentage.removeValue(forKey: device.id)
         }
+        else {
+            notificationSentForPercentage.removeValue(forKey: device.id)
+        }
     }
     
     private func notificationId(for device: Device) -> NSUserNotification.Id {
