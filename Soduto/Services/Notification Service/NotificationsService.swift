@@ -257,12 +257,14 @@ public class NotificationsService: Service, UserNotificationActionHandler {
             let isCancelable = try dataPacket.getClearableFlag()
             let dontPresent = isAnswer || isSilent
 
-            let notificationIconPath = Bundle.main.path(forResource: "\(appName)", ofType: ".png")
+            let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name(appName))
 
             if #available(macOS 11.0, *){
                 un.getNotificationSettings { (settings) in
                     if settings.authorizationStatus == .authorized {
                         let notification = UNMutableNotificationContent()
+                        
+                        // Set Notification UserInfo
                         var userInfo = notification.userInfo
                         userInfo[UserInfoProperty.deviceId.rawValue] = device.id as AnyObject
                         userInfo[UserInfoProperty.notificationId.rawValue] = packetNotificationId as AnyObject
@@ -270,12 +272,17 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                         userInfo[UserInfoProperty.isCancelable.rawValue] = NSNumber(value: isCancelable)
                         userInfo[UserNotificationManager.Property.dontPresent.rawValue] = NSNumber(value: dontPresent)
                         notification.userInfo = userInfo
-                        notification.title = "\(appName) | \(device.name)"
-                        notification.body = ticker
+                        
+                        notification.title = "\(appName) | \(device.name)"  /// Set Notification Title
+                        notification.body = ticker  /// Set Notification Body
+                        notification.categoryIdentifier = "IncomingNotification"    /// Set Notification Category Identifier
+                        
+                        /// Don't set notification sound if it's an answer to request packet or is a silent notification
                         if !dontPresent {
                             notification.sound = UNNotificationSound.default()
                         }
-                        let id = notificationId
+                        
+                        /// Set Notification App Icon
                         if (notificationIconPath != nil) {
                             let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
                             do {
@@ -286,14 +293,18 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                                 print(error.localizedDescription)
                             }
                         }
-                        notification.categoryIdentifier = "IncomingNotification"
+                        
                         var notificationActions = [UNNotificationAction]()
+                        
+                        /// Add Reply Action Button if Reply Actions are available
                         if replyId != nil {
                             notificationActions.append(UNTextInputNotificationAction(identifier: "ReplyNotification", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your message here..."))
                         }
+                        
+                        /// Add Action Buttons, if available
                         if actions != nil {
                             for action in actions! {
-                                /// Don't show if there's a copy action and instead copy it to clipboard automatically
+                                /// Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
                                 if action.starts(with: "Copy") && appName == "Messages" {
                                     let otp = action.replacingOccurrences(of: "\"", with: "").split(separator: " ")[1]
                                     NSPasteboard.general.clearContents()
@@ -303,10 +314,12 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                                 }
                             }
                         }
-                        notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))
-                        let category = UNNotificationCategory(identifier: "IncomingNotification", actions: notificationActions, intentIdentifiers: [], options: [])
-                        let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
-                        self.un.setNotificationCategories([category])
+                        notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))   /// Append a Dismiss Action which can trigger a dismiss request to the other device.
+                        let category = UNNotificationCategory(identifier: "IncomingNotification", actions: notificationActions, intentIdentifiers: [], options: []) /// Create Notification Category
+                        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)    /// Create Notification Request
+                        self.un.setNotificationCategories([category])   /// Set Notification Categories
+                        
+                        /// Push Notification
                         self.un.add(request){ (error) in
                             if error != nil {print(error?.localizedDescription as Any)}
                         }
@@ -337,7 +350,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                 NSUserNotificationCenter.default.scheduleNotification(notification)
             }
 
-            self.addNotificationId(notificationId, from: device)
+            self.addNotificationId(notificationId, from: device)    /// Add the Notification ID to the `notificationIds` Dictionary
         }
         catch {
             Log.error?.message("Error while showing notification: \(error)")
