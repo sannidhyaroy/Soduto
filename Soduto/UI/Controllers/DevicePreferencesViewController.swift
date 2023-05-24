@@ -8,7 +8,9 @@
 
 import Foundation
 import Cocoa
+import Sparkle
 
+let updater = AppDelegate.shared().updaterController.updater
 let preferencesUserDefaults = UserDefaults(suiteName: SharedUserDefaults.preferencesSuite)
 var disableSharePopUp = UserDefaults.standard.bool(forKey: SharedUserDefaults.Preferences.disableSharePopUp)
 var deviceTypeInt = preferencesUserDefaults?.integer(forKey: SharedUserDefaults.Preferences.deviceType) ?? 0
@@ -22,6 +24,7 @@ class DevicePreferencesViewController: NSViewController {
     
     @IBOutlet weak var hostNameLabel: NSTextField!
     
+    @IBOutlet weak var automaticCheckForUpdates: NSButton!
     @IBOutlet weak var disableSharePopUpCheckbox: NSButton!
     @IBOutlet weak var deviceTypeButton: NSPopUpButton!
     
@@ -73,6 +76,9 @@ class DevicePreferencesViewController: NSViewController {
         if self.deviceTypeButton != nil {
             self.deviceTypeButton.selectItem(withTag: deviceTypeInt)
         }
+        if self.automaticCheckForUpdates != nil {
+            self.automaticCheckForUpdates.state = updater.automaticallyChecksForUpdates ? NSButton.StateValue.on : NSButton.StateValue.off
+        }
     }
     
     @IBAction func sharePopUp (_ sender: Any?) {
@@ -92,5 +98,11 @@ class DevicePreferencesViewController: NSViewController {
             // No item selected
         }
         preferencesUserDefaults?.synchronize()
+    }
+    
+    @IBAction func autoCheckForUpdates (_ sender: Any?) {
+        let checkBoxState = automaticCheckForUpdates.state
+        let state: Bool = (checkBoxState == .on) ? true : false
+        updater.automaticallyChecksForUpdates = state
     }
 }
