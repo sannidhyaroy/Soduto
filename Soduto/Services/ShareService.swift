@@ -409,6 +409,15 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let notificationId = "\(self.id).upload.\(deviceName)"
         
         if #available(macOS 11.0, *) {
+            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
+                if authorized {
+                    print("Authorized to send notifications!")
+                } else if !authorized {
+                    print("Not authorized to send notifications")
+                } else {
+                    print(error?.localizedDescription as Any)
+                }
+            }
             un.getNotificationSettings { (settings) in
                 if settings.authorizationStatus == .authorized {
                     let notification = UNMutableNotificationContent()
@@ -457,6 +466,15 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let notificationId = "\(self.id).download.\(task.id)"
         
         if #available(macOS 11.0, *) {
+            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
+                if authorized {
+                    print("Authorized to send notifications!")
+                } else if !authorized {
+                    print("Not authorized to send notifications")
+                } else {
+                    print(error?.localizedDescription as Any)
+                }
+            }
             un.getNotificationSettings { (settings) in
                 if settings.authorizationStatus == .authorized {
                     let notification = UNMutableNotificationContent()
@@ -506,6 +524,15 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let notificationId = "\(self.id).upload.\(deviceName!)"
         
         if #available(macOS 11.0, *) {
+            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
+                if authorized {
+                    print("Authorized to send notifications!")
+                } else if !authorized {
+                    print("Not authorized to send notifications")
+                } else {
+                    print(error?.localizedDescription as Any)
+                }
+            }
             un.getNotificationSettings { (settings) in
                 if settings.authorizationStatus == .authorized {
                     let notification = UNMutableNotificationContent()
@@ -569,6 +596,15 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let notificationId = "\(self.id).download.\(task.id)"
         
         if #available(macOS 11.0, *) {
+            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
+                if authorized {
+                    print("Authorized to send notifications!")
+                } else if !authorized {
+                    print("Not authorized to send notifications")
+                } else {
+                    print(error?.localizedDescription as Any)
+                }
+            }
             un.getNotificationSettings { (settings) in
                 if settings.authorizationStatus == .authorized {
                     let notification = UNMutableNotificationContent()

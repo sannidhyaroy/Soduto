@@ -24,6 +24,8 @@
 				<integer>1</integer>
 			</dict>
 		</dict>
+		<key>NSExtensionMainNibFile</key>
+		<string>ShareViewController</string>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.share-services</string>
 		<key>NSExtensionPrincipalClass</key>
