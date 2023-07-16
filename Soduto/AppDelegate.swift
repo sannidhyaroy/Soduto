@@ -79,6 +79,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: PingService())
         self.serviceManager.add(service: BatteryService())
         self.serviceManager.add(service: FindMyPhoneService())
+        self.serviceManager.add(service: MediaService())
         //self.serviceManager.add(service: RemoteKeyboardService())
         un.delegate = self
         self.updateValidDevices()

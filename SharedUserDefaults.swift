@@ -9,7 +9,7 @@
 import Foundation
 
 struct SharedUserDefaults {
-    static let suiteName = "P8CGT2P7HB.com.soduto.Soduto"
+    static let suiteName = "73583QR2DF.com.soduto.Soduto"
     static let preferencesSuite = "com.soduto.Soduto.Preferences.Keys"
     
     struct Keys {

@@ -25,6 +25,8 @@
 		02968D0C204C4B9100FCE5E0 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 02968CFE204C4B9000FCE5E0 /* README.md */; };
 		02EC48B51F229CCE00C9370F /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B41F229CCE00C9370F /* Configuration.swift */; };
 		02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */; };
+		1D8F3EFB2A614A110080B51F /* MediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D8F3EFA2A614A110080B51F /* MediaService.swift */; };
+		1D8F3EFE2A616E5C0080B51F /* SwiftyJSON in Frameworks */ = {isa = PBXBuildFile; productRef = 1D8F3EFD2A616E5C0080B51F /* SwiftyJSON */; };
 		312E76FF2938A93F00F29BFA /* Signal.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76F42938A93D00F29BFA /* Signal.png */; };
 		312E77002938A93F00F29BFA /* WhatsApp.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76F52938A93E00F29BFA /* WhatsApp.png */; };
 		312E77012938A93F00F29BFA /* Messenger.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76F62938A93E00F29BFA /* Messenger.png */; };
@@ -262,6 +264,7 @@
 		02968CFE204C4B9000FCE5E0 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		02EC48B41F229CCE00C9370F /* Configuration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Configuration.swift; path = Configuration/Configuration.swift; sourceTree = "<group>"; };
 		02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceConfiguration.swift; sourceTree = "<group>"; };
+		1D8F3EFA2A614A110080B51F /* MediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaService.swift; sourceTree = "<group>"; };
 		312E76F42938A93D00F29BFA /* Signal.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Signal.png; sourceTree = "<group>"; };
 		312E76F52938A93E00F29BFA /* WhatsApp.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = WhatsApp.png; sourceTree = "<group>"; };
 		312E76F62938A93E00F29BFA /* Messenger.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messenger.png; sourceTree = "<group>"; };
@@ -414,6 +417,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1D8F3EFE2A616E5C0080B51F /* SwiftyJSON in Frameworks */,
 				76B580582930EE1B003453FD /* libcrypto.a in Frameworks */,
 				76B580592930EE1B003453FD /* libssl.a in Frameworks */,
 				31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */,
@@ -799,6 +803,7 @@
 				84651A751E5AEBE100D17601 /* SftpService.swift */,
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
 				847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */,
+				1D8F3EFA2A614A110080B51F /* MediaService.swift */,
 				319CBA272939662400DAE301 /* Phone.png */,
 				319CBA292939F07D00DAE301 /* AirDrop.png */,
 				3144827C2940AF3200CCA098 /* Message.png */,
@@ -847,6 +852,9 @@
 				31F3A15B293B5EA300550088 /* PBXTargetDependency */,
 			);
 			name = Soduto;
+			packageProductDependencies = (
+				1D8F3EFD2A616E5C0080B51F /* SwiftyJSON */,
+			);
 			productName = Soduto;
 			productReference = 843301601D2D8CB8008934BB /* Soduto.app */;
 			productType = "com.apple.product-type.application";
@@ -964,6 +972,9 @@
 				Base,
 			);
 			mainGroup = 843301571D2D8CB8008934BB;
+			packageReferences = (
+				1D8F3EFC2A616E5C0080B51F /* XCRemoteSwiftPackageReference "SwiftyJSON" */,
+			);
 			productRefGroup = 843301611D2D8CB8008934BB /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -1103,6 +1114,7 @@
 				84B933EF1E281AB40071DEFF /* CertificateUtils.m in Sources */,
 				849237A11DE224CF00D95BBA /* FindMyPhoneService.swift in Sources */,
 				84FA45E41DDDDB7F00EF3992 /* InterfaceElementTags.swift in Sources */,
+				1D8F3EFB2A614A110080B51F /* MediaService.swift in Sources */,
 				849237A31DE4E76E00D95BBA /* UserNotificationManager.swift in Sources */,
 				845BE2E21EC246EE00F3BD62 /* LoadingWindowController.swift in Sources */,
 				84651A761E5AEBE100D17601 /* SftpService.swift in Sources */,
@@ -1289,7 +1301,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 18;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1329,7 +1341,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 18;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1476,7 +1488,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 18;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1517,7 +1529,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 18;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1554,7 +1566,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -1576,7 +1588,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -1598,7 +1610,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoBrowser/Info.plist;
@@ -1627,7 +1639,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoBrowser/Info.plist;
@@ -1654,7 +1666,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_WARN_SUSPICIOUS_MOVES = YES;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoTests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1676,7 +1688,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_WARN_SUSPICIOUS_MOVES = YES;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = 73583QR2DF;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoTests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1750,6 +1762,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1D8F3EFC2A616E5C0080B51F /* XCRemoteSwiftPackageReference "SwiftyJSON" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SwiftyJSON/SwiftyJSON";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1D8F3EFD2A616E5C0080B51F /* SwiftyJSON */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1D8F3EFC2A616E5C0080B51F /* XCRemoteSwiftPackageReference "SwiftyJSON" */;
+			productName = SwiftyJSON;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 843301581D2D8CB8008934BB /* Project object */;
 }
