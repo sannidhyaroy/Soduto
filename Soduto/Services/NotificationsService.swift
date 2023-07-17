@@ -324,9 +324,8 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                             for action in actions! {
                                 /// Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
                                 if action.starts(with: "Copy") && appName == "Messages" {
-                                    let otp = action.replacingOccurrences(of: "\"", with: "").split(separator: " ")[1]
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(String(otp), forType: .string)
+                                    /// Copy OTP to clipboard
+                                    self.copyOTP(from: action)
                                 } else {
                                     notificationActions.append(UNNotificationAction(identifier: action, title: action))
                                 }
@@ -416,6 +415,22 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     private func removeNotificationId(_ id: NotificationId, from device: Device) {
         guard self.notificationIds[device.id] != nil else { return }
         _ = self.notificationIds[device.id]?.remove(id)
+    }
+    
+    private func copyOTP(from string:String) {
+        let regex = try! NSRegularExpression(pattern: #"Copy "(.*?)""#, options: [])
+            if let match = regex.firstMatch(in: string, options: [], range: NSRange(string.startIndex..., in: string)) {
+                let numberRange = Range(match.range(at: 1), in: string)!
+                let number = String(string[numberRange])
+                
+                // Remove non-digit characters from the number
+                let nonDigitCharacters = CharacterSet.decimalDigits.inverted
+                let otp = number.components(separatedBy: nonDigitCharacters).joined()
+
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(otp, forType: .string)
+        }
     }
     
 }

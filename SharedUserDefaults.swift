@@ -23,5 +23,6 @@ struct SharedUserDefaults {
     struct Preferences {
         static let disableSharePopUp = ""
         static let deviceType = ""
+        static let hostName = ""
     }
 }

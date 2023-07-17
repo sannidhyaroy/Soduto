@@ -464,26 +464,28 @@
 			name = Configuration;
 			sourceTree = "<group>";
 		};
-		312E770B2938AB7400F29BFA /* Notification Service */ = {
+		312E770B2938AB7400F29BFA /* App Icons */ = {
 			isa = PBXGroup;
 			children = (
-				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
+				319CBA292939F07D00DAE301 /* AirDrop.png */,
+				317ACC482A1C35A800D01DF4 /* Clock.png */,
 				312E76F82938A93E00F29BFA /* Discord.png */,
 				312E76FE2938A93F00F29BFA /* Facebook.png */,
-				312E76FC2938A93F00F29BFA /* Instagram.png */,
-				317ACC482A1C35A800D01DF4 /* Clock.png */,
 				317ACC472A1C35A800D01DF4 /* Gmail.png */,
-				317ACC492A1C35A800D01DF4 /* YouTube.png */,
+				312E76FC2938A93F00F29BFA /* Instagram.png */,
+				3144827C2940AF3200CCA098 /* Message.png */,
 				312E76FD2938A93F00F29BFA /* Messages.png */,
 				312E76F62938A93E00F29BFA /* Messenger.png */,
+				319CBA272939662400DAE301 /* Phone.png */,
 				312E76F92938A93E00F29BFA /* Reddit.png */,
 				312E76F42938A93D00F29BFA /* Signal.png */,
 				312E76F72938A93E00F29BFA /* Spike.png */,
 				312E76FB2938A93F00F29BFA /* Telegram.png */,
 				312E76FA2938A93F00F29BFA /* Twitter.png */,
 				312E76F52938A93E00F29BFA /* WhatsApp.png */,
+				317ACC492A1C35A800D01DF4 /* YouTube.png */,
 			);
-			path = "Notification Service";
+			path = "App Icons";
 			sourceTree = "<group>";
 		};
 		31F3A150293B5EA300550088 /* Soduto Share */ = {
@@ -595,6 +597,7 @@
 				8438A9251E45145F00922155 /* StatusBarApplication.swift */,
 				31864DCE293C3CE100334902 /* SharedUserDefaults.swift */,
 				843301651D2D8CB8008934BB /* Assets.xcassets */,
+				312E770B2938AB7400F29BFA /* App Icons */,
 				8456F4A41D7DE31A006EFE19 /* Core */,
 				849961B31D572664002B893A /* MyUtilities */,
 				84FA45EB1DDF51EB00EF3992 /* Services */,
@@ -794,15 +797,12 @@
 				84651A711E599A3C00D17601 /* BatteryService.swift */,
 				840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */,
 				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
+				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
 				84FA45EC1DDF525200EF3992 /* PingService.swift */,
 				842505E81ED1BD3C00AEE25F /* RemoteKeyboardService.swift */,
 				84651A751E5AEBE100D17601 /* SftpService.swift */,
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
 				847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */,
-				319CBA272939662400DAE301 /* Phone.png */,
-				319CBA292939F07D00DAE301 /* AirDrop.png */,
-				3144827C2940AF3200CCA098 /* Message.png */,
-				312E770B2938AB7400F29BFA /* Notification Service */,
 			);
 			path = Services;
 			sourceTree = "<group>";

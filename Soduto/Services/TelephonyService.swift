@@ -233,7 +233,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                         notification.title = "Incoming call from \(contactName)"
                         notification.subtitle = device.name
                         
-                        let notificationIconPath = Bundle.main.path(forResource: "Phone", ofType: ".png")
+                        let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone"))
                         if (notificationIconPath != nil) {
                             let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
                             do {
@@ -370,7 +370,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                         notification.title = "SMS from  \(contactName) | \(device.name)"
                         notification.body = messageBody
                         notification.sound = UNNotificationSound.default()
-                        let notificationIconPath = Bundle.main.path(forResource: "Message", ofType: ".png")
+                        let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Message"))
                         if (notificationIconPath != nil) {
                             let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
                             do {

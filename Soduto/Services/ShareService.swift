@@ -26,7 +26,7 @@ import UserNotifications
 public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotificationActionHandler, NSDraggingDestination {
     
     let un = UNUserNotificationCenter.current()
-    let notificationIconPath = Bundle.main.path(forResource: "AirDrop", ofType: ".png")
+    let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("AirDrop"))
     let connectedDevices = AppDelegate.shared().validDevices
     
     // MARK: Types

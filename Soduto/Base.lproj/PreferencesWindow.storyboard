@@ -55,17 +55,17 @@
             <objects>
                 <viewController title="Devices" id="DvB-YZ-h1x" customClass="DevicePreferencesViewController" customModule="Soduto" customModuleProvider="target" sceneMemberID="viewController">
                     <view key="view" wantsLayer="YES" id="gnx-Qc-teH">
-                        <rect key="frame" x="0.0" y="0.0" width="680" height="400"/>
+                        <rect key="frame" x="0.0" y="0.0" width="750" height="450"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
                             <containerView translatesAutoresizingMaskIntoConstraints="NO" id="1St-dx-ejH">
-                                <rect key="frame" x="240" y="20" width="420" height="360"/>
+                                <rect key="frame" x="240" y="20" width="490" height="410"/>
                                 <connections>
                                     <segue destination="NJm-NZ-OS4" kind="embed" id="sAC-j9-Ov0"/>
                                 </connections>
                             </containerView>
                             <imageView horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="Nu6-PX-g25">
-                                <rect key="frame" x="40" y="248" width="172" height="112"/>
+                                <rect key="frame" x="40" y="298" width="172" height="112"/>
                                 <constraints>
                                     <constraint firstAttribute="height" constant="112" id="BRh-GY-Swb"/>
                                     <constraint firstAttribute="width" constant="172" id="CFB-5S-goK"/>
@@ -73,7 +73,7 @@
                                 <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" image="NSApplicationIcon" id="HWE-4F-dhu"/>
                             </imageView>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="JI8-Vn-Ayd" userLabel="Host name">
-                                <rect key="frame" x="18" y="204" width="216" height="16"/>
+                                <rect key="frame" x="18" y="254" width="216" height="16"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="center" title="Host name" id="sAG-f5-P1a">
                                     <font key="font" usesAppearanceFont="YES"/>
                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
