@@ -24,14 +24,16 @@
 ---
 ## Installation
 
-The official build of Soduto can be downloaded from [soduto.com](https://www.soduto.com). To install, open the downloaded `.dmg` file and drag `Soduto.app` onto Applications folder.
+To install my forked version of Soduto, head to the [Releases Page](https://github.com/sannidhyaroy/soduto/releases/latest) of this Repository and download the `.dmg` file from the latest build. Then open the downloaded `.dmg` file. You might get a pop-up window containing the license. Tap agree if you've read it and wish to continue. Then drag `Soduto.app` onto the Applications Folder. When running for the first time, you might get a prompt saying that macOS can't run apps from an unidentified developer. Press and hold `control` and click on the app icon. While still holding `Control`, select `Open`.
+
+The official build of Soduto can be downloaded from [soduto.com](https://www.soduto.com) or from [Soduto's official repository](https://github.com/soduto/Soduto).
 
 There is also a (unofficial) Homebrew formulae, that can install Soduto with such command:
 
 ```bash
 brew install --cask soduto
 ```
-Since, Soduto is open-sourced, there are many forks of it on GitHub. To install my forked version of Soduto, head to the [Releases Page](https://github.com/sannidhyaroy/soduto/releases/latest) of this Repository and download the latest build, open the downloaded `.dmg` file and drag `Soduto.app` onto the Applications Folder. When running for the first time, you might get a prompt saying that macOS can't run apps from an unidentified developer. Press and hold control and click on the app icon. While still holding Control, select `Open`.
+Do note that currently there's no Homebrew formulae for my forked version and the only source is the [Releases Page](https://github.com/sannidhyaroy/soduto/releases/latest) of this repository.
 
 ---
 ## Building
