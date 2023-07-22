@@ -291,16 +291,16 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                         userInfo[UserNotificationManager.Property.dontPresent.rawValue] = NSNumber(value: dontPresent)
                         notification.userInfo = userInfo
                         
-                        notification.title = "\(appName) | \(device.name)"  /// Set Notification Title
-                        notification.body = ticker  /// Set Notification Body
-                        notification.categoryIdentifier = "IncomingNotification"    /// Set Notification Category Identifier
+                        notification.title = "\(appName) | \(device.name)"  // Set Notification Title
+                        notification.body = ticker  // Set Notification Body
+                        notification.categoryIdentifier = "IncomingNotification"    // Set Notification Category Identifier
                         
-                        /// Don't set notification sound if it's an answer to request packet or is a silent notification
+                        // Don't set notification sound if it's an answer to request packet or is a silent notification
                         if !dontPresent {
                             notification.sound = UNNotificationSound.default()
                         }
                         
-                        /// Set Notification App Icon
+                        // Set Notification App Icon
                         if (notificationIconPath != nil) {
                             let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
                             do {
@@ -314,29 +314,35 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                         
                         var notificationActions = [UNNotificationAction]()
                         
-                        /// Add Reply Action Button if Reply Actions are available
+                        // Add Reply Action Button if Reply Actions are available
                         if replyId != nil {
                             notificationActions.append(UNTextInputNotificationAction(identifier: "ReplyNotification", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your message here..."))
                         }
                         
-                        /// Add Action Buttons, if available
+                        // Add Action Buttons, if available
                         if actions != nil {
                             for action in actions! {
-                                /// Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
-                                if action.starts(with: "Copy") && appName == "Messages" {
-                                    /// Copy OTP to clipboard
-                                    self.copyOTP(from: action)
+                                // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
+                                if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
+                                    self.copyOTP(from: action) // Copy OTP to clipboard
                                 } else {
                                     notificationActions.append(UNNotificationAction(identifier: action, title: action))
                                 }
                             }
                         }
-                        notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))   /// Append a Dismiss Action which can trigger a dismiss request to the other device.
-                        let category = UNNotificationCategory(identifier: "IncomingNotification", actions: notificationActions, intentIdentifiers: [], options: []) /// Create Notification Category
-                        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)    /// Create Notification Request
-                        self.un.setNotificationCategories([category])   /// Set Notification Categories
+                        // Append a dismiss action that can trigger a dismiss request to the other device
+                        notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))
                         
-                        /// Push Notification
+                        // Create Notification Category
+                        let category = UNNotificationCategory(identifier: "IncomingNotification", actions: notificationActions, intentIdentifiers: [], options: [])
+                        
+                        // Create notification request
+                        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+                        
+                        // Set Notification Categories
+                        self.un.setNotificationCategories([category])
+                        
+                        // Push Notification
                         self.un.add(request){ (error) in
                             if error != nil {print(error?.localizedDescription as Any)}
                         }
@@ -418,19 +424,25 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     }
     
     private func copyOTP(from string:String) {
-        let regex = try! NSRegularExpression(pattern: #"Copy "(.*?)""#, options: [])
-            if let match = regex.firstMatch(in: string, options: [], range: NSRange(string.startIndex..., in: string)) {
-                let numberRange = Range(match.range(at: 1), in: string)!
-                let number = String(string[numberRange])
-                
-                // Remove non-digit characters from the number
-                let nonDigitCharacters = CharacterSet.decimalDigits.inverted
-                let otp = number.components(separatedBy: nonDigitCharacters).joined()
-
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(otp, forType: .string)
-        }
+        let prefixToRemove = "Copy \""
+        let suffixToRemove = "\""
+        let pattern = "[^0-9A-Za-z]" // Matches any character that is NOT a number or letter
+        
+        // Extract OTP
+        let startIndex = string.index(string.startIndex, offsetBy: prefixToRemove.count)
+        let endIndex = string.index(string.endIndex, offsetBy: -suffixToRemove.count)
+        let slicedString = string[startIndex..<endIndex]
+        
+        let regex = try! NSRegularExpression(pattern: pattern, options: [])
+        let range = NSRange(location: 0, length: slicedString.utf16.count)
+        
+        // Remove any non-alphanumeric character (like invisible unicode characters)
+        let otp = regex.stringByReplacingMatches(in: String(slicedString), options: [], range: range, withTemplate: "")
+        
+        // Copy to clipboard
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(otp, forType: .string)
     }
     
 }
