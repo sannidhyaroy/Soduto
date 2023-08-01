@@ -7,6 +7,7 @@
 //
 
 import Cocoa
+import AppleScriptObjC
 import Foundation
 import CleanroomLogger
 import UserNotifications
@@ -34,6 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     static let logLevelConfigurationKey = "com.soduto.logLevel"
     
     override init() {
+        
         UserDefaults.standard.register(defaults: [AppDelegate.logLevelConfigurationKey: LogSeverity.info.rawValue])
         
 #if DEBUG
@@ -51,6 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.deviceManager = DeviceManager(config: config, serviceManager: self.serviceManager)
         self.userNotificationManager = UserNotificationManager(config: self.config, serviceManager: self.serviceManager, deviceManager: self.deviceManager)
         self.updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        
         
         super.init()
         

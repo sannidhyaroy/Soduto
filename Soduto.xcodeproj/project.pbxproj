@@ -25,8 +25,11 @@
 		02968D0C204C4B9100FCE5E0 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 02968CFE204C4B9000FCE5E0 /* README.md */; };
 		02EC48B51F229CCE00C9370F /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B41F229CCE00C9370F /* Configuration.swift */; };
 		02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */; };
+		1D08E3362A77B9650054056B /* AppleScriptObjC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1D08E3352A77B9650054056B /* AppleScriptObjC.framework */; };
 		1D8F3EFB2A614A110080B51F /* MediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D8F3EFA2A614A110080B51F /* MediaService.swift */; };
 		1D8F3EFE2A616E5C0080B51F /* SwiftyJSON in Frameworks */ = {isa = PBXBuildFile; productRef = 1D8F3EFD2A616E5C0080B51F /* SwiftyJSON */; };
+		1D8FEB302A6D18D300FAF989 /* iTunesBridge.applescript in Sources */ = {isa = PBXBuildFile; fileRef = 1D8FEB2F2A6D18D300FAF989 /* iTunesBridge.applescript */; };
+		1D8FEB322A6D19C600FAF989 /* iTunesBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D8FEB312A6D19C600FAF989 /* iTunesBridge.swift */; };
 		312E76FF2938A93F00F29BFA /* Signal.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76F42938A93D00F29BFA /* Signal.png */; };
 		312E77002938A93F00F29BFA /* WhatsApp.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76F52938A93E00F29BFA /* WhatsApp.png */; };
 		312E77012938A93F00F29BFA /* Messenger.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76F62938A93E00F29BFA /* Messenger.png */; };
@@ -264,7 +267,10 @@
 		02968CFE204C4B9000FCE5E0 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		02EC48B41F229CCE00C9370F /* Configuration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Configuration.swift; path = Configuration/Configuration.swift; sourceTree = "<group>"; };
 		02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceConfiguration.swift; sourceTree = "<group>"; };
+		1D08E3352A77B9650054056B /* AppleScriptObjC.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppleScriptObjC.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/AppleScriptObjC.framework; sourceTree = DEVELOPER_DIR; };
 		1D8F3EFA2A614A110080B51F /* MediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaService.swift; sourceTree = "<group>"; };
+		1D8FEB2F2A6D18D300FAF989 /* iTunesBridge.applescript */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.applescript; path = iTunesBridge.applescript; sourceTree = "<group>"; };
+		1D8FEB312A6D19C600FAF989 /* iTunesBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iTunesBridge.swift; sourceTree = "<group>"; };
 		312E76F42938A93D00F29BFA /* Signal.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Signal.png; sourceTree = "<group>"; };
 		312E76F52938A93E00F29BFA /* WhatsApp.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = WhatsApp.png; sourceTree = "<group>"; };
 		312E76F62938A93E00F29BFA /* Messenger.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messenger.png; sourceTree = "<group>"; };
@@ -423,6 +429,7 @@
 				31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */,
 				76B5805A2930EE1B003453FD /* libssh2.a in Frameworks */,
 				843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */,
+				1D08E3362A77B9650054056B /* AppleScriptObjC.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -466,6 +473,16 @@
 				02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */,
 			);
 			name = Configuration;
+			sourceTree = "<group>";
+		};
+		1D8FEB2C2A6D183200FAF989 /* MediaService */ = {
+			isa = PBXGroup;
+			children = (
+				1D8F3EFA2A614A110080B51F /* MediaService.swift */,
+				1D8FEB2F2A6D18D300FAF989 /* iTunesBridge.applescript */,
+				1D8FEB312A6D19C600FAF989 /* iTunesBridge.swift */,
+			);
+			path = MediaService;
 			sourceTree = "<group>";
 		};
 		312E770B2938AB7400F29BFA /* Notification Service */ = {
@@ -779,6 +796,7 @@
 		849962261D574530002B893A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				1D08E3352A77B9650054056B /* AppleScriptObjC.framework */,
 				31B189B529ED731B001C8735 /* Sparkle.framework */,
 				76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */,
 				76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */,
@@ -795,6 +813,7 @@
 		84FA45EB1DDF51EB00EF3992 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				1D8FEB2C2A6D183200FAF989 /* MediaService */,
 				84651A711E599A3C00D17601 /* BatteryService.swift */,
 				840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */,
 				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
@@ -803,7 +822,6 @@
 				84651A751E5AEBE100D17601 /* SftpService.swift */,
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
 				847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */,
-				1D8F3EFA2A614A110080B51F /* MediaService.swift */,
 				319CBA272939662400DAE301 /* Phone.png */,
 				319CBA292939F07D00DAE301 /* AirDrop.png */,
 				3144827C2940AF3200CCA098 /* Message.png */,
@@ -1104,6 +1122,7 @@
 				84651A721E599A3C00D17601 /* BatteryService.swift in Sources */,
 				849237EC1DE5FC9600D95BBA /* PairingInterfaceController.swift in Sources */,
 				849961C31D57287F002B893A /* Test.m in Sources */,
+				1D8FEB322A6D19C600FAF989 /* iTunesBridge.swift in Sources */,
 				31F3A1B7293BEEB800550088 /* ButtonLabelCell.swift in Sources */,
 				849961C11D57287F002B893A /* CollectionUtils.m in Sources */,
 				84FA45D91DDDCB3D00EF3992 /* DataPacket.swift in Sources */,
@@ -1143,6 +1162,7 @@
 				8468BE001DEB7F97003B9925 /* NetworkUtils.swift in Sources */,
 				84D903A21DC696A600E61DA7 /* CertificateUtils.swift in Sources */,
 				84FA45DD1DDDCB3D00EF3992 /* SocketAddress.swift in Sources */,
+				1D8FEB302A6D18D300FAF989 /* iTunesBridge.applescript in Sources */,
 				840538201ED62282003798AA /* WelcomeWindowController.swift in Sources */,
 				84FA45E61DDDE87F00EF3992 /* AppDelegate.swift in Sources */,
 				84651A741E59F9C900D17601 /* MenuView.swift in Sources */,
@@ -1489,6 +1509,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = 73583QR2DF;
+				ENABLE_HARDENED_RUNTIME = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1496,6 +1517,7 @@
 				);
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = Soduto/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Soduto;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1530,6 +1552,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = 73583QR2DF;
+				ENABLE_HARDENED_RUNTIME = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1537,6 +1560,7 @@
 				);
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = Soduto/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Soduto;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
