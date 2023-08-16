@@ -111,7 +111,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 let id = try dataPacket.getId() ?? nil
                 if (id != nil && dataPacket.downloadTask != nil) {
                     let iconDownloadTask = dataPacket.downloadTask
-                    self.downloadFile(downloadTask: iconDownloadTask!, notificationId: id!, dataPacket: dataPacket, device: device)
+                    self.startIconDownloadTaskAndShowNotification(downloadTask: iconDownloadTask!, notificationId: id!, dataPacket: dataPacket, device: device)
                 }
                 else {
                     self.showNotification(for: dataPacket, from: device)
@@ -297,7 +297,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         return "\(self.id).\(deviceId).\(packetId)"
     }
     
-    private func downloadFile(downloadTask task: DownloadTask, notificationId: String, dataPacket: DataPacket, device: Device) {
+    private func startIconDownloadTaskAndShowNotification(downloadTask task: DownloadTask, notificationId: String, dataPacket: DataPacket, device: Device) {
         if let (readyStream, partFileURL) = self.streamForTempDownload() {
             self.notificationIconDownloadInfos.append(DownloadInfo(
                 task: task,
