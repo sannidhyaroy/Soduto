@@ -64,14 +64,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
 
     private struct DownloadInfo {
         let task: DownloadTask
-        let packageId: String
-        let url: URL
+        let notificationId: String
+        let partFileURL: URL
         let dataPacket: DataPacket
         let device: Device
-        init(task: DownloadTask, packageId: String, url: URL, dataPacket: DataPacket, device: Device) {
+        init(task: DownloadTask, notificationId: String, partFileURL: URL, dataPacket: DataPacket, device: Device) {
             self.task = task
-            self.packageId = packageId
-            self.url = url
+            self.notificationId = notificationId
+            self.partFileURL = partFileURL
             self.dataPacket = dataPacket
             self.device = device
         }
@@ -86,7 +86,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.notificationPacketType ])
     
     private var notificationIconDownloadInfos: [DownloadInfo] = []
-    private var downloadedNotificationIconUrlByPackageId: [String: URL] = [:]
+    private var downloadedNotificationIconFileURLByNotificationId: [String: URL] = [:]
 
     /// Delivered notification ids grouped by device
     private var notificationIds: [Device.Id: Set<NotificationId>] = [:]
@@ -109,9 +109,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         else {
             do {
                 let id = try dataPacket.getId() ?? nil
-                if (id != nil && downloadedNotificationIconUrlByPackageId[id!] == nil && dataPacket.downloadTask != nil) {
+                if (id != nil && dataPacket.downloadTask != nil) {
                     let iconDownloadTask = dataPacket.downloadTask
-                    self.downloadFile(downloadTask: iconDownloadTask!, packageId: id!, dataPacket: dataPacket, device: device)
+                    self.downloadFile(downloadTask: iconDownloadTask!, notificationId: id!, dataPacket: dataPacket, device: device)
                 }
                 else {
                     self.showNotification(for: dataPacket, from: device)
@@ -184,8 +184,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         let info = self.notificationIconDownloadInfos.remove(at: index)
         if success {
             do {
-                let finalUrl = try self.renamePartFile(url: info.url, to: "\(info.packageId).png")
-                downloadedNotificationIconUrlByPackageId[info.packageId] = finalUrl
+                let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: "\(info.notificationId).png")
+                downloadedNotificationIconFileURLByNotificationId[info.notificationId] = finalFileURL
             }
             catch {}
         }
@@ -297,44 +297,50 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         return "\(self.id).\(deviceId).\(packetId)"
     }
     
-    private func downloadFile(downloadTask task: DownloadTask, packageId: String, dataPacket: DataPacket, device: Device) {
-        let directory = NSTemporaryDirectory()
-        let fileName = "\(UUID().uuidString)"
-        let url = URL(fileURLWithPath: fileName, relativeTo: URL(fileURLWithPath: directory, isDirectory: true))
-        if let (readyStream, partUrl) = self.streamForTempDownload(finalUrl: url) {
-            self.notificationIconDownloadInfos.append(DownloadInfo(task: task, packageId: packageId, url: partUrl, dataPacket: dataPacket, device: device))
+    private func downloadFile(downloadTask task: DownloadTask, notificationId: String, dataPacket: DataPacket, device: Device) {
+        if let (readyStream, partFileURL) = self.streamForTempDownload() {
+            self.notificationIconDownloadInfos.append(DownloadInfo(
+                task: task,
+                notificationId: notificationId,
+                partFileURL: partFileURL,
+                dataPacket: dataPacket,
+                device: device
+            ))
             task.delegate = self
             task.start(withStream: readyStream)
         }
     }
     
-    private func streamForTempDownload(finalUrl: URL) -> (OutputStream, URL)? {
+    private func streamForTempDownload() -> (OutputStream, URL)? {
+        let temporaryDirectory = NSTemporaryDirectory()
+        let randomUuidForFileName = "\(UUID().uuidString)"
+        let tempFileURL = URL(fileURLWithPath: randomUuidForFileName, relativeTo: URL(fileURLWithPath: temporaryDirectory, isDirectory: true))
         // Try open stream for new file. Try alternative names on fail
-        var partUrl = finalUrl.appendingPathExtension("part")
+        var partFileURL = tempFileURL.appendingPathExtension("part")
         var stream: OutputStream? = nil
         for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: partUrl.path) {
-                stream = OutputStream(url: partUrl, append: false)
+            if !FileManager.default.fileExists(atPath: partFileURL.path) {
+                stream = OutputStream(url: partFileURL, append: false)
                 stream?.open()
                 if stream?.hasSpaceAvailable ?? false {
                     break
                 }
             }
             
-            partUrl = partUrl.alternativeForDuplicate()
+            partFileURL = partFileURL.alternativeForDuplicate()
         }
         
         // Last attempt with completely random extension
         if stream == nil {
-            partUrl = finalUrl.appendingPathExtension("part-\(UUID().uuidString)")
-            if !FileManager.default.fileExists(atPath: partUrl.path) {
-                stream = OutputStream(url: partUrl, append: false)
+            partFileURL = tempFileURL.appendingPathExtension("part-\(UUID().uuidString)")
+            if !FileManager.default.fileExists(atPath: partFileURL.path) {
+                stream = OutputStream(url: partFileURL, append: false)
                 stream?.open()
             }
         }
         
         if let readyStream = stream, (stream?.hasSpaceAvailable ?? false) {
-            return (readyStream, partUrl)
+            return (readyStream, partFileURL)
         }
         else {
             stream?.close()
@@ -342,19 +348,19 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
 
-    private func renamePartFile(url partUrl: URL, to fileName: String) throws -> URL {
+    private func renamePartFile(url partFileURL: URL, to fileName: String) throws -> URL {
         // Try rename file from temporary *.part name to final path based on original file name
         // NOTE: *.part name might not necesarily be equal to filename with appended .part suffix
-        var finalUrl = partUrl.deletingLastPathComponent().appendingPathComponent(fileName)
+        var finalFileURL = partFileURL.deletingLastPathComponent().appendingPathComponent(fileName)
         for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: finalUrl.path) {
+            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
                 do {
-                    try FileManager.default.moveItem(at: partUrl, to: finalUrl)
-                    return finalUrl
+                    try FileManager.default.moveItem(at: partFileURL, to: finalFileURL)
+                    return finalFileURL
                 }
                 catch {}
             }
-            finalUrl = finalUrl.alternativeForDuplicate()
+            finalFileURL = finalFileURL.alternativeForDuplicate()
         }
         
         throw DataPacket.NotificationError.partFileRenameFailed
@@ -367,7 +373,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             guard let packetNotificationId = try dataPacket.getId() else { return }
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
             guard let appName = try dataPacket.getAppName() else { return }
-            guard appName != "KDE Connect" else { return } // Ignore notifications shown be KDE Connect
+            guard appName != "KDE Connect" else { return } // Ignore notifications shown by KDE Connect
             guard let ticker = try dataPacket.getTicker() else { return }
             let replyId = try dataPacket.getReplyRequestId()
             let actions = try dataPacket.getActions()
@@ -376,9 +382,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isCancelable = try dataPacket.getClearableFlag()
             let dontPresent = isAnswer || isSilent
 
-            var notificationIconPath: URL? = nil
-            if (downloadedNotificationIconUrlByPackageId[packetNotificationId] != nil) {
-                notificationIconPath = downloadedNotificationIconUrlByPackageId[packetNotificationId]
+            var notificationIconURL: URL? = nil
+            if (downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
+                notificationIconURL = downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetNotificationId)
             }
 
             if #available(macOS 11.0, *){
@@ -414,10 +420,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                         }
                         
                         // Set Notification App Icon
-                        if (notificationIconPath != nil) {
-                            let notificationIconURL = URL(fileURLWithPath: notificationIconPath!.path)
+                        if (notificationIconURL != nil) {
                             do {
-                                let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
+                                let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL!, options: .none)
                                 notification.attachments = [attachment]
                             }
                             catch let error {
@@ -475,8 +480,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 notification.userInfo = userInfo
                 notification.title = "\(appName) | \(device.name)"
                 notification.informativeText = ticker
-                if (notificationIconPath != nil) {
-                    notification.contentImage = NSImage(contentsOf: URL(fileURLWithPath: notificationIconPath!.path))
+                if (notificationIconURL != nil) {
+                    notification.contentImage = NSImage(contentsOf: URL(fileURLWithPath: notificationIconURL!.path))
                 }
                 if !dontPresent {
                     notification.soundName = NSUserNotificationDefaultSoundName
