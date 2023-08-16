@@ -683,7 +683,7 @@ fileprivate extension DataPacket {
         guard let value = body[NotificationProperty.appName.rawValue] as? String else { throw NotificationError.invalidAppName }
         return value
     }
-
+    
     func getTicker() throws -> String? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.ticker.rawValue) else { return nil }
