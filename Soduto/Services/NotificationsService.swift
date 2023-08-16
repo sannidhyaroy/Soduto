@@ -107,12 +107,17 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             self.hideNotification(for: dataPacket, from: device)
         }
         else {
-            let id = dataPacket.getId()
-            if (id != nil && downloadedNotificationIconUrlByPackageId[id] == nil && dataPacket.downloadTask != nil) {
-                let iconDownloadTask = dataPacket.downloadTask
-                self.downloadFile(downloadTask: iconDownloadTask, packageId: id, dataPacket: dataPacket, device: device)
+            do {
+                let id = try dataPacket.getId() ?? nil
+                if (id != nil && downloadedNotificationIconUrlByPackageId[id!] == nil && dataPacket.downloadTask != nil) {
+                    let iconDownloadTask = dataPacket.downloadTask
+                    self.downloadFile(downloadTask: iconDownloadTask!, packageId: id!, dataPacket: dataPacket, device: device)
+                }
+                else {
+                    self.showNotification(for: dataPacket, from: device)
+                }
             }
-            else {
+            catch {
                 self.showNotification(for: dataPacket, from: device)
             }
         }
@@ -178,8 +183,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         guard let index = self.notificationIconDownloadInfos.index(where: { $0.task === task }) else { return }
         let info = self.notificationIconDownloadInfos.remove(at: index)
         if success {
-            let finalUrl = try self.renamePartFile(url: info.url, to: info.packageId)
-            downloadedNotificationIconUrlByPackageId[info.packageId] = finalUrl
+            do {
+                let finalUrl = try self.renamePartFile(url: info.url, to: "\(info.packageId).png")
+                downloadedNotificationIconUrlByPackageId[info.packageId] = finalUrl
+            }
+            catch {}
         }
         self.showNotification(for: info.dataPacket, from: info.device)
     }
@@ -290,7 +298,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     private func downloadFile(downloadTask task: DownloadTask, packageId: String, dataPacket: DataPacket, device: Device) {
-        let url = try URL(forDownloadedFile: fileName)
+        let directory = NSTemporaryDirectory()
+        let fileName = "\(UUID().uuidString)"
+        let url = URL(fileURLWithPath: fileName, relativeTo: URL(fileURLWithPath: directory, isDirectory: true))
         if let (readyStream, partUrl) = self.streamForTempDownload(finalUrl: url) {
             self.notificationIconDownloadInfos.append(DownloadInfo(task: task, packageId: packageId, url: partUrl, dataPacket: dataPacket, device: device))
             task.delegate = self
@@ -347,7 +357,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             finalUrl = finalUrl.alternativeForDuplicate()
         }
         
-        throw ShareError.partFileRenameFailed
+        throw DataPacket.NotificationError.partFileRenameFailed
     }
 
     private func showNotification(for dataPacket: DataPacket, from device: Device) {
@@ -366,8 +376,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isCancelable = try dataPacket.getClearableFlag()
             let dontPresent = isAnswer || isSilent
 
+            var notificationIconPath: URL? = nil
             if (downloadedNotificationIconUrlByPackageId[packetNotificationId] != nil) {
-                let notificationIconPath = downloadedNotificationIconUrlByPackageId[packetNotificationId]?.path
+                notificationIconPath = downloadedNotificationIconUrlByPackageId[packetNotificationId]
             }
 
             if #available(macOS 11.0, *){
@@ -404,7 +415,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                         
                         // Set Notification App Icon
                         if (notificationIconPath != nil) {
-                            let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
+                            let notificationIconURL = URL(fileURLWithPath: notificationIconPath!.path)
                             do {
                                 let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
                                 notification.attachments = [attachment]
@@ -465,7 +476,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 notification.title = "\(appName) | \(device.name)"
                 notification.informativeText = ticker
                 if (notificationIconPath != nil) {
-                    notification.contentImage = NSImage(contentsOf: URL(fileURLWithPath: notificationIconPath!))
+                    notification.contentImage = NSImage(contentsOf: URL(fileURLWithPath: notificationIconPath!.path))
                 }
                 if !dontPresent {
                     notification.soundName = NSUserNotificationDefaultSoundName
@@ -570,6 +581,7 @@ fileprivate extension DataPacket {
         case invalidCancelFlag
         case invalidAnswerFlag
         case invalidSilentFlag
+        case partFileRenameFailed
     }
     
     enum NotificationProperty: String {
