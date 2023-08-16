@@ -370,7 +370,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                         notification.title = "SMS from  \(contactName) | \(device.name)"
                         notification.body = messageBody
                         notification.sound = UNNotificationSound.default()
-                        let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Message"))
+                        let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Messages"))
                         if (notificationIconPath != nil) {
                             let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
                             do {
