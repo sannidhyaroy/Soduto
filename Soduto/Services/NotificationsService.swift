@@ -185,7 +185,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         if success {
             do {
                 let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: "\(info.notificationId).png")
-                downloadedNotificationIconFileURLByNotificationId[info.notificationId] = finalFileURL
+                Log.debug?.message("downloadTask saving icon to: \(finalFileURL.path)")
+                self.downloadedNotificationIconFileURLByNotificationId[info.notificationId] = finalFileURL
             }
             catch {}
         }
@@ -383,8 +384,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let dontPresent = isAnswer || isSilent
 
             var notificationIconURL: URL? = nil
-            if (downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
-                notificationIconURL = downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetNotificationId)
+            if (self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
+                notificationIconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetNotificationId)
             }
 
             if #available(macOS 11.0, *){
