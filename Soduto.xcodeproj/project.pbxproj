@@ -1233,7 +1233,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 19;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1273,7 +1273,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 19;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1347,7 +1347,7 @@
 					"$(PROJECT_DIR)/Libraries/include/libssh2",
 					"$(PROJECT_DIR)/Libraries/include",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 10.13;
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
@@ -1401,7 +1401,7 @@
 					"$(PROJECT_DIR)/Libraries/include/libssh2",
 					"$(PROJECT_DIR)/Libraries/include",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 10.13;
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -1420,7 +1420,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 19;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1461,7 +1461,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 19;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1498,7 +1498,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -1520,7 +1520,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -1542,7 +1542,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoBrowser/Info.plist;
@@ -1571,7 +1571,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoBrowser/Info.plist;
@@ -1597,9 +1597,8 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_WARN_SUSPICIOUS_MOVES = YES;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoTests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1620,9 +1619,8 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_WARN_SUSPICIOUS_MOVES = YES;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoTests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
