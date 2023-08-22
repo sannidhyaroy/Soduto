@@ -18,6 +18,8 @@
 - [Installation](#installation)
 - [Building](#building)
 - [Debugging](#debugging)
+- [Limitations](#limitations)
+- [Workarounds](#workarounds)
 - [Get in touch](#get-in-touch)
 - [FAQ](#faq)
 - [License](#license)
@@ -76,6 +78,18 @@ Do note that currently there's no Homebrew formulae for my forked version and th
     `defaults write com.soduto.Soduto com.soduto.logLevel -int <level>`
     
     It is highly recommended to enable verbose logging levels only during debugging as sensitive data may be logged in plain text (like passwords copied into a clipboard).
+
+---
+## Limitations
+- Google introduced some privacy changes on Android 10 and higher, that doesn’t allow apps to access clipboard data, unless the app is the default input method editor (IME) or is currently in focus. This will affect seamless clipboard sync between KDE Connect and Soduto. Your clipboard will automatically sync to your other devices when you copy something on your mac, however you will have to manually tap on `Send Clipboard` in the KDE Connect app, everytime you want to sync your android's clipboard to your mac.
+- On Android 11 and higher, you may not be able to add the root location of your Internal Storage or your Download folder to KDE Connect's `Filesystem expose` locations due to Google's privacy changes.
+- The Share Extension is currently buggy & doesn't provide support for sharing multiple files yet. Soduto Share won't appear in the share menu if multiple files are selected.
+
+---
+## Workarounds
+- If you have `Riru` or `Zygisk`, you can bypass the clipboard restriction on Android 10 or higher by using [Kr328's Clipboard Whitelist](https://github.com/Kr328/Riru-ClipboardWhitelist) module and then tick `KDE Connect`/`Zorin Connect` from the `Clipboard Whitelist` app. If you're on Android 13 and the module isn’t working for you, try [Xposed Clipboard Whitelist](https://github.com/GamerGirlandCo/xposed-clipboard-whitelist) (remember to select `System Framework` for the module scope). You need to have `Xposed Framework` for the `Xposed Clipboard Whitelist` module to work.
+- [NoStorageRestrict](https://github.com/Xposed-Modules-Repo/com.github.dan.nostoragerestrict) is an `Xposed Module` that removes the restriction when selecting folders(like Internal Storage, Android, Download, data, obb) through file manager on Android 11 and higher. There is a [Magisk module](https://github.com/DanGLES3/NoStorageRestrict) for this as well but I haven’t tested the Magisk Module version yet, so use it at your own risk ⚠️.
+- To share multiple files, use the option to `Send Files` from the menu bar app options or drag & drop multiple selected files to the menu bar icon. As of now, Soduto Share only supports sharing one file at a time.
 
 ---
 ## Get in touch
