@@ -64,12 +64,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
 
     private struct DownloadInfo {
         let task: DownloadTask
+        let fileHash: String?
         let notificationId: String
         let partFileURL: URL
         let dataPacket: DataPacket
         let device: Device
-        init(task: DownloadTask, notificationId: String, partFileURL: URL, dataPacket: DataPacket, device: Device) {
+        init(task: DownloadTask, fileHash:String?, notificationId: String, partFileURL: URL, dataPacket: DataPacket, device: Device) {
             self.task = task
+            self.fileHash = fileHash
             self.notificationId = notificationId
             self.partFileURL = partFileURL
             self.dataPacket = dataPacket
@@ -87,6 +89,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     private var notificationIconDownloadInfos: [DownloadInfo] = []
     private var downloadedNotificationIconFileURLByNotificationId: [String: URL] = [:]
+    private var cachedDownloadedNotificationIconFileURLByHash: [String: URL] = [:]
 
     /// Delivered notification ids grouped by device
     private var notificationIds: [Device.Id: Set<NotificationId>] = [:]
@@ -186,7 +189,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             do {
                 let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: "\(info.notificationId).png")
                 Log.debug?.message("downloadTask saving icon to: \(finalFileURL.path)")
+                Log.debug?.message("Notification id: \(info.notificationId)")
                 self.downloadedNotificationIconFileURLByNotificationId[info.notificationId] = finalFileURL
+                if (info.fileHash != nil && self.cachedDownloadedNotificationIconFileURLByHash[info.fileHash!] == nil) {
+                    let cachedFileURL = try self.copyFileToCache(url: finalFileURL, hash: info.fileHash!)
+                    self.cachedDownloadedNotificationIconFileURLByHash[info.fileHash!] = cachedFileURL
+                    Log.debug?.message("New icon found with hash \(info.fileHash!), saving to cached icons as \(cachedFileURL)")
+                }
             }
             catch {}
         }
@@ -299,16 +308,32 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     private func startIconDownloadTaskAndShowNotification(downloadTask task: DownloadTask, notificationId: String, dataPacket: DataPacket, device: Device) {
-        if let (readyStream, partFileURL) = self.streamForTempDownload() {
-            self.notificationIconDownloadInfos.append(DownloadInfo(
-                task: task,
-                notificationId: notificationId,
-                partFileURL: partFileURL,
-                dataPacket: dataPacket,
-                device: device
-            ))
-            task.delegate = self
-            task.start(withStream: readyStream)
+        var downloadFileHash: String? = nil
+        do {
+            downloadFileHash = try dataPacket.getPayloadHash()
+        }
+        catch {}
+        if (downloadFileHash != nil && cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!] != nil) {
+            Log.debug?.message("Found cached icon for hash \(downloadFileHash!) at \(cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!)")
+            do {
+                var copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!, notificationId: notificationId)
+                self.downloadedNotificationIconFileURLByNotificationId[notificationId] = copiedFromCacheFileURL
+            }
+            catch {}
+            self.showNotification(for: dataPacket, from: device)
+        } else {
+            if let (readyStream, partFileURL) = self.streamForTempDownload() {
+                self.notificationIconDownloadInfos.append(DownloadInfo(
+                    task: task,
+                    fileHash: downloadFileHash,
+                    notificationId: notificationId,
+                    partFileURL: partFileURL,
+                    dataPacket: dataPacket,
+                    device: device
+                ))
+                task.delegate = self
+                task.start(withStream: readyStream)
+            }
         }
     }
     
@@ -365,6 +390,36 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
         
         throw DataPacket.NotificationError.partFileRenameFailed
+    }
+
+    private func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
+        var finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
+        for _ in 1...10000 {
+            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                do {
+                    try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                    return finalFileURL
+                }
+                catch {}
+            }
+        }
+        
+        throw DataPacket.NotificationError.copyFileFailed
+    }
+
+    private func copyFileFromCache(url fileURL: URL, notificationId fileNotificationId: String) throws -> URL {
+        var finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileNotificationId).png")
+        for _ in 1...10000 {
+            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                do {
+                    try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                    return finalFileURL
+                }
+                catch {}
+            }
+        }
+        
+        throw DataPacket.NotificationError.copyFileFailed
     }
 
     private func showNotification(for dataPacket: DataPacket, from device: Device) {
@@ -587,7 +642,9 @@ fileprivate extension DataPacket {
         case invalidCancelFlag
         case invalidAnswerFlag
         case invalidSilentFlag
+        case invalidPayloadHash
         case partFileRenameFailed
+        case copyFileFailed
     }
     
     enum NotificationProperty: String {
@@ -610,6 +667,7 @@ fileprivate extension DataPacket {
         case isCancel = "isCancel"           /// (boolean): True if the notification was dismissed in the peer device.
         case requestAnswer = "requestAnswer" /// (boolean): True if this is an answer to a "request" package.
         case silent = "silent"               /// (boolean): True if this notification should be silent.
+        case payloadHash = "payloadHash"     /// (string): The hash of the payload
     }
     
     
@@ -725,6 +783,13 @@ fileprivate extension DataPacket {
         guard body.keys.contains(NotificationProperty.requestAnswer.rawValue) else { return false }
         guard let value = body[NotificationProperty.requestAnswer.rawValue] as? NSNumber else { throw NotificationError.invalidAnswerFlag }
         return value.boolValue
+    }
+    
+    func getPayloadHash() throws -> String? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.payloadHash.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.payloadHash.rawValue] as? String else { throw NotificationError.invalidPayloadHash }
+        return value
     }
     
     func validateNotificationType() throws {
