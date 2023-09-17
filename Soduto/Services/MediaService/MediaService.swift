@@ -12,10 +12,17 @@ import AppleScriptObjC
 import MediaPlayer
 import SwiftyJSON
 
+/// Constants relevant to the MediaService class.
+fileprivate struct Constants {
+    static let player: String = "Mac"
+    // basically the player actually playing the audio.
+}
 
 // MARK: Struct Decleration
+
+// Various structs used to exchange requests through packets.
 struct MediaInfo {
-    let player: String = "Mac"
+    let player: String
     let title: String
     let artist: String
     let album: String
@@ -63,7 +70,7 @@ struct PlaybackInfo {
 }
 
 struct TimelineProperties {
-    let player: String = "Mac" // to be changed
+    let player: String
     let canSeek: Bool = true
     let pos: Int64
     let length: Int64
@@ -78,25 +85,19 @@ struct TimelineProperties {
     }
 }
 
-
+/// Service providing the capability to control the media playing through Apple Music.
 public class MediaService: Service {
-    
     // MARK: Properties
     
-    private static let monitoringInterval: TimeInterval = 0.5
     private static let timeDiffTolerance: Int64 = 5
     
-    private var monitoringTimer: Timer? = nil
-    private var lastMediaID: String = ""
-    private var lastExternalChangeID: String = ""
-    private var lastExternalChangeDevice: Device? = nil
     private var devices: [Device] = []
     private var iTunesBridge: iTunesBridge?
     
     // MARK: Info
-    private var currentMediaInfo: MediaInfo = MediaInfo(title: "title", artist: "artist", album: "album", albumArtUrl: "", url: "", isPlaying: true)
+    private var currentMediaInfo: MediaInfo = MediaInfo(player: Constants.player, title: "title", artist: "artist", album: "album", albumArtUrl: "", url: "", isPlaying: true)
     private var currentPlaybackInfo: PlaybackInfo = PlaybackInfo(shuffle: false)
-    private var currentTimelineInfo: TimelineProperties = TimelineProperties(pos: 0, length: 10)
+    private var currentTimelineInfo: TimelineProperties = TimelineProperties(player: Constants.player,pos: 0, length: 10)
     
     @objc dynamic var pos: Int64 {
         get {
@@ -167,13 +168,11 @@ public class MediaService: Service {
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
         guard dataPacket.isMediaRequestPacket else { return false }
-        
-        
         do {
             if try dataPacket.wantPlayerList() {
                 return sendPlayersList()
             }
-            let player = try dataPacket.getPlayerName()
+            
             if try dataPacket.wantNowPlaying() {
                 sendThemPackets()
             }
@@ -221,6 +220,7 @@ public class MediaService: Service {
         return false
     }
     
+    // sends all the packets with all the information relevant to the media playing
     private func sendThemPackets() {
         sendPacket(DataPacket(type: DataPacket.mediaPacketType, body: currentMediaInfo.m_dict))
         sendPacket(DataPacket(type: DataPacket.mediaPacketType, body: currentPlaybackInfo.m_dict))
@@ -231,7 +231,7 @@ public class MediaService: Service {
         Bundle.main.loadAppleScriptObjectiveCScripts()
         guard !self.devices.contains(where: { $0.id == device.id }) else { return }
         let iTunesBridgeClass: AnyClass = NSClassFromString("iTunesBridge")!
-        self.iTunesBridge = iTunesBridgeClass.alloc() as! iTunesBridge
+        self.iTunesBridge = (iTunesBridgeClass.alloc() as! iTunesBridge)
 
         self.devices.append(device)
         
@@ -277,10 +277,11 @@ public class MediaService: Service {
             
             print("pos is \(pos)")
             
-            self.currentMediaInfo = MediaInfo(title: name, artist: artist, album: album, albumArtUrl: albumArtUrl, url: url, isPlaying: isPlaying)
-            self.currentTimelineInfo = TimelineProperties(pos: Int64(pos) * 1000, length: Int64(totalTime))
+            self.currentMediaInfo = MediaInfo(player: Constants.player, title: name, artist: artist, album: album, albumArtUrl: albumArtUrl, url: url, isPlaying: isPlaying)
+            self.currentTimelineInfo = TimelineProperties(player: Constants.player, pos: Int64(pos) * 1000, length: Int64(totalTime))
             
             sendThemPackets()
+            sendVolume()
         }
     }
     
@@ -288,10 +289,6 @@ public class MediaService: Service {
         guard let index = self.devices.index(where: { $0.id == device.id }) else { return }
         
         self.devices.remove(at: index)
-        
-        if self.devices.count == 0 {
-//            self.stopMonitoring()
-        }
     }
     
     public func actions(for device: Device) -> [ServiceAction] {
@@ -306,7 +303,6 @@ public class MediaService: Service {
         guard packet.isMediaPacket == true else { return }
         
         for device in devices {
-//            device.send(DataPacket.mediaPacket(player: playerName, title: "testing", artist: "dunno", album: "test", isPlaying: true))
             device.send(packet)
         }
     }
@@ -323,7 +319,7 @@ public class MediaService: Service {
     
     private func sendVolume() {
         let body =  [
-            "player": "Mac",
+            "player": Constants.player,
             "volume": iTunesBridge?.soundVolume as AnyObject
         ] as Dictionary<String, AnyObject>
         let packet = DataPacket(type: DataPacket.mediaPacketType, body: body)
@@ -350,7 +346,7 @@ public class MediaService: Service {
         self.currentMediaInfo.isPlaying = false
         sendPacket(DataPacket(type: DataPacket.mediaPacketType, body: currentMediaInfo.m_dict))
         self.pos = 0
-        self.currentTimelineInfo = TimelineProperties(pos: pos * 1000, length: self.currentTimelineInfo.length)
+        self.currentTimelineInfo = TimelineProperties(player: Constants.player, pos: pos * 1000, length: self.currentTimelineInfo.length)
         sendPacket(DataPacket(type: DataPacket.mediaPacketType, body: currentTimelineInfo.m_dict))
     }
     
