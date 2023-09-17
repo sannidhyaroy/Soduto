@@ -122,7 +122,7 @@ class WelcomeTabItemViewController: NSViewController {
     }
     
     @IBAction func goToKdeConnectAndroidWebsite(_ sender: AnyObject) {
-        guard let url = URL(string: "https://go.noton.tk/kde-connect") else { assertionFailure("Could not create URL"); return }
+        guard let url = URL(string: "https://go.thenoton.com/kde-connect") else { assertionFailure("Could not create URL"); return }
         NSWorkspace.shared.open(url)
     }
     @IBAction func goToZorinConnectAndroidWebsite(_ sender: AnyObject) {
