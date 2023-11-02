@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.4</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>14</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
@@ -34,5 +34,13 @@
 	<string>Soduto.StatusBarApplication</string>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUPublicEDKey</key>
+	<string>n0eebZ3Df6AWfesZYWLU1rD+dAsF2iHb6Kn/BXzdGa8=</string>
+	<key>SUFeedURL</key>
+	<string>https://soduto.thenoton.com/appcast.xml</string>
 </dict>
 </plist>

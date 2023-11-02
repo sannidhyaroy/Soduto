@@ -214,6 +214,15 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             let thumbnail = (try? dataPacket.getPhoneThumbnail() ?? nil) ?? nil
             
             if #available(macOS 11.0, *) {
+                un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
+                    if authorized {
+                        print("Authorized to send notifications!")
+                    } else if !authorized {
+                        print("Not authorized to send notifications")
+                    } else {
+                        print(error?.localizedDescription as Any)
+                    }
+                }
                 un.getNotificationSettings { (settings) in
                     if settings.authorizationStatus == .authorized {
                         let notification = UNMutableNotificationContent()
@@ -224,7 +233,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                         notification.title = "Incoming call from \(contactName)"
                         notification.subtitle = device.name
                         
-                        let notificationIconPath = Bundle.main.path(forResource: "Phone", ofType: ".png")
+                        let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone"))
                         if (notificationIconPath != nil) {
                             let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
                             do {
@@ -341,6 +350,15 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 }
             }
             if #available(macOS 11.0, *) {
+                un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
+                    if authorized {
+                        print("Authorized to send notifications!")
+                    } else if !authorized {
+                        print("Not authorized to send notifications")
+                    } else {
+                        print(error?.localizedDescription as Any)
+                    }
+                }
                 un.getNotificationSettings { (settings) in
                     if settings.authorizationStatus == .authorized {
                         let notification = UNMutableNotificationContent()
@@ -352,7 +370,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                         notification.title = "SMS from  \(contactName) | \(device.name)"
                         notification.body = messageBody
                         notification.sound = UNNotificationSound.default()
-                        let notificationIconPath = Bundle.main.path(forResource: "Message", ofType: ".png")
+                        let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Message"))
                         if (notificationIconPath != nil) {
                             let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
                             do {

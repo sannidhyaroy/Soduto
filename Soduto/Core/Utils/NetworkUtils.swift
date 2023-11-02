@@ -93,7 +93,7 @@ public struct NetworkUtils {
 //        struct sockaddr_dl *sdl;
 //        extern int h_errno;
 //        struct hostent *hp;
-//        
+//
 //        lim = buf + needed;
 //        for (next = buf; next < lim; next += rtm->rtm_msglen) {
 //            rtm = (struct rt_msghdr *)next;

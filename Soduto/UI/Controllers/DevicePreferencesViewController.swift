@@ -8,6 +8,12 @@
 
 import Foundation
 import Cocoa
+import Sparkle
+
+let updater = AppDelegate.shared().updaterController.updater
+let preferencesUserDefaults = UserDefaults(suiteName: SharedUserDefaults.preferencesSuite)
+var disableSharePopUp = UserDefaults.standard.bool(forKey: SharedUserDefaults.Preferences.disableSharePopUp)
+var deviceTypeInt = preferencesUserDefaults?.integer(forKey: SharedUserDefaults.Preferences.deviceType) ?? 0
 
 class DevicePreferencesViewController: NSViewController {
     
@@ -17,6 +23,10 @@ class DevicePreferencesViewController: NSViewController {
     var config: HostConfiguration?
     
     @IBOutlet weak var hostNameLabel: NSTextField!
+    
+    @IBOutlet weak var automaticCheckForUpdates: NSButton!
+    @IBOutlet weak var disableSharePopUpCheckbox: NSButton!
+    @IBOutlet weak var deviceTypeButton: NSPopUpButton!
     
     private weak var deviceListController: DeviceListController?
     
@@ -49,6 +59,7 @@ class DevicePreferencesViewController: NSViewController {
         
         self.deviceListController?.deviceDataSource = self.deviceDataSource
         self.deviceListController?.refreshDeviceList()
+        self.loadPreferences()
         self.view.layoutSubtreeIfNeeded()
     }
     
@@ -58,6 +69,40 @@ class DevicePreferencesViewController: NSViewController {
         }
     }
     
+    public func loadPreferences() {
+        if self.disableSharePopUpCheckbox != nil {
+            self.disableSharePopUpCheckbox.state = disableSharePopUp ? NSButton.StateValue.on : NSButton.StateValue.off
+        }
+        if self.deviceTypeButton != nil {
+            self.deviceTypeButton.selectItem(withTag: deviceTypeInt)
+        }
+        if self.automaticCheckForUpdates != nil {
+            self.automaticCheckForUpdates.state = updater.automaticallyChecksForUpdates ? NSButton.StateValue.on : NSButton.StateValue.off
+        }
+    }
     
+    @IBAction func sharePopUp (_ sender: Any?) {
+        let checkBoxState = disableSharePopUpCheckbox.state
+        let state: Bool = (checkBoxState == .on) ? true : false
+        UserDefaults.standard.set(state, forKey: SharedUserDefaults.Preferences.disableSharePopUp)
+        disableSharePopUp = state
+        UserDefaults.standard.synchronize()
+    }
     
+    @IBAction func deviceTypeAction (_ sender: Any?) {
+        let selectedIndex = self.deviceTypeButton.indexOfSelectedItem
+        if selectedIndex >= 0 {
+            preferencesUserDefaults?.set(selectedIndex, forKey: SharedUserDefaults.Preferences.deviceType)
+            deviceTypeInt = selectedIndex
+        } else {
+            // No item selected
+        }
+        preferencesUserDefaults?.synchronize()
+    }
+    
+    @IBAction func autoCheckForUpdates (_ sender: Any?) {
+        let checkBoxState = automaticCheckForUpdates.state
+        let state: Bool = (checkBoxState == .on) ? true : false
+        updater.automaticallyChecksForUpdates = state
+    }
 }

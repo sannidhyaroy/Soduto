@@ -73,13 +73,14 @@
                                 </constraints>
                                 <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" image="welcomeBackground" id="tek-XU-n4o"/>
                             </imageView>
-                            <visualEffectView wantsLayer="YES" appearanceType="vibrantDark" fixedFrame="YES" blendingMode="withinWindow" material="ultraDark" state="active" translatesAutoresizingMaskIntoConstraints="NO" id="tTi-lY-RjK">
+                            <visualEffectView wantsLayer="YES" appearanceType="vibrantDark" blendingMode="withinWindow" material="ultraDark" state="active" translatesAutoresizingMaskIntoConstraints="NO" id="tTi-lY-RjK">
                                 <rect key="frame" x="0.0" y="0.0" width="560" height="350"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <subviews>
-                                    <button wantsLayer="YES" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="pHn-2N-2sT">
+                                    <button wantsLayer="YES" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="pHn-2N-2sT">
                                         <rect key="frame" x="209" y="13" width="142" height="32"/>
-                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <constraints>
+                                            <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="128" id="QUg-1b-2N8"/>
+                                        </constraints>
                                         <buttonCell key="cell" type="push" title="Quick Setup" bezelStyle="rounded" alignment="center" lineBreakMode="truncatingTail" state="on" borderStyle="border" inset="2" id="91x-gB-fj6">
                                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                             <font key="font" metaFont="system"/>
@@ -89,6 +90,10 @@
                                         </connections>
                                     </button>
                                 </subviews>
+                                <constraints>
+                                    <constraint firstItem="pHn-2N-2sT" firstAttribute="centerX" secondItem="tTi-lY-RjK" secondAttribute="centerX" id="V8B-gH-i1O"/>
+                                    <constraint firstAttribute="bottom" secondItem="pHn-2N-2sT" secondAttribute="bottom" constant="20" symbolic="YES" id="jfL-eH-oFJ"/>
+                                </constraints>
                                 <ciFilter key="compositingFilter" name="CILightenBlendMode">
                                     <configuration>
                                         <null key="inputBackgroundImage"/>
@@ -99,8 +104,12 @@
                         </subviews>
                         <constraints>
                             <constraint firstItem="bRT-wU-evQ" firstAttribute="top" secondItem="YZH-Gg-XwB" secondAttribute="top" id="C4n-cJ-tII"/>
+                            <constraint firstItem="tTi-lY-RjK" firstAttribute="leading" secondItem="bRT-wU-evQ" secondAttribute="leading" id="HC3-S3-VpL"/>
                             <constraint firstAttribute="trailing" secondItem="bRT-wU-evQ" secondAttribute="trailing" id="SAU-XU-UKK"/>
                             <constraint firstAttribute="bottom" secondItem="bRT-wU-evQ" secondAttribute="bottom" id="U7f-3X-BdU"/>
+                            <constraint firstItem="tTi-lY-RjK" firstAttribute="bottom" secondItem="bRT-wU-evQ" secondAttribute="bottom" id="Uxw-PE-8X1"/>
+                            <constraint firstItem="tTi-lY-RjK" firstAttribute="top" secondItem="bRT-wU-evQ" secondAttribute="top" id="l8X-VC-ip2"/>
+                            <constraint firstItem="tTi-lY-RjK" firstAttribute="trailing" secondItem="bRT-wU-evQ" secondAttribute="trailing" id="tSg-ai-xWJ"/>
                             <constraint firstItem="bRT-wU-evQ" firstAttribute="leading" secondItem="YZH-Gg-XwB" secondAttribute="leading" id="taT-BW-yPR"/>
                         </constraints>
                     </view>
@@ -648,7 +657,7 @@ Don't worry if you couldn't setup all your devices right now — you can always 
         </scene>
     </scenes>
     <resources>
-        <image name="androidIcon" width="512" height="512"/>
+        <image name="androidIcon" width="64" height="64"/>
         <image name="kdeConnectIcon" width="64" height="64"/>
         <image name="linuxIcon" width="64" height="64"/>
         <image name="macOSIcon" width="64" height="64"/>

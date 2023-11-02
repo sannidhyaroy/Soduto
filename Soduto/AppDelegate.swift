@@ -10,39 +10,43 @@ import Cocoa
 import Foundation
 import CleanroomLogger
 import UserNotifications
+import Sparkle
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     let un = UNUserNotificationCenter.current()
     @IBOutlet weak var statusBarMenuController: StatusBarMenuController!
+    @IBOutlet weak var checkForUpdatesMenuItem: NSMenuItem!
     var welcomeWindowController: WelcomeWindowController?
-
+    
     let config = Configuration()
     let connectionProvider: ConnectionProvider
     let deviceManager: DeviceManager
     let serviceManager = ServiceManager()
     let userNotificationManager: UserNotificationManager
+    let updaterController: SPUStandardUpdaterController
     
     static let logLevelConfigurationKey = "com.soduto.logLevel"
     
     override init() {
         UserDefaults.standard.register(defaults: [AppDelegate.logLevelConfigurationKey: LogSeverity.info.rawValue])
         
-        #if DEBUG
-            Log.enable(configuration: XcodeLogConfiguration(minimumSeverity: .debug, debugMode: true))
-        #else
-            let formatter = FieldBasedLogFormatter(fields: [.severity(.simple), .delimiter(.spacedPipe), .payload])
-            if let osRecorder = OSLogRecorder(formatters: [formatter]) {
-                let severity: LogSeverity = LogSeverity(rawValue: UserDefaults.standard.integer(forKey: AppDelegate.logLevelConfigurationKey)) ?? .info
-                Log.enable(configuration: BasicLogConfiguration(minimumSeverity: severity, recorders: [osRecorder]))
-            }
-        #endif
+#if DEBUG
+        Log.enable(configuration: XcodeLogConfiguration(minimumSeverity: .debug, debugMode: true))
+#else
+        let formatter = FieldBasedLogFormatter(fields: [.severity(.simple), .delimiter(.spacedPipe), .payload])
+        if let osRecorder = OSLogRecorder(formatters: [formatter]) {
+            let severity: LogSeverity = LogSeverity(rawValue: UserDefaults.standard.integer(forKey: AppDelegate.logLevelConfigurationKey)) ?? .info
+            Log.enable(configuration: BasicLogConfiguration(minimumSeverity: severity, recorders: [osRecorder]))
+        }
+#endif
         
         
         self.connectionProvider = ConnectionProvider(config: config)
         self.deviceManager = DeviceManager(config: config, serviceManager: self.serviceManager)
         self.userNotificationManager = UserNotificationManager(config: self.config, serviceManager: self.serviceManager, deviceManager: self.deviceManager)
+        self.updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         
         super.init()
         
@@ -60,6 +64,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.statusBarMenuController.config = self.config
         self.deviceManager.delegate = self
         
+        self.checkForUpdatesMenuItem.target = updaterController
+        self.checkForUpdatesMenuItem.action = #selector(SPUStandardUpdaterController.checkForUpdates(_:))
+        
         self.serviceManager.add(service: NotificationsService())
         self.serviceManager.add(service: ClipboardService())
         self.serviceManager.add(service: SftpService())
@@ -68,7 +75,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: PingService())
         self.serviceManager.add(service: BatteryService())
         self.serviceManager.add(service: FindMyPhoneService())
-//        self.serviceManager.add(service: RemoteKeyboardService())
+        //self.serviceManager.add(service: RemoteKeyboardService())
         un.delegate = self
         
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wakeUpListener(_:)), name: NSWorkspace.didWakeNotification, object: nil)
@@ -77,11 +84,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         
         showWelcomeWindow()
     }
-
+    
     func applicationWillTerminate(_ aNotification: Notification) {
         // Insert code here to tear down your application
     }
-
+    
     
     // MARK: DeviceManagerDelegate
     

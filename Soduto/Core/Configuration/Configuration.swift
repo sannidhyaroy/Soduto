@@ -282,7 +282,18 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
     }
     
     public var hostDeviceType: DeviceType {
-        return .Desktop
+        switch deviceTypeInt {
+        case 0:
+            return .Desktop
+        case 1:
+            return .Laptop
+        case 2:
+            return .Phone
+        case 3:
+            return .Tablet
+        default:
+            return .Unknown
+        }
     }
     
     public var hostDeviceId: Device.Id {
@@ -326,7 +337,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
         get { return self.userDefaults.bool(forKey: Property.launchOnLogin.rawValue) }
         set {
             if #available(macOS 13.0, *) {
-                let loginItem = SMAppService.loginItem(identifier: "com.soduto.SodutoLauncher")
+                let loginItem = SMAppService.mainApp
                 switch (loginItem.status.rawValue) {
                 case 0:
                     if ((try? loginItem.register()) != nil) {
@@ -348,7 +359,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                     break
                 case 2:
                     SMAppService.openSystemSettingsLoginItems()
-                    self.notification.ShowCustomNotification(title: "Uh'oh!", body: "macOS requires approval to let Soduto change login item settings. Try toggling 'Soduto' manually from System Preferences", sound: true, id: "LoginItemApproval")
+                    self.notification.ShowCustomNotification(title: "Uh'oh!", body: "macOS requires approval to let Soduto change login item settings. Tap the + icon and add 'Soduto' manually", sound: true, id: "LoginItemApproval")
                     break
                 case 3:
                     print("SMAppService not found!")

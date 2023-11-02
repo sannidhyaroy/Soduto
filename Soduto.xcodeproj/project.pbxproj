@@ -37,8 +37,22 @@
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
 		312E77092938A93F00F29BFA /* Facebook.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FE2938A93F00F29BFA /* Facebook.png */; };
 		3144827D2940AF3200CCA098 /* Message.png in Resources */ = {isa = PBXBuildFile; fileRef = 3144827C2940AF3200CCA098 /* Message.png */; };
+		317ACC4A2A1C35A800D01DF4 /* Gmail.png in Resources */ = {isa = PBXBuildFile; fileRef = 317ACC472A1C35A800D01DF4 /* Gmail.png */; };
+		317ACC4B2A1C35A800D01DF4 /* Clock.png in Resources */ = {isa = PBXBuildFile; fileRef = 317ACC482A1C35A800D01DF4 /* Clock.png */; };
+		317ACC4C2A1C35A800D01DF4 /* YouTube.png in Resources */ = {isa = PBXBuildFile; fileRef = 317ACC492A1C35A800D01DF4 /* YouTube.png */; };
+		31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
+		31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		319CBA282939662400DAE301 /* Phone.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA272939662400DAE301 /* Phone.png */; };
 		319CBA2A2939F07D00DAE301 /* AirDrop.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA292939F07D00DAE301 /* AirDrop.png */; };
+		31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31B189B529ED731B001C8735 /* Sparkle.framework */; };
+		31B189B829ED73A1001C8735 /* Sparkle.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 31B189B529ED731B001C8735 /* Sparkle.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		31F3A152293B5EA300550088 /* icon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 31F3A151293B5EA300550088 /* icon.icns */; };
+		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		31F3A164293B9AC600550088 /* ShareViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = 31F3A163293B9AC500550088 /* ShareViewController.xib */; };
+		31F3A1AF293BDAF400550088 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareViewController.swift */; };
+		31F3A1B3293BDFBD00550088 /* Soduto Share.png in Resources */ = {isa = PBXBuildFile; fileRef = 31F3A1B5293BDFBD00550088 /* Soduto Share.png */; };
+		31F3A1B6293BE76900550088 /* ButtonLabelCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A165293BB1D400550088 /* ButtonLabelCell.swift */; };
+		31F3A1B7293BEEB800550088 /* ButtonLabelCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A165293BB1D400550088 /* ButtonLabelCell.swift */; };
 		761FBEF3293211C50034FD44 /* NMSSH.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF4293212030034FD44 /* CleanroomLogger.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -207,6 +221,7 @@
 				761FBEF7293212E10034FD44 /* CleanroomLogger.xcframework in Embed Frameworks */,
 				761FBEF6293212600034FD44 /* Reachability.xcframework in Embed Frameworks */,
 				761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */,
+				31B189B829ED73A1001C8735 /* Sparkle.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -241,8 +256,21 @@
 		312E76FD2938A93F00F29BFA /* Messages.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messages.png; sourceTree = "<group>"; };
 		312E76FE2938A93F00F29BFA /* Facebook.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Facebook.png; sourceTree = "<group>"; };
 		3144827C2940AF3200CCA098 /* Message.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Message.png; sourceTree = "<group>"; };
+		317ACC472A1C35A800D01DF4 /* Gmail.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Gmail.png; sourceTree = "<group>"; };
+		317ACC482A1C35A800D01DF4 /* Clock.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Clock.png; sourceTree = "<group>"; };
+		317ACC492A1C35A800D01DF4 /* YouTube.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = YouTube.png; sourceTree = "<group>"; };
+		31864DCE293C3CE100334902 /* SharedUserDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUserDefaults.swift; sourceTree = SOURCE_ROOT; };
 		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
+		31B189B529ED731B001C8735 /* Sparkle.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Sparkle.framework; path = Carthage/Build/Mac/Sparkle.framework; sourceTree = "<group>"; };
+		31F3A14F293B5EA300550088 /* Soduto Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Soduto Share.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		31F3A151293B5EA300550088 /* icon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = icon.icns; sourceTree = "<group>"; };
+		31F3A153293B5EA300550088 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		31F3A158293B5EA300550088 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		31F3A159293B5EA300550088 /* Soduto_Share.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto_Share.entitlements; sourceTree = "<group>"; };
+		31F3A163293B9AC500550088 /* ShareViewController.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = ShareViewController.xib; sourceTree = "<group>"; };
+		31F3A165293BB1D400550088 /* ButtonLabelCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ButtonLabelCell.swift; sourceTree = "<group>"; };
+		31F3A1B4293BDFBD00550088 /* Base */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = Base; path = "Base.lproj/Soduto Share.png"; sourceTree = "<group>"; };
 		76B580552930EE1B003453FD /* libcrypto.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libcrypto.a; path = Libraries/lib/libcrypto.a; sourceTree = "<group>"; };
 		76B580562930EE1B003453FD /* libssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssl.a; path = Libraries/lib/libssl.a; sourceTree = "<group>"; };
 		76B580572930EE1B003453FD /* libssh2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssh2.a; path = Libraries/lib/libssh2.a; sourceTree = "<group>"; };
@@ -363,6 +391,7 @@
 			files = (
 				76B580582930EE1B003453FD /* libcrypto.a in Frameworks */,
 				76B580592930EE1B003453FD /* libssl.a in Frameworks */,
+				31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */,
 				76B5805A2930EE1B003453FD /* libssh2.a in Frameworks */,
 				843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */,
 			);
@@ -410,23 +439,42 @@
 			name = Configuration;
 			sourceTree = "<group>";
 		};
-		312E770B2938AB7400F29BFA /* Notification Service */ = {
+		312E770B2938AB7400F29BFA /* App Icons */ = {
 			isa = PBXGroup;
 			children = (
-				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
+				319CBA292939F07D00DAE301 /* AirDrop.png */,
+				317ACC482A1C35A800D01DF4 /* Clock.png */,
 				312E76F82938A93E00F29BFA /* Discord.png */,
 				312E76FE2938A93F00F29BFA /* Facebook.png */,
+				317ACC472A1C35A800D01DF4 /* Gmail.png */,
 				312E76FC2938A93F00F29BFA /* Instagram.png */,
+				3144827C2940AF3200CCA098 /* Message.png */,
 				312E76FD2938A93F00F29BFA /* Messages.png */,
 				312E76F62938A93E00F29BFA /* Messenger.png */,
+				319CBA272939662400DAE301 /* Phone.png */,
 				312E76F92938A93E00F29BFA /* Reddit.png */,
 				312E76F42938A93D00F29BFA /* Signal.png */,
 				312E76F72938A93E00F29BFA /* Spike.png */,
 				312E76FB2938A93F00F29BFA /* Telegram.png */,
 				312E76FA2938A93F00F29BFA /* Twitter.png */,
 				312E76F52938A93E00F29BFA /* WhatsApp.png */,
+				317ACC492A1C35A800D01DF4 /* YouTube.png */,
 			);
 			path = "Notification Service";
+			sourceTree = "<group>";
+		};
+		31F3A150293B5EA300550088 /* Soduto Share */ = {
+			isa = PBXGroup;
+			children = (
+				31F3A151293B5EA300550088 /* icon.icns */,
+				31F3A1B5293BDFBD00550088 /* Soduto Share.png */,
+				31F3A153293B5EA300550088 /* ShareViewController.swift */,
+				31F3A163293B9AC500550088 /* ShareViewController.xib */,
+				31F3A165293BB1D400550088 /* ButtonLabelCell.swift */,
+				31F3A158293B5EA300550088 /* Info.plist */,
+				31F3A159293B5EA300550088 /* Soduto_Share.entitlements */,
+			);
+			path = "Soduto Share";
 			sourceTree = "<group>";
 		};
 		8421A8DF1D75FEA0008AC833 /* XIB */ = {
@@ -521,6 +569,7 @@
 				84FA45E51DDDE87F00EF3992 /* AppDelegate.swift */,
 				8438A9251E45145F00922155 /* StatusBarApplication.swift */,
 				843301651D2D8CB8008934BB /* Assets.xcassets */,
+				312E770B2938AB7400F29BFA /* App Icons */,
 				8456F4A41D7DE31A006EFE19 /* Core */,
 				849961B31D572664002B893A /* MyUtilities */,
 				84FA45EB1DDF51EB00EF3992 /* Services */,
@@ -701,6 +750,7 @@
 		849962261D574530002B893A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				31B189B529ED731B001C8735 /* Sparkle.framework */,
 				76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */,
 				76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */,
 				76B5805D2930EF31003453FD /* NMSSH.xcframework */,
@@ -719,15 +769,12 @@
 				84651A711E599A3C00D17601 /* BatteryService.swift */,
 				840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */,
 				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
+				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
 				84FA45EC1DDF525200EF3992 /* PingService.swift */,
 				842505E81ED1BD3C00AEE25F /* RemoteKeyboardService.swift */,
 				84651A751E5AEBE100D17601 /* SftpService.swift */,
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
 				847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */,
-				319CBA272939662400DAE301 /* Phone.png */,
-				3144827C2940AF3200CCA098 /* Message.png */,
-				319CBA292939F07D00DAE301 /* AirDrop.png */,
-				312E770B2938AB7400F29BFA /* Notification Service */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -890,12 +937,14 @@
 				843107711E3D23CA00AE96AB /* SendMessageWindow.xib in Resources */,
 				312E77062938A93F00F29BFA /* Telegram.png in Resources */,
 				02150DE81F17F98F00401CC6 /* DeviceInfoWindow.xib in Resources */,
+				317ACC4B2A1C35A800D01DF4 /* Clock.png in Resources */,
 				312E77082938A93F00F29BFA /* Messages.png in Resources */,
 				02968D0C204C4B9100FCE5E0 /* README.md in Resources */,
 				312E76FF2938A93F00F29BFA /* Signal.png in Resources */,
 				845BE2DE1EC2465500F3BD62 /* LoadingWindow.xib in Resources */,
 				312E77092938A93F00F29BFA /* Facebook.png in Resources */,
 				844AF28F1ED6185100422B7F /* DevicesList.storyboard in Resources */,
+				317ACC4C2A1C35A800D01DF4 /* YouTube.png in Resources */,
 				312E77002938A93F00F29BFA /* WhatsApp.png in Resources */,
 				312E77072938A93F00F29BFA /* Instagram.png in Resources */,
 				312E77012938A93F00F29BFA /* Messenger.png in Resources */,
@@ -906,6 +955,7 @@
 				312E77052938A93F00F29BFA /* Twitter.png in Resources */,
 				023382B31F8D58AC00A832DD /* AboutWindow.storyboard in Resources */,
 				319CBA282939662400DAE301 /* Phone.png in Resources */,
+				317ACC4A2A1C35A800D01DF4 /* Gmail.png in Resources */,
 				312E77022938A93F00F29BFA /* Spike.png in Resources */,
 				843301691D2D8CB8008934BB /* MainMenu.xib in Resources */,
 				024B435F1F23BEEB00037A33 /* PreferencesWindow.storyboard in Resources */,
@@ -1137,6 +1187,85 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		31F3A15E293B5EA300550088 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = "Soduto Share/Soduto_Share.entitlements";
+				CODE_SIGN_IDENTITY = "Mac Developer";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 20;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Soduto Share/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Soduto Share";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2022 Soduto. All rights reserved.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
+				MARKETING_VERSION = 2.0.3;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.soduto.Soduto.Soduto-Share";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		31F3A15F293B5EA300550088 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = "Soduto Share/Soduto_Share.entitlements";
+				CODE_SIGN_IDENTITY = "Mac Developer";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 20;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Soduto Share/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Soduto Share";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2022 Soduto. All rights reserved.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
+				MARKETING_VERSION = 2.0.3;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.soduto.Soduto.Soduto-Share";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		8433016B1D2D8CB8008934BB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1260,10 +1389,12 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
+					"$(PROJECT_DIR)/Carthage/Build/Mac",
 				);
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = Soduto/Info.plist;
@@ -1277,7 +1408,7 @@
 					"$(PROJECT_DIR)/Libraries/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 2.0.3;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.soduto.Soduto;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1299,10 +1430,12 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
+					"$(PROJECT_DIR)/Carthage/Build/Mac",
 				);
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = Soduto/Info.plist;
@@ -1316,7 +1449,7 @@
 					"$(PROJECT_DIR)/Libraries/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 2.0.3;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.soduto.Soduto;
 				PRODUCT_NAME = "$(TARGET_NAME)";

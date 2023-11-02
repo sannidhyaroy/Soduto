@@ -50,6 +50,7 @@ public class BatteryService: Service {
     private var runLoopSource: CFRunLoopSource?
     private var lastBatteryStatus: BatteryStatus?
     private let thresholdValue: Int = 15
+    private var notificationSentForPercentage: [Device.Id: Int] = [:]
     
     
     // MARK: Setup / Cleanup
@@ -135,24 +136,31 @@ public class BatteryService: Service {
         let newStatus = BatteryStatus(currentCharge: currentCharge, isCharging: isCharging)
         self.statuses[device.id] = newStatus
         
-        let notificationId = self.notificationId(for: device)
-        var hasNotification = false
-        if #available(macOS 11.0, *) {
-            UNUserNotificationCenter.current().getDeliveredNotifications { deliveredNotifications -> () in
-                for notification in deliveredNotifications {
-                    if notification.request.identifier == notificationId {
-                        hasNotification = true
-                    }
-                }
-            }
-        } else {
-            hasNotification = NSUserNotificationCenter.default.containsDeliveredNotification(withId: notificationId)
-        }
-        if thresholdEvent == .batteryLow || hasNotification || newStatus.isCritical {
+        let previousPercentage = notificationSentForPercentage[device.id] ?? 0
+//        let notificationId = self.notificationId(for: device)
+//        var hasNotification = false
+//        if #available(macOS 11.0, *) {
+//            UNUserNotificationCenter.current().getDeliveredNotifications { deliveredNotifications in
+//                for notification in deliveredNotifications {
+//                    if notification.request.identifier == notificationId {
+//                        hasNotification = true
+//                        break
+//                    }
+//                }
+//            }
+//        } else {
+//            hasNotification = NSUserNotificationCenter.default.containsDeliveredNotification(withId: notificationId)
+//        }
+        if (thresholdEvent == .batteryLow || newStatus.isCritical) && currentCharge != previousPercentage {
             self.showNotification(for: device, withStatus: newStatus)
+            notificationSentForPercentage[device.id] = currentCharge
         }
         else if isCharging {
             self.hideNotification(for: device)
+            notificationSentForPercentage.removeValue(forKey: device.id)
+        }
+        else {
+            notificationSentForPercentage.removeValue(forKey: device.id)
         }
     }
     

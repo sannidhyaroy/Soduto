@@ -11,7 +11,7 @@ import CleanroomLogger
 
 /// Supported device types.
 ///
-/// - Unknown: Device type is not known. Usupported device types default to this.
+/// - Unknown: Device type is not known. Unsupported device types default to this.
 /// - Dektop: Device is desktop computer.
 /// - Laptop: Device is laptop computer.
 /// - Phone: Device is a mobile phone.

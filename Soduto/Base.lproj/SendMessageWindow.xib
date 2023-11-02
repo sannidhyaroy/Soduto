@@ -123,7 +123,7 @@
             </view>
             <toolbar key="toolbar" implicitIdentifier="5BE39696-EFAC-49AF-9F6E-A29CE9AB6426" autosavesConfiguration="NO" allowsUserCustomization="NO" displayMode="iconOnly" sizeMode="regular" id="Ym2-od-Q4Z">
                 <allowedToolbarItems>
-                    <toolbarItem implicitItemIdentifier="ADB3F3EF-D77C-4FC3-B069-7B693D402546" label="" paletteLabel="" image="paperplane" catalog="system" sizingBehavior="auto" id="0Jl-d3-6gn">
+                    <toolbarItem implicitItemIdentifier="ADB3F3EF-D77C-4FC3-B069-7B693D402546" label="Send" paletteLabel="" image="paperplane" catalog="system" sizingBehavior="auto" id="0Jl-d3-6gn">
                         <nil key="toolTip"/>
                         <button key="view" verticalHuggingPriority="750" id="yeu-Uf-cat">
                             <rect key="frame" x="0.0" y="14" width="46" height="32"/>
@@ -157,11 +157,9 @@ DQ
                     </toolbarItem>
                 </allowedToolbarItems>
                 <defaultToolbarItems>
-                    <toolbarItem reference="0Jl-d3-6gn"/>
-                    <toolbarItem reference="J90-T3-Kgn"/>
                     <toolbarItem reference="yMl-8L-h3M"/>
                     <toolbarItem reference="J90-T3-Kgn"/>
-                    <toolbarItem reference="IIh-6i-MIz"/>
+                    <toolbarItem reference="0Jl-d3-6gn"/>
                 </defaultToolbarItems>
             </toolbar>
             <connections>
