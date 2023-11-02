@@ -43,7 +43,7 @@ import UserNotifications
 /// "id" set to the id of the notification we want to dismiss and a boolean "cancel"
 /// set to true. The other device will answer with a notification package with
 /// "isCancel" set to true when it is dismissed.
-public class NotificationsService: Service, UserNotificationActionHandler {
+public class NotificationsService: Service, DownloadTaskDelegate, UserNotificationActionHandler {
     
     let un = UNUserNotificationCenter.current()
     
@@ -61,6 +61,23 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     enum ActionId: ServiceAction.Id {
         case refresh
     }
+
+    private struct DownloadInfo {
+        let task: DownloadTask
+        let fileHash: String?
+        let notificationId: String
+        let partFileURL: URL
+        let dataPacket: DataPacket
+        let device: Device
+        init(task: DownloadTask, fileHash:String?, notificationId: String, partFileURL: URL, dataPacket: DataPacket, device: Device) {
+            self.task = task
+            self.fileHash = fileHash
+            self.notificationId = notificationId
+            self.partFileURL = partFileURL
+            self.dataPacket = dataPacket
+            self.device = device
+        }
+    }
     
     
     // MARK: Service properties
@@ -70,6 +87,10 @@ public class NotificationsService: Service, UserNotificationActionHandler {
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.notificationPacketType ])
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.notificationPacketType ])
     
+    private var notificationIconDownloadInfos: [DownloadInfo] = []
+    private var downloadedNotificationIconFileURLByNotificationId: [String: URL] = [:]
+    private var cachedDownloadedNotificationIconFileURLByHash: [String: URL] = [:]
+
     /// Delivered notification ids grouped by device
     private var notificationIds: [Device.Id: Set<NotificationId>] = [:]
     
@@ -89,7 +110,19 @@ public class NotificationsService: Service, UserNotificationActionHandler {
             self.hideNotification(for: dataPacket, from: device)
         }
         else {
-            self.showNotification(for: dataPacket, from: device)
+            do {
+                let id = try dataPacket.getId() ?? nil
+                if (id != nil && dataPacket.downloadTask != nil) {
+                    let iconDownloadTask = dataPacket.downloadTask
+                    self.startIconDownloadTaskAndShowNotification(downloadTask: iconDownloadTask!, notificationId: id!, dataPacket: dataPacket, device: device)
+                }
+                else {
+                    self.showNotification(for: dataPacket, from: device)
+                }
+            }
+            catch {
+                self.showNotification(for: dataPacket, from: device)
+            }
         }
         
         return true
@@ -145,6 +178,30 @@ public class NotificationsService: Service, UserNotificationActionHandler {
         }
     }
     
+    // MARK: DownloadTaskDelegate
+    
+    public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
+        Log.debug?.message("downloadTask(<\(task)> finishedWithSuccess:<\(success)>)")
+        
+        guard let index = self.notificationIconDownloadInfos.index(where: { $0.task === task }) else { return }
+        let info = self.notificationIconDownloadInfos.remove(at: index)
+        if success {
+            do {
+                let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: "\(info.notificationId).png")
+                Log.debug?.message("downloadTask saving icon to: \(finalFileURL.path)")
+                Log.debug?.message("Notification id: \(info.notificationId)")
+                self.downloadedNotificationIconFileURLByNotificationId[info.notificationId] = finalFileURL
+                if (info.fileHash != nil && self.cachedDownloadedNotificationIconFileURLByHash[info.fileHash!] == nil) {
+                    let cachedFileURL = try self.copyFileToCache(url: finalFileURL, hash: info.fileHash!)
+                    self.cachedDownloadedNotificationIconFileURLByHash[info.fileHash!] = cachedFileURL
+                    Log.debug?.message("New icon found with hash \(info.fileHash!), saving to cached icons as \(cachedFileURL)")
+                }
+            }
+            catch {}
+        }
+        self.showNotification(for: info.dataPacket, from: info.device)
+    }
+
     
     // MARK: UserNotificationActionHandler
     
@@ -250,6 +307,121 @@ public class NotificationsService: Service, UserNotificationActionHandler {
         return "\(self.id).\(deviceId).\(packetId)"
     }
     
+    private func startIconDownloadTaskAndShowNotification(downloadTask task: DownloadTask, notificationId: String, dataPacket: DataPacket, device: Device) {
+        var downloadFileHash: String? = nil
+        do {
+            downloadFileHash = try dataPacket.getPayloadHash()
+        }
+        catch {}
+        if (downloadFileHash != nil && cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!] != nil) {
+            Log.debug?.message("Found cached icon for hash \(downloadFileHash!) at \(cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!)")
+            do {
+                var copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!, notificationId: notificationId)
+                self.downloadedNotificationIconFileURLByNotificationId[notificationId] = copiedFromCacheFileURL
+            }
+            catch {}
+            self.showNotification(for: dataPacket, from: device)
+        } else {
+            if let (readyStream, partFileURL) = self.streamForTempDownload() {
+                self.notificationIconDownloadInfos.append(DownloadInfo(
+                    task: task,
+                    fileHash: downloadFileHash,
+                    notificationId: notificationId,
+                    partFileURL: partFileURL,
+                    dataPacket: dataPacket,
+                    device: device
+                ))
+                task.delegate = self
+                task.start(withStream: readyStream)
+            }
+        }
+    }
+    
+    private func streamForTempDownload() -> (OutputStream, URL)? {
+        let temporaryDirectory = NSTemporaryDirectory()
+        let randomUuidForFileName = "\(UUID().uuidString)"
+        let tempFileURL = URL(fileURLWithPath: randomUuidForFileName, relativeTo: URL(fileURLWithPath: temporaryDirectory, isDirectory: true))
+        // Try open stream for new file. Try alternative names on fail
+        var partFileURL = tempFileURL.appendingPathExtension("part")
+        var stream: OutputStream? = nil
+        for _ in 1...10000 {
+            if !FileManager.default.fileExists(atPath: partFileURL.path) {
+                stream = OutputStream(url: partFileURL, append: false)
+                stream?.open()
+                if stream?.hasSpaceAvailable ?? false {
+                    break
+                }
+            }
+            
+            partFileURL = partFileURL.alternativeForDuplicate()
+        }
+        
+        // Last attempt with completely random extension
+        if stream == nil {
+            partFileURL = tempFileURL.appendingPathExtension("part-\(UUID().uuidString)")
+            if !FileManager.default.fileExists(atPath: partFileURL.path) {
+                stream = OutputStream(url: partFileURL, append: false)
+                stream?.open()
+            }
+        }
+        
+        if let readyStream = stream, (stream?.hasSpaceAvailable ?? false) {
+            return (readyStream, partFileURL)
+        }
+        else {
+            stream?.close()
+            return nil
+        }
+    }
+
+    private func renamePartFile(url partFileURL: URL, to fileName: String) throws -> URL {
+        // Try rename file from temporary *.part name to final path based on original file name
+        // NOTE: *.part name might not necesarily be equal to filename with appended .part suffix
+        var finalFileURL = partFileURL.deletingLastPathComponent().appendingPathComponent(fileName)
+        for _ in 1...10000 {
+            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                do {
+                    try FileManager.default.moveItem(at: partFileURL, to: finalFileURL)
+                    return finalFileURL
+                }
+                catch {}
+            }
+            finalFileURL = finalFileURL.alternativeForDuplicate()
+        }
+        
+        throw DataPacket.NotificationError.partFileRenameFailed
+    }
+
+    private func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
+        var finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
+        for _ in 1...10000 {
+            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                do {
+                    try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                    return finalFileURL
+                }
+                catch {}
+            }
+        }
+        
+        throw DataPacket.NotificationError.copyFileFailed
+    }
+
+    private func copyFileFromCache(url fileURL: URL, notificationId fileNotificationId: String) throws -> URL {
+        var finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileNotificationId).png")
+        for _ in 1...10000 {
+            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                do {
+                    try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                    return finalFileURL
+                }
+                catch {}
+            }
+        }
+        
+        throw DataPacket.NotificationError.copyFileFailed
+    }
+
     private func showNotification(for dataPacket: DataPacket, from device: Device) {
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
 
@@ -257,7 +429,7 @@ public class NotificationsService: Service, UserNotificationActionHandler {
             guard let packetNotificationId = try dataPacket.getId() else { return }
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
             guard let appName = try dataPacket.getAppName() else { return }
-            guard appName != "KDE Connect" else { return } // Ignore notifications shown be KDE Connect
+            guard appName != "KDE Connect" else { return } // Ignore notifications shown by KDE Connect
             guard let ticker = try dataPacket.getTicker() else { return }
             let replyId = try dataPacket.getReplyRequestId()
             let actions = try dataPacket.getActions()
@@ -266,7 +438,10 @@ public class NotificationsService: Service, UserNotificationActionHandler {
             let isCancelable = try dataPacket.getClearableFlag()
             let dontPresent = isAnswer || isSilent
 
-            let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name(appName))
+            var notificationIconURL: URL? = nil
+            if (self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
+                notificationIconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetNotificationId)
+            }
 
             if #available(macOS 11.0, *){
                 un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
@@ -301,10 +476,9 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                         }
                         
                         // Set Notification App Icon
-                        if (notificationIconPath != nil) {
-                            let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
+                        if (notificationIconURL != nil) {
                             do {
-                                let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
+                                let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL!, options: .none)
                                 notification.attachments = [attachment]
                             }
                             catch let error {
@@ -362,8 +536,8 @@ public class NotificationsService: Service, UserNotificationActionHandler {
                 notification.userInfo = userInfo
                 notification.title = "\(appName) | \(device.name)"
                 notification.informativeText = ticker
-                if (notificationIconPath != nil) {
-                    notification.contentImage = NSImage(contentsOf: URL(fileURLWithPath: notificationIconPath!))
+                if (notificationIconURL != nil) {
+                    notification.contentImage = NSImage(contentsOf: URL(fileURLWithPath: notificationIconURL!.path))
                 }
                 if !dontPresent {
                     notification.soundName = NSUserNotificationDefaultSoundName
@@ -468,6 +642,9 @@ fileprivate extension DataPacket {
         case invalidCancelFlag
         case invalidAnswerFlag
         case invalidSilentFlag
+        case invalidPayloadHash
+        case partFileRenameFailed
+        case copyFileFailed
     }
     
     enum NotificationProperty: String {
@@ -490,6 +667,7 @@ fileprivate extension DataPacket {
         case isCancel = "isCancel"           /// (boolean): True if the notification was dismissed in the peer device.
         case requestAnswer = "requestAnswer" /// (boolean): True if this is an answer to a "request" package.
         case silent = "silent"               /// (boolean): True if this notification should be silent.
+        case payloadHash = "payloadHash"     /// (string): The hash of the payload
     }
     
     
@@ -605,6 +783,13 @@ fileprivate extension DataPacket {
         guard body.keys.contains(NotificationProperty.requestAnswer.rawValue) else { return false }
         guard let value = body[NotificationProperty.requestAnswer.rawValue] as? NSNumber else { throw NotificationError.invalidAnswerFlag }
         return value.boolValue
+    }
+    
+    func getPayloadHash() throws -> String? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.payloadHash.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.payloadHash.rawValue] as? String else { throw NotificationError.invalidPayloadHash }
+        return value
     }
     
     func validateNotificationType() throws {
