@@ -742,10 +742,10 @@
 				8433015C1D2D8CB8008934BB /* Sources */,
 				8433015D1D2D8CB8008934BB /* Frameworks */,
 				8433015E1D2D8CB8008934BB /* Resources */,
+				84E732261DF55B68001E1549 /* Embed Frameworks */,
 				843E178A1E26B613001D0444 /* Embed Login Items */,
 				84D071481EB9076F004D383A /* Embed XPC Services */,
 				84D071671EB91D2C004D383A /* Embed Helper Executables */,
-				76E5A03C27F8A10E000FD208 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
