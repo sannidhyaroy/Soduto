@@ -10,6 +10,7 @@ import Foundation
 import Cocoa
 import CleanroomLogger
 import IOKit.ps
+import UserNotifications
 
 /// This service receives packages with type "kdeconnect.battery" and reads the
 /// following fields:
@@ -33,7 +34,7 @@ public class BatteryService: Service {
     public struct BatteryStatus {
         var currentCharge: Int
         var isCharging: Bool
-        var isCritical: Bool { return !isCharging && currentCharge <= 2 }
+        var isCritical: Bool { return !isCharging && currentCharge <= 10 }
     }
     
     public enum BatteryStatusError: Error {
@@ -135,7 +136,18 @@ public class BatteryService: Service {
         self.statuses[device.id] = newStatus
         
         let notificationId = self.notificationId(for: device)
-        let hasNotification = NSUserNotificationCenter.default.containsDeliveredNotification(withId: notificationId)
+        var hasNotification = false
+        if #available(macOS 11.0, *) {
+            UNUserNotificationCenter.current().getDeliveredNotifications { deliveredNotifications -> () in
+                for notification in deliveredNotifications {
+                    if notification.request.identifier == notificationId {
+                        hasNotification = true
+                    }
+                }
+            }
+        } else {
+            hasNotification = NSUserNotificationCenter.default.containsDeliveredNotification(withId: notificationId)
+        }
         if thresholdEvent == .batteryLow || hasNotification || newStatus.isCritical {
             self.showNotification(for: device, withStatus: newStatus)
         }
@@ -152,18 +164,23 @@ public class BatteryService: Service {
         let title = NSLocalizedString("Low Battery", comment: "notification title")  + " | \(device.name)"
         let info = NSString(format: NSLocalizedString("%d%% of battery remaining", comment: "notification info") as NSString, status.currentCharge)
 
-        let notification = NSUserNotification()
-        notification.title = title
-        notification.informativeText = info as String
-        notification.soundName = NSUserNotificationDefaultSoundName
-        notification.hasActionButton = false
-        notification.identifier = self.notificationId(for: device)
-        NSUserNotificationCenter.default.deliver(notification)
+        if #available(macOS 11.0, *) {
+            NotificationsService().ShowCustomNotification(title: title, body: info as String, sound: true, id: self.notificationId(for: device))
+        } else {
+            let notification = NSUserNotification()
+            notification.title = title
+            notification.informativeText = info as String
+            notification.soundName = NSUserNotificationDefaultSoundName
+            notification.hasActionButton = false
+            notification.identifier = self.notificationId(for: device)
+            NSUserNotificationCenter.default.deliver(notification)
+        }
     }
     
     private func hideNotification(for device: Device) {
         let notificationId = self.notificationId(for: device)
         NSUserNotificationCenter.default.removeNotification(withId: notificationId)
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
     }
     
     private func getBatteryStatus() -> BatteryStatus? {

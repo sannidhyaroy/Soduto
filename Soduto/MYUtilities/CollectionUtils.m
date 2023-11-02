@@ -167,7 +167,7 @@ void cfSetObj(void *var, CFTypeRef value) {
 }
 
 
-- (NSArray*) my_map: (id (^)(id obj))block {
+- (NSArray*) my_map: (id (NS_NOESCAPE^)(id obj))block {
     NSMutableArray* mapped = [[NSMutableArray alloc] initWithCapacity: self.count];
     for (id obj in self) {
         id mappedObj = block(obj);
@@ -177,7 +177,7 @@ void cfSetObj(void *var, CFTypeRef value) {
     return [mapped copy];
 }
 
-- (NSArray*) my_filter: (int (^)(id obj))block {
+- (NSArray*) my_filter: (int (NS_NOESCAPE^)(id obj))block {
     NSMutableArray* filtered = [[NSMutableArray alloc] initWithCapacity: self.count];
     for (id obj in self) {
         if (block(obj))
@@ -209,7 +209,7 @@ void cfSetObj(void *var, CFTypeRef value) {
 
 @implementation NSMutableArray (MYUtils)
 
-- (void) my_removeMatching: (int (^)(id obj))block {
+- (void) my_removeMatching: (int (NS_NOESCAPE^)(id obj))block {
     for (NSInteger i = self.count - 1; i >= 0; --i) {
         if (!block([self objectAtIndex: i]))
             [self removeObjectAtIndex: i];
@@ -292,7 +292,7 @@ void cfSetObj(void *var, CFTypeRef value) {
 }
 
 
-- (NSDictionary*) my_dictionaryByUpdatingValues: (id (^)(id key, id value))block {
+- (NSDictionary*) my_dictionaryByUpdatingValues: (id (NS_NOESCAPE^)(id key, id value))block {
     __block NSMutableDictionary* updated = nil;
     [self enumerateKeysAndObjectsUsingBlock: ^(id key, id value, BOOL *stop) {
         id nuValue = block(key, value);

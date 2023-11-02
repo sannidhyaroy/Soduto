@@ -52,7 +52,7 @@ class DeviceInfoWindowController: NSWindowController {
             self.deviceTypeImage?.image = device.type.icon
             self.deviceNameLabel?.stringValue = device.name
             let deviceTypeInfo: String = device.type != .Unknown ? NSLocalizedString(device.type.rawValue, comment: "Device type") : ""
-            let deviceStatusInfo: String = device.isReachable ? NSLocalizedString("reachable", comment: "Device status") : NSLocalizedString("unreachable", comment: "Device status")
+            let deviceStatusInfo: String = device.isReachable ? NSLocalizedString("Reachable", comment: "Device status") : NSLocalizedString("Unreachable", comment: "Device status")
             self.statusLabel?.stringValue = deviceTypeInfo.isEmpty ? deviceStatusInfo : "\(deviceTypeInfo) - \(deviceStatusInfo)"
             self.deviceIDLabel?.stringValue = device.id
             self.localCertificateLabel?.stringValue = device.hostCertificate != nil ? CertificateUtils.digestString(for: device.hostCertificate!) : "-"

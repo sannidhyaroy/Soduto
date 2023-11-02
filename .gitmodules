@@ -1,0 +1,3 @@
+[submodule "iSSH2"]
+	path = iSSH2
+	url = https://github.com/Frugghi/iSSH2.git

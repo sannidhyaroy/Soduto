@@ -10,13 +10,13 @@ import Foundation
 
 public extension URL {
     
-    public init(forDownloadedFile fileName: String) throws {
+    init(forDownloadedFile fileName: String) throws {
         let fileUrl = URL(fileURLWithPath: "").appendingPathComponent(fileName, isDirectory: false)
         let dirUrl = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: fileUrl, create: true)
         self.init(fileURLWithPath: fileUrl.relativeString, relativeTo: dirUrl)
     }
     
-    public func alternativeForDuplicate() -> URL {
+    func alternativeForDuplicate() -> URL {
         let pathExtension = self.pathExtension
         let urlWithoutExtension = !pathExtension.isEmpty ? self.deletingPathExtension() : self
         let pathWithoutExtension = urlWithoutExtension.path

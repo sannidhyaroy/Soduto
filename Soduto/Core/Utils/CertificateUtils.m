@@ -13,7 +13,7 @@
 #import "CertificateUtils.h"
 
 /* Generates a 2048-bit RSA key. */
-EVP_PKEY * generate_key() {
+EVP_PKEY * generate_key(void) {
     /* Allocate memory for the EVP_PKEY structure. */
     EVP_PKEY * pkey = EVP_PKEY_new();
     if (!pkey) {

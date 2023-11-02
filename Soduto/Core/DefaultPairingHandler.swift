@@ -238,11 +238,11 @@ public extension DataPacket {
     
     // MARK: Types
     
-    public enum PairingProperty: String {
+    enum PairingProperty: String {
         case pairFlag = "pair"
     }
     
-    public enum PairingError: Error {
+    enum PairingError: Error {
         case wrongType
         case invalidPairFlag
     }
@@ -250,20 +250,20 @@ public extension DataPacket {
     
     // MARK: Properties
     
-    public static let pairingPacketType = "kdeconnect.pair"
+    static let pairingPacketType = "kdeconnect.pair"
     
-    public var isPairingPacket: Bool { return self.type == DataPacket.pairingPacketType }
+    var isPairingPacket: Bool { return self.type == DataPacket.pairingPacketType }
     
     
     // MARK: Public static methods
     
-    public static func pairPacket() -> DataPacket {
+    static func pairPacket() -> DataPacket {
         return DataPacket(type: pairingPacketType, body: [
             PairingProperty.pairFlag.rawValue: NSNumber(value: true)
         ])
     }
     
-    public static func unpairPacket() -> DataPacket {
+    static func unpairPacket() -> DataPacket {
         return DataPacket(type: pairingPacketType, body: [
             PairingProperty.pairFlag.rawValue: NSNumber(value: false)
         ])
@@ -272,13 +272,13 @@ public extension DataPacket {
     
     // MARK: Public methods
     
-    public func getPairFlag() throws -> Bool {
+    func getPairFlag() throws -> Bool {
         try self.validatePairingType()
         guard let value = body[PairingProperty.pairFlag.rawValue] as? NSNumber else { throw PairingError.invalidPairFlag }
         return value.boolValue
     }
     
-    public func validatePairingType() throws {
+    func validatePairingType() throws {
         guard isPairingPacket else { throw PairingError.wrongType }
     }
 }

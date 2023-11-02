@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import UserNotifications
 
 /// Ping service data packet utilities
 fileprivate extension DataPacket {
@@ -24,7 +25,7 @@ fileprivate extension DataPacket {
     
     static func pingPacket() -> DataPacket {
         return DataPacket(type: pingPacketType, body: [
-            PingProperty.message.rawValue: "Testing Connection." as AnyObject
+            PingProperty.message.rawValue: "Device was pinged for testing connection status!" as AnyObject
         ])
     }
     
@@ -49,6 +50,8 @@ fileprivate extension DataPacket {
 /// "kdeconnect.ping" is received. If the package has something in the "message"
 /// field, that will be displayed in the notification body.
 public class PingService: Service {
+    
+    let un = UNUserNotificationCenter.current()
     
     // MARK: Types
     
@@ -107,16 +110,47 @@ public class PingService: Service {
     private func showNotification(for dataPacket: DataPacket, from device: Device) {
         assert(dataPacket.isPingPacket, "Expected ping data packet")
         
-        let notification = NSUserNotification()
-        notification.title = device.name
-        notification.informativeText = try? dataPacket.getMessage() ?? "Ping!"
-        notification.soundName = NSUserNotificationDefaultSoundName
-        notification.hasActionButton = false
-        notification.identifier = "\(self.id).\(device.id)"
-        NSUserNotificationCenter.default.scheduleNotification(notification)
-        
-        _ = Timer.compatScheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
-            NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+        if #available(macOS 11.0, *) {
+            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
+                if authorized {
+                    print("Authorized to send notifications!")
+                } else if !authorized {
+                    print("Not authorized to send notifications")
+                } else {
+                    print(error?.localizedDescription as Any)
+                }
+            }
+            un.getNotificationSettings { (settings) in
+                if settings.authorizationStatus == .authorized {
+                    let pingnotification = UNMutableNotificationContent()
+                    
+                    pingnotification.title = device.name
+                    pingnotification.body = "Device was pinged for testing connection status!"
+                    pingnotification.sound = UNNotificationSound.default()
+                    
+                    let id = "\(self.id).\(device.id)"
+//                    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+                    let pingrequest = UNNotificationRequest(identifier: id, content: pingnotification, trigger: nil)
+                    self.un.add(pingrequest){ (error) in
+                        if error != nil {print(error?.localizedDescription as Any)}
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
+                        self.un.removeDeliveredNotifications(withIdentifiers: [id])
+                    }
+                }
+            }
+        } else {
+            let notification = NSUserNotification()
+            notification.title = device.name
+            notification.informativeText = try? dataPacket.getMessage() ?? "Device was pinged for testing connection status!"
+            notification.soundName = NSUserNotificationDefaultSoundName
+            notification.hasActionButton = false
+            notification.identifier = "\(self.id).\(device.id)"
+            NSUserNotificationCenter.default.scheduleNotification(notification)
+            
+            _ = Timer.compatScheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+                NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+            }
         }
     }
 }

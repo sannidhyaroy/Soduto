@@ -181,10 +181,10 @@ class BrowserWindowController: NSWindowController {
     
     private func updateWindowTitle() {
         if self.fileSystem.isUnderRoot(self.url) {
-            self.window?.title = "\(self.fileSystem.name) - \(self.url.lastPathComponent)"
+            self.window?.title = "\(self.url.lastPathComponent)".removingPercentEncoding ?? "\(self.url.lastPathComponent)"
         }
         else {
-            self.window?.title = self.fileSystem.name
+            self.window?.title = self.fileSystem.name.removingPercentEncoding ?? self.fileSystem.name
         }
     }
     
@@ -223,8 +223,8 @@ class BrowserWindowController: NSWindowController {
         var url = self.fileSystem.rootUrl
         
         let rootCell = NSPathComponentCell()
-        rootCell.image = NSImage(named: NSImage.Name.network)
-        rootCell.title = self.fileSystem.name
+        rootCell.image = NSImage(named: NSImage.Name.computer)
+        rootCell.title = self.fileSystem.name.removingPercentEncoding ?? self.fileSystem.name
         rootCell.url = url
         cells.append(rootCell)
         
@@ -234,7 +234,7 @@ class BrowserWindowController: NSWindowController {
             url.appendPathComponent(component, isDirectory: true)
             let cell = NSPathComponentCell()
             cell.image = NSImage(named: NSImage.Name.folder)
-            cell.title = component
+            cell.title = component.removingPercentEncoding ?? component
             cell.url = url
             cells.append(cell)
         }
@@ -242,7 +242,7 @@ class BrowserWindowController: NSWindowController {
         if self.collectionView.selectionIndexPaths.count == 1, let fileItem = self.fileItem(at: self.collectionView.selectionIndexPaths.first!), fileItem.isDirectory {
             let cell = NSPathComponentCell()
             cell.image = NSImage(named: NSImage.Name.folder)
-            cell.title = fileItem.name
+            cell.title = fileItem.name.removingPercentEncoding ?? fileItem.name
             cell.url = fileItem.url
             cells.append(cell)
         }
@@ -312,7 +312,7 @@ class BrowserWindowController: NSWindowController {
     }
     
     fileprivate func fileItems(at indexPaths: Set<IndexPath>) -> [FileItem] {
-        return indexPaths.flatMap { return self.fileItem(at: $0) }
+        return indexPaths.compactMap { return self.fileItem(at: $0) }
     }
     
     fileprivate func indexPath(for url: URL) -> IndexPath? {
@@ -838,7 +838,7 @@ class BrowserWindowController: NSWindowController {
     }
     
     @IBAction func deleteSelectedFiles(_ sender: Any?) {
-        let fileItems: [FileItem] = self.collectionView.selectionIndexPaths.flatMap { fileItem(at: $0) }
+        let fileItems: [FileItem] = self.collectionView.selectionIndexPaths.compactMap { fileItem(at: $0) }
         deleteFiles(fileItems)
     }
     
@@ -991,7 +991,7 @@ extension BrowserWindowController: NSCollectionViewDelegate {
         
         let operations = copyFiles(fileItems, to: dropURL)
         
-        return operations.flatMap { return $0.destination?.lastPathComponent }
+        return operations.compactMap { return $0.destination?.lastPathComponent }
     }
     
     

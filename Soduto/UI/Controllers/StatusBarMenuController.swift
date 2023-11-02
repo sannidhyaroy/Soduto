@@ -8,6 +8,7 @@
 
 import Foundation
 import AppKit
+import ServiceManagement
 
 public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate, NSDraggingDestination {
     
@@ -34,7 +35,11 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         let statusBarIcon = #imageLiteral(resourceName: "statusBarIcon")
         statusBarIcon.isTemplate = true
         
-        self.statusBarItem.image = statusBarIcon
+        if #available(macOS 10.14, *) {
+            self.statusBarItem.button?.image = statusBarIcon
+        } else {
+            self.statusBarItem.image = statusBarIcon
+        }
         self.statusBarItem.menu = self.statusBarMenu
         
         let dragTypes: [NSPasteboard.PasteboardType] = [
@@ -118,7 +123,22 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         
         if menu == self.statusBarMenu {
             self.refreshMenuDeviceList()
-            self.launchOnLoginItem.state = (self.config?.launchOnLogin ?? false) ? NSControl.StateValue.on : NSControl.StateValue.off
+            if #available(macOS 13.0, *) {
+                let loginItem = SMAppService.loginItem(identifier: "com.soduto.SodutoLauncher")
+                switch (loginItem.status.rawValue) {
+                case 0:
+                    self.launchOnLoginItem.state = NSControl.StateValue.off
+                    break
+                case 1:
+                    self.launchOnLoginItem.state = NSControl.StateValue.on
+                    break
+                default:
+                    self.launchOnLoginItem.state = NSControl.StateValue.mixed
+                    break
+                }
+            } else {
+                self.launchOnLoginItem.state = (self.config?.launchOnLogin ?? false) ? NSControl.StateValue.on : NSControl.StateValue.off
+            }
         }
     }
     
@@ -164,9 +184,9 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         guard let service = serviceManager.services.first(where: { $0 is BatteryService }) as? BatteryService else { return nil }
         guard let batteryStatus = service.statuses.first(where: { $0.key == device.id })?.value else { return nil }
 
-        var rect = NSRect(x: 0, y: 0, width: 24, height: 13)
+        let rect = NSRect(x: 0, y: 0, width: 24, height: 13)
         let image = NSImage(size: CGSize(width: 56, height: 13), flipped: false) { _ in
-            let mainIcon = #imageLiteral(resourceName: "batteryStatusIcon")
+            let mainIcon = batteryStatus.isCharging ? #imageLiteral(resourceName: "batteryStatusChargingIconInverted") : (batteryStatus.isCritical ? #imageLiteral(resourceName: "batteryCriticalIcon") : #imageLiteral(resourceName: "batteryStatusIcon"))
             assert(mainIcon.size == rect.size)
             mainIcon.draw(in: rect)
 
@@ -176,29 +196,31 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             percentage.draw(in: NSRect(x: 26, y: 2, width: 28, height: 10), withAttributes: attr)
             
             let fullWidth: CGFloat = 16
-            let chargedWidth: CGFloat = fullWidth * CGFloat(batteryStatus.currentCharge) / 100.0
-            NSColor.black.set()
-            NSRect(x: 2, y: 2, width: chargedWidth, height: 8).fill()
-            
-            if batteryStatus.isCharging {
-                let chargingIcon = #imageLiteral(resourceName: "batteryStatusChargingIcon")
-                let mask = NSImage(size: chargingIcon.size, flipped: false) { [rect] _ in
-                    NSColor.white.setFill()
-                    rect.fill()
-                    chargingIcon.draw(in: rect)
-                    return true
-                }
-                if let context = NSGraphicsContext.current,
-                    let cgMask = mask.cgImage(forProposedRect: &rect, context: context, hints: nil),
-                    let cgMask2 = CGImage(maskWidth: cgMask.width, height: cgMask.height, bitsPerComponent: cgMask.bitsPerComponent, bitsPerPixel: cgMask.bitsPerPixel, bytesPerRow: cgMask.bytesPerRow, provider: cgMask.dataProvider!, decode: nil, shouldInterpolate: false) {
-                    
-                    chargingIcon.draw(in: rect, from: rect, operation: NSCompositingOperation.destinationOut, fraction: 1.0)
-                    
-                    context.cgContext.clip(to: rect, mask: cgMask2)
-                    NSColor.black.setFill()
-                    rect.fill()
-                }
+            if (!batteryStatus.isCharging && !batteryStatus.isCritical) {
+                let chargedWidth: CGFloat = fullWidth * CGFloat(batteryStatus.currentCharge) / 100.0
+                NSColor.black.set()
+                NSRect(x: 2, y: 2, width: chargedWidth, height: 8).fill()
             }
+            
+//            if batteryStatus.isCharging {
+//                let chargingIcon = #imageLiteral(resourceName: "batteryStatusChargingIcon")
+//                let mask = NSImage(size: chargingIcon.size, flipped: false) { [rect] _ in
+//                    NSColor.white.setFill()
+//                    rect.fill()
+//                    chargingIcon.draw(in: rect)
+//                    return true
+//                }
+//                if let context = NSGraphicsContext.current,
+//                    let cgMask = mask.cgImage(forProposedRect: &rect, context: context, hints: nil),
+//                    let cgMask2 = CGImage(maskWidth: cgMask.width, height: cgMask.height, bitsPerComponent: cgMask.bitsPerComponent, bitsPerPixel: cgMask.bitsPerPixel, bytesPerRow: cgMask.bytesPerRow, provider: cgMask.dataProvider!, decode: nil, shouldInterpolate: false) {
+//
+//                    chargingIcon.draw(in: rect, from: rect, operation: NSCompositingOperation.destinationOut, fraction: 1.0)
+//
+//                    context.cgContext.clip(to: rect, mask: cgMask2)
+//                    NSColor.black.setFill()
+//                    rect.fill()
+//                }
+//            }
             
             return true
         }
