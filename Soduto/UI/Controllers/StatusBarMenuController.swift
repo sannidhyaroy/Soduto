@@ -129,11 +129,11 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             self.refreshMenuDeviceList()
             if #available(macOS 13.0, *) {
                 let loginItem = SMAppService.mainApp
-                switch (loginItem.status.rawValue) {
-                case 0:
+                switch (loginItem.status) {
+                case SMAppService.Status.notFound, SMAppService.Status.notRegistered, SMAppService.Status.requiresApproval:
                     self.launchOnLoginItem.state = NSControl.StateValue.off
                     break
-                case 1:
+                case SMAppService.Status.enabled:
                     self.launchOnLoginItem.state = NSControl.StateValue.on
                     break
                 default:

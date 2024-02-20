@@ -338,8 +338,8 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
         set {
             if #available(macOS 13.0, *) {
                 let loginItem = SMAppService.mainApp
-                switch (loginItem.status.rawValue) {
-                case 0:
+                switch (loginItem.status) {
+                case SMAppService.Status.notRegistered, SMAppService.Status.notFound:
                     if ((try? loginItem.register()) != nil) {
                         self.userDefaults.set(true, forKey: Property.launchOnLogin.rawValue)
                     } else {
@@ -348,7 +348,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                         SMAppService.openSystemSettingsLoginItems()
                     }
                     break
-                case 1:
+                case SMAppService.Status.enabled:
                     if ((try? loginItem.unregister()) != nil) {
                         self.userDefaults.set(false, forKey: Property.launchOnLogin.rawValue)
                     } else {
@@ -357,12 +357,9 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                         SMAppService.openSystemSettingsLoginItems()
                     }
                     break
-                case 2:
+                case SMAppService.Status.requiresApproval:
                     SMAppService.openSystemSettingsLoginItems()
                     self.notification.ShowCustomNotification(title: "Uh'oh!", body: "macOS requires approval to let Soduto change login item settings. Tap the + icon and add 'Soduto' manually", sound: true, id: "LoginItemApproval")
-                    break
-                case 3:
-                    print("SMAppService not found!")
                     break
                 default: break
                 }
