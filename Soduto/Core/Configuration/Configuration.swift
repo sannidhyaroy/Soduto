@@ -340,6 +340,12 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                 let loginItem = SMAppService.mainApp
                 switch (loginItem.status) {
                 case SMAppService.Status.notRegistered, SMAppService.Status.notFound:
+                    // Request to turn off, but already unregistered
+                    if !newValue {
+                        self.userDefaults.set(false, forKey: Property.launchOnLogin.rawValue)
+                        break
+                    }
+                    // Request to turn on
                     if ((try? loginItem.register()) != nil) {
                         self.userDefaults.set(true, forKey: Property.launchOnLogin.rawValue)
                     } else {
@@ -349,6 +355,12 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                     }
                     break
                 case SMAppService.Status.enabled:
+                    // Request to turn on, but already registered
+                    if newValue {
+                        self.userDefaults.set(true, forKey: Property.launchOnLogin.rawValue)
+                        break
+                    }
+                    // Request to turn off
                     if ((try? loginItem.unregister()) != nil) {
                         self.userDefaults.set(false, forKey: Property.launchOnLogin.rawValue)
                     } else {
@@ -358,10 +370,17 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                     }
                     break
                 case SMAppService.Status.requiresApproval:
+                    // Request to turn off, but not registered (requires approval)
+                    if !newValue {
+                        self.userDefaults.set(false, forKey: Property.launchOnLogin.rawValue)
+                        break
+                    }
+                    // Request to turn on
                     SMAppService.openSystemSettingsLoginItems()
                     self.notification.ShowCustomNotification(title: "Uh'oh!", body: "macOS requires approval to let Soduto change login item settings. Tap the + icon and add 'Soduto' manually", sound: true, id: "LoginItemApproval")
                     break
-                default: break
+                default:
+                    break
                 }
             } else {
                 if SMLoginItemSetEnabled("com.soduto.SodutoLauncher" as CFString, newValue) {
