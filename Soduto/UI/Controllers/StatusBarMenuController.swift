@@ -9,6 +9,7 @@
 import Foundation
 import AppKit
 import ServiceManagement
+import CleanroomLogger
 
 public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate, NSDraggingDestination {
     
@@ -129,16 +130,23 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             self.refreshMenuDeviceList()
             if #available(macOS 13.0, *) {
                 let loginItem = SMAppService.mainApp
+                var enabled = self.config?.launchOnLogin ?? false
                 switch (loginItem.status) {
                 case SMAppService.Status.notFound, SMAppService.Status.notRegistered, SMAppService.Status.requiresApproval:
                     self.launchOnLoginItem.state = NSControl.StateValue.off
+                    enabled = false
                     break
                 case SMAppService.Status.enabled:
                     self.launchOnLoginItem.state = NSControl.StateValue.on
+                    enabled = true
                     break
                 default:
                     self.launchOnLoginItem.state = NSControl.StateValue.mixed
                     break
+                }
+                if self.config?.launchOnLogin != enabled {
+                    Log.debug?.message("Updated launchOnLogin state: \(enabled)")
+                    self.config?.launchOnLogin = enabled
                 }
             } else {
                 self.launchOnLoginItem.state = (self.config?.launchOnLogin ?? false) ? NSControl.StateValue.on : NSControl.StateValue.off
