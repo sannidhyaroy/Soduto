@@ -132,11 +132,11 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
                 let loginItem = SMAppService.mainApp
                 var enabled = self.config?.launchOnLogin ?? false
                 switch (loginItem.status) {
-                case SMAppService.Status.notFound, SMAppService.Status.notRegistered, SMAppService.Status.requiresApproval:
+                case .notFound, .notRegistered, .requiresApproval:
                     self.launchOnLoginItem.state = NSControl.StateValue.off
                     enabled = false
                     break
-                case SMAppService.Status.enabled:
+                case .enabled:
                     self.launchOnLoginItem.state = NSControl.StateValue.on
                     enabled = true
                     break
