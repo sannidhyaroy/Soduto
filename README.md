@@ -50,7 +50,7 @@ Do note that currently there's no Homebrew formulae for my forked version and th
     
 * Fetch and build frameworks using Carthage:
     
-    `carthage update --platform macOS --use-xcframeworks`
+    `XCODE_XCCONFIG_FILE="./carthage.xcconfig" carthage update --platform macOS --use-xcframeworks`
 
 * Compile universal openssl and libssh2 library using [iSSH2](https://github.com/Frugghi/iSSH2):
 

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 52;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -1233,7 +1233,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 20;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = D492BH5DH9;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1273,7 +1273,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 20;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = D492BH5DH9;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1420,7 +1420,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 20;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = D492BH5DH9;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1461,7 +1461,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 20;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = D492BH5DH9;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1498,7 +1498,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = D492BH5DH9;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -1520,7 +1520,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = D492BH5DH9;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -1542,7 +1542,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = D492BH5DH9;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoBrowser/Info.plist;
@@ -1571,7 +1571,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = P8CGT2P7HB;
+				DEVELOPMENT_TEAM = D492BH5DH9;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoBrowser/Info.plist;
