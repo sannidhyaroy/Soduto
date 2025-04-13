@@ -1419,7 +1419,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_TEAM = D492BH5DH9;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1438,7 +1438,7 @@
 					"$(PROJECT_DIR)/Libraries/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
-				MARKETING_VERSION = 2.0.3;
+				MARKETING_VERSION = 2.0.4;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.soduto.Soduto;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1460,7 +1460,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_TEAM = D492BH5DH9;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1479,7 +1479,7 @@
 					"$(PROJECT_DIR)/Libraries/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
-				MARKETING_VERSION = 2.0.3;
+				MARKETING_VERSION = 2.0.4;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.soduto.Soduto;
 				PRODUCT_NAME = "$(TARGET_NAME)";
