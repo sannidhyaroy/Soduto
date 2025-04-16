@@ -176,55 +176,98 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             let item = NSMenuItem(title: device.name, action: nil, keyEquivalent: "")
             item.tag = InterfaceElementTags.availableDeviceMenuItem.rawValue
             item.submenu = DeviceMenu(device: device)
-            item.image = batteryImage(for: device)
+            item.image = statusImage(for: device)
             index += 1
             self.statusBarMenu.insertItem(item, at: index)
         }
     }
     
-    private func batteryImage(for device: Device) -> NSImage? {
+    private func statusImage(for device: Device) -> NSImage? {
         assert(self.serviceManager != nil, "serviceManager property is not setup correctly")
         guard let serviceManager = self.serviceManager else { return nil }
-        guard let service = serviceManager.services.first(where: { $0 is BatteryService }) as? BatteryService else { return nil }
-        guard let batteryStatus = service.statuses.first(where: { $0.key == device.id })?.value else { return nil }
-
-        let rect = NSRect(x: 0, y: 0, width: 24, height: 13)
-        let image = NSImage(size: CGSize(width: 56, height: 13), flipped: false) { _ in
-            let mainIcon = batteryStatus.isCharging ? #imageLiteral(resourceName: "batteryStatusChargingIconInverted") : (batteryStatus.isCritical ? #imageLiteral(resourceName: "batteryCriticalIcon") : #imageLiteral(resourceName: "batteryStatusIcon"))
-            assert(mainIcon.size == rect.size)
-            mainIcon.draw(in: rect)
-
-            let percentage = "\(batteryStatus.currentCharge)%" as NSString
-            let attr = [NSAttributedStringKey.font: NSFont.systemFont(ofSize: 10),
-                        NSAttributedStringKey.foregroundColor: NSColor.black,]
-            percentage.draw(in: NSRect(x: 26, y: 2, width: 28, height: 10), withAttributes: attr)
+        
+        var batteryStatus: BatteryService.BatteryStatus? = nil
+        var connectivityStatus: ConnectivityReportService.ConnectivityStatus? = nil
+        
+        // Get battery status if available
+        if let service = serviceManager.services.first(where: { $0 is BatteryService }) as? BatteryService {
+            batteryStatus = service.statuses.first(where: { $0.key == device.id })?.value
+        }
+        
+        // Get network status if available
+        if let service = serviceManager.services.first(where: { $0 is ConnectivityReportService }) as? ConnectivityReportService {
+            connectivityStatus = service.statuses.first(where: { $0.key == device.id })?.value
+        }
+        
+        // If no status info available, return nil
+        if batteryStatus == nil && connectivityStatus == nil {
+            return nil
+        }
+        
+        // Calculate image width based on what status info is available
+        let batteryWidth: CGFloat = batteryStatus != nil ? 56 : 0
+        let connectivityWidth: CGFloat = connectivityStatus != nil ? 30 : 0
+        let totalWidth = batteryWidth + connectivityWidth
+        
+        // Create image with all status indicators
+        let image = NSImage(size: CGSize(width: totalWidth, height: 13), flipped: false) { _ in
+            var currentX: CGFloat = 0
             
-            let fullWidth: CGFloat = 16
-            if (!batteryStatus.isCharging && !batteryStatus.isCritical) {
-                let chargedWidth: CGFloat = fullWidth * CGFloat(batteryStatus.currentCharge) / 100.0
-                NSColor.black.set()
-                NSRect(x: 2, y: 2, width: chargedWidth, height: 8).fill()
+            // Draw battery status if available
+            if let batteryStatus = batteryStatus {
+                let rect = NSRect(x: currentX, y: 0, width: 24, height: 13)
+                let mainIcon = batteryStatus.isCharging ? #imageLiteral(resourceName: "batteryStatusChargingIconInverted") : (batteryStatus.isCritical ? #imageLiteral(resourceName: "batteryCriticalIcon") : #imageLiteral(resourceName: "batteryStatusIcon"))
+                assert(mainIcon.size == rect.size)
+                mainIcon.draw(in: rect)
+
+                let percentage = "\(batteryStatus.currentCharge)%" as NSString
+                let attr = [NSAttributedStringKey.font: NSFont.systemFont(ofSize: 10),
+                           NSAttributedStringKey.foregroundColor: NSColor.black,]
+                percentage.draw(in: NSRect(x: currentX + 26, y: 2, width: 28, height: 10), withAttributes: attr)
+                
+                let fullWidth: CGFloat = 16
+                if (!batteryStatus.isCharging && !batteryStatus.isCritical) {
+                    let chargedWidth: CGFloat = fullWidth * CGFloat(batteryStatus.currentCharge) / 100.0
+                    NSColor.black.set()
+                    NSRect(x: currentX + 2, y: 2, width: chargedWidth, height: 8).fill()
+                }
+                
+                currentX += batteryWidth
             }
             
-//            if batteryStatus.isCharging {
-//                let chargingIcon = #imageLiteral(resourceName: "batteryStatusChargingIcon")
-//                let mask = NSImage(size: chargingIcon.size, flipped: false) { [rect] _ in
-//                    NSColor.white.setFill()
-//                    rect.fill()
-//                    chargingIcon.draw(in: rect)
-//                    return true
-//                }
-//                if let context = NSGraphicsContext.current,
-//                    let cgMask = mask.cgImage(forProposedRect: &rect, context: context, hints: nil),
-//                    let cgMask2 = CGImage(maskWidth: cgMask.width, height: cgMask.height, bitsPerComponent: cgMask.bitsPerComponent, bitsPerPixel: cgMask.bitsPerPixel, bytesPerRow: cgMask.bytesPerRow, provider: cgMask.dataProvider!, decode: nil, shouldInterpolate: false) {
-//
-//                    chargingIcon.draw(in: rect, from: rect, operation: NSCompositingOperation.destinationOut, fraction: 1.0)
-//
-//                    context.cgContext.clip(to: rect, mask: cgMask2)
-//                    NSColor.black.setFill()
-//                    rect.fill()
-//                }
-//            }
+            // Draw network status if available
+            if let connectivityStatus = connectivityStatus {
+                // Draw network type indicator
+                let signalStrength = min(max(connectivityStatus.signalStrength, 0), 4)
+                
+                // Draw network type (3G/4G/5G)
+                let networkType = connectivityStatus.networkType
+                let networkLabel = (networkType == "LTE" ? "4G" : 
+                                    networkType == "5G" ? "5G" : 
+                                    (networkType == "UMTS" || networkType == "CDMA2000" || networkType == "HSPA") ? "3G" : 
+                                    (networkType == "GSM" || networkType == "CDMA" || networkType == "iDEN" || networkType == "EDGE") ? "2G" : "")
+                
+                if !networkLabel.isEmpty {
+                    let netAttr = [NSAttributedStringKey.font: NSFont.systemFont(ofSize: 10),
+                                  NSAttributedStringKey.foregroundColor: NSColor.black,]
+                    (networkLabel as NSString).draw(in: NSRect(x: currentX, y: 2, width: 15, height: 10), withAttributes: netAttr)
+                }
+                
+                // Draw signal bars with larger size
+                if signalStrength > 0 {
+                    for i in 0..<signalStrength {
+                        NSColor.black.set()
+                        let barHeight = CGFloat(i + 1) * 2.5 // Increased bar height
+                        let barWidth: CGFloat = 2.0 // Increased bar width
+                        NSRect(x: currentX + 16 + (CGFloat(i) * 3), y: 2, width: barWidth, height: barHeight).fill()
+                    }
+                } else {
+                    // Draw X for no signal
+                    let noSignalAttr = [NSAttributedStringKey.font: NSFont.systemFont(ofSize: 10),
+                                      NSAttributedStringKey.foregroundColor: NSColor.black,]
+                    ("X" as NSString).draw(in: NSRect(x: currentX + 16, y: 2, width: 10, height: 10), withAttributes: noSignalAttr)
+                }
+            }
             
             return true
         }

@@ -134,6 +134,7 @@
 		84FA45ED1DDF525200EF3992 /* PingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FA45EC1DDF525200EF3992 /* PingService.swift */; };
 		84FFDA2A1E1D8D370069AC9A /* SimplePing.m in Sources */ = {isa = PBXBuildFile; fileRef = 84FFDA291E1D8D370069AC9A /* SimplePing.m */; };
 		8FC977F11D4778E9001ADF7E /* StatusBarMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC977F01D4778E9001ADF7E /* StatusBarMenuController.swift */; };
+		F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -372,6 +373,7 @@
 		84FFDA1F1E1D8D0D0069AC9A /* SimplePing.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SimplePing.h; sourceTree = "<group>"; };
 		84FFDA291E1D8D370069AC9A /* SimplePing.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SimplePing.m; sourceTree = "<group>"; };
 		8FC977F01D4778E9001ADF7E /* StatusBarMenuController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StatusBarMenuController.swift; sourceTree = "<group>"; };
+		F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityReportService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -752,6 +754,7 @@
 		84FA45EB1DDF51EB00EF3992 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */,
 				84651A711E599A3C00D17601 /* BatteryService.swift */,
 				840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */,
 				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
@@ -1023,6 +1026,7 @@
 				84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */,
 				84C613E31DECBF6C00CE7F7A /* UploadTask.swift in Sources */,
 				84FA45E81DDE088B00EF3992 /* ServiceManager.swift in Sources */,
+				F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */,
 				0236B63C1F9936C80020DA9F /* AboutWindowController.swift in Sources */,
 				84FA45DB1DDDCB3D00EF3992 /* DeviceManager.swift in Sources */,
 				02EC48B51F229CCE00C9370F /* Configuration.swift in Sources */,
