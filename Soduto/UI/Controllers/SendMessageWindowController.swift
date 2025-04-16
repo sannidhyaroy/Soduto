@@ -55,12 +55,27 @@ class SendMessageWindowController: NSWindowController {
     
     public override func showWindow(_ sender: Any?) {
         if CNContactStore.authorizationStatus(for: .contacts) == .notDetermined {
-            CNContactStore().requestAccess(for: .contacts) { _,_ in
-                NSApp.activate(ignoringOtherApps: true)
-                super.showWindow(sender)
+            // Create a new CNContactStore instance and request access
+            let contactStore = CNContactStore()
+            
+            // This will trigger the permission prompt to appear
+            contactStore.requestAccess(for: .contacts) { [weak self] (granted, error) in
+                // Dispatch back to the main thread before performing UI operations
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    
+                    // Log the result of the permission request
+                    if granted {
+                        Log.debug?.message("Contacts access granted")
+                    } else {
+                        Log.debug?.message("Contacts access denied or error: \(String(describing: error))")
+                    }
+                    
+                    NSApp.activate(ignoringOtherApps: true)
+                    self.window?.makeKeyAndOrderFront(sender)
+                }
             }
-        }
-        else {
+        } else {
             NSApp.activate(ignoringOtherApps: true)
             super.showWindow(sender)
         }
