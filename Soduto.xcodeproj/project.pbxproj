@@ -119,7 +119,7 @@
 		84B933EF1E281AB40071DEFF /* CertificateUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 84B933EE1E281AB40071DEFF /* CertificateUtils.m */; };
 		84C545E01EABC14E005A8107 /* SftpFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */; };
 		84C613E31DECBF6C00CE7F7A /* UploadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C613E21DECBF6B00CE7F7A /* UploadTask.swift */; };
-		84D071681EB91F5D004D383A /* SodutoBrowser.app in Embed Helper Executables */ = {isa = PBXBuildFile; fileRef = 845BC70A1E69F00E00DC9B81 /* SodutoBrowser.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		84D071681EB91F5D004D383A /* Soduto Files.app in Embed Helper Executables */ = {isa = PBXBuildFile; fileRef = 845BC70A1E69F00E00DC9B81 /* Soduto Files.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		84D903A21DC696A600E61DA7 /* CertificateUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D903A11DC696A600E61DA7 /* CertificateUtils.swift */; };
 		84FA45D71DDDCB3D00EF3992 /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FA45CF1DDDCB3D00EF3992 /* Connection.swift */; };
 		84FA45D81DDDCB3D00EF3992 /* ConnectionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FA45D01DDDCB3D00EF3992 /* ConnectionProvider.swift */; };
@@ -156,7 +156,7 @@
 			containerPortal = 843301581D2D8CB8008934BB /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 845BC7091E69F00E00DC9B81;
-			remoteInfo = SodutoBrowser;
+			remoteInfo = "Soduto Files";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -211,7 +211,7 @@
 			dstPath = Contents/Helpers;
 			dstSubfolderSpec = 1;
 			files = (
-				84D071681EB91F5D004D383A /* SodutoBrowser.app in Embed Helper Executables */,
+				84D071681EB91F5D004D383A /* Soduto Files.app in Embed Helper Executables */,
 			);
 			name = "Embed Helper Executables";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -294,7 +294,7 @@
 		8436DEF71E956DA000529362 /* Timer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Timer.swift; sourceTree = "<group>"; };
 		8436DEF91E958ABA00529362 /* FileManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileManager.swift; sourceTree = "<group>"; };
 		8438A9251E45145F00922155 /* StatusBarApplication.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StatusBarApplication.swift; sourceTree = "<group>"; };
-		8438ECE01EBA650A006CBB07 /* SodutoBrowser.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SodutoBrowser.entitlements; sourceTree = "<group>"; };
+		8438ECE01EBA650A006CBB07 /* Soduto_Files.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto_Files.entitlements; sourceTree = "<group>"; };
 		843B67031DF1E64A00289EC9 /* ShareService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShareService.swift; sourceTree = "<group>"; };
 		843B67091DF2CEC400289EC9 /* DownloadTask.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DownloadTask.swift; sourceTree = "<group>"; };
 		843B670B1DF3087800289EC9 /* URL.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = URL.swift; sourceTree = "<group>"; };
@@ -308,7 +308,7 @@
 		8456F4A71D7DE393006EFE19 /* Pairable.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Pairable.swift; sourceTree = "<group>"; };
 		8456F4A91D7DEA47006EFE19 /* DefaultPairingHandler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DefaultPairingHandler.swift; sourceTree = "<group>"; };
 		8458472F1E75D33600EE5A09 /* URL.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = URL.swift; sourceTree = "<group>"; };
-		845BC70A1E69F00E00DC9B81 /* SodutoBrowser.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SodutoBrowser.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		845BC70A1E69F00E00DC9B81 /* Soduto Files.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Soduto Files.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		845BC70C1E69F00E00DC9B81 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		845BC70E1E69F00E00DC9B81 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		845BC7111E69F00E00DC9B81 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
@@ -355,7 +355,7 @@
 		84B933EE1E281AB40071DEFF /* CertificateUtils.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CertificateUtils.m; sourceTree = "<group>"; };
 		84B9340D1E2A56EA0071DEFF /* CertificateUtils.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CertificateUtils.h; sourceTree = "<group>"; };
 		84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SftpFileSystem.swift; sourceTree = "<group>"; };
-		84C545F71EABECDE005A8107 /* SodutoBrowser-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "SodutoBrowser-Bridging-Header.h"; sourceTree = "<group>"; };
+		84C545F71EABECDE005A8107 /* Soduto-Files-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Soduto-Files-Bridging-Header.h"; sourceTree = "<group>"; };
 		84C613E21DECBF6B00CE7F7A /* UploadTask.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UploadTask.swift; sourceTree = "<group>"; };
 		84D903A11DC696A600E61DA7 /* CertificateUtils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CertificateUtils.swift; sourceTree = "<group>"; };
 		84FA45CF1DDDCB3D00EF3992 /* Connection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
@@ -522,7 +522,7 @@
 				02968CD8204C42F500FCE5E0 /* LICENSE */,
 				845BE2CD1EC2443300F3BD62 /* Shared */,
 				843301621D2D8CB8008934BB /* Soduto */,
-				845BC70B1E69F00E00DC9B81 /* SodutoBrowser */,
+				845BC70B1E69F00E00DC9B81 /* Soduto Files */,
 				8435AEF71E26DD27005CD719 /* SodutoLauncher */,
 				847EF4C31DC9049D00360BBE /* SodutoTests */,
 				31F3A150293B5EA300550088 /* Soduto Share */,
@@ -537,7 +537,7 @@
 				843301601D2D8CB8008934BB /* Soduto.app */,
 				847EF4C21DC9049D00360BBE /* SodutoTests.xctest */,
 				8435AEF61E26DD27005CD719 /* SodutoLauncher.app */,
-				845BC70A1E69F00E00DC9B81 /* SodutoBrowser.app */,
+				845BC70A1E69F00E00DC9B81 /* Soduto Files.app */,
 				31F3A14F293B5EA300550088 /* Soduto Share.appex */,
 			);
 			name = Products;
@@ -618,7 +618,7 @@
 			path = Utils;
 			sourceTree = "<group>";
 		};
-		845BC70B1E69F00E00DC9B81 /* SodutoBrowser */ = {
+		845BC70B1E69F00E00DC9B81 /* Soduto Files */ = {
 			isa = PBXGroup;
 			children = (
 				845BC70C1E69F00E00DC9B81 /* AppDelegate.swift */,
@@ -635,11 +635,11 @@
 				8440FD061E6CA6CA00E5BFA9 /* LocalFileSystem.swift */,
 				845BC7101E69F00E00DC9B81 /* MainMenu.xib */,
 				84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */,
-				84C545F71EABECDE005A8107 /* SodutoBrowser-Bridging-Header.h */,
-				8438ECE01EBA650A006CBB07 /* SodutoBrowser.entitlements */,
+				84C545F71EABECDE005A8107 /* Soduto-Files-Bridging-Header.h */,
+				8438ECE01EBA650A006CBB07 /* Soduto_Files.entitlements */,
 				845847201E75D0ED00EE5A09 /* Utils */,
 			);
-			path = SodutoBrowser;
+			path = "Soduto Files";
 			sourceTree = SOURCE_ROOT;
 		};
 		845BE2CD1EC2443300F3BD62 /* Shared */ = {
@@ -826,9 +826,9 @@
 			productReference = 8435AEF61E26DD27005CD719 /* SodutoLauncher.app */;
 			productType = "com.apple.product-type.application";
 		};
-		845BC7091E69F00E00DC9B81 /* SodutoBrowser */ = {
+		845BC7091E69F00E00DC9B81 /* Soduto Files */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 845BC7241E69F00E00DC9B81 /* Build configuration list for PBXNativeTarget "SodutoBrowser" */;
+			buildConfigurationList = 845BC7241E69F00E00DC9B81 /* Build configuration list for PBXNativeTarget "Soduto Files" */;
 			buildPhases = (
 				845BC7061E69F00E00DC9B81 /* Sources */,
 				845BC7071E69F00E00DC9B81 /* Frameworks */,
@@ -839,9 +839,9 @@
 			);
 			dependencies = (
 			);
-			name = SodutoBrowser;
-			productName = SodutoBrowser;
-			productReference = 845BC70A1E69F00E00DC9B81 /* SodutoBrowser.app */;
+			name = "Soduto Files";
+			productName = "Soduto Files";
+			productReference = 845BC70A1E69F00E00DC9B81 /* Soduto Files.app */;
 			productType = "com.apple.product-type.application";
 		};
 		847EF4C11DC9049D00360BBE /* SodutoTests */ = {
@@ -929,7 +929,7 @@
 				8433015F1D2D8CB8008934BB /* Soduto */,
 				847EF4C11DC9049D00360BBE /* SodutoTests */,
 				8435AEF51E26DD27005CD719 /* SodutoLauncher */,
-				845BC7091E69F00E00DC9B81 /* SodutoBrowser */,
+				845BC7091E69F00E00DC9B81 /* Soduto Files */,
 				31F3A14E293B5EA300550088 /* Soduto Share */,
 			);
 		};
@@ -1136,7 +1136,7 @@
 		};
 		84D0716A1EB91FAE004D383A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 845BC7091E69F00E00DC9B81 /* SodutoBrowser */;
+			target = 845BC7091E69F00E00DC9B81 /* Soduto Files */;
 			targetProxy = 84D071691EB91FAE004D383A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -1538,14 +1538,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = SodutoBrowser/SodutoBrowser.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "Soduto Files/Soduto_Files.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = D492BH5DH9;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
-				INFOPLIST_FILE = SodutoBrowser/Info.plist;
+				INFOPLIST_FILE = "Soduto Files/Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1553,11 +1553,11 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.soduto.SodutoBrowser;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.soduto.Soduto-Files";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Soduto/OpenSSL/openssl/include";
-				SWIFT_OBJC_BRIDGING_HEADER = "SodutoBrowser/SodutoBrowser-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "Soduto Files/Soduto-Files-Bridging-Header.h";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
 				SWIFT_VERSION = 4.0;
 			};
@@ -1567,14 +1567,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = SodutoBrowser/SodutoBrowser.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "Soduto Files/Soduto_Files.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = D492BH5DH9;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
-				INFOPLIST_FILE = SodutoBrowser/Info.plist;
+				INFOPLIST_FILE = "Soduto Files/Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1582,11 +1582,11 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.soduto.SodutoBrowser;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.soduto.Soduto-Files";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Soduto/OpenSSL/openssl/include";
-				SWIFT_OBJC_BRIDGING_HEADER = "SodutoBrowser/SodutoBrowser-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "Soduto Files/Soduto-Files-Bridging-Header.h";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
 				SWIFT_VERSION = 4.0;
 			};
@@ -1675,7 +1675,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		845BC7241E69F00E00DC9B81 /* Build configuration list for PBXNativeTarget "SodutoBrowser" */ = {
+		845BC7241E69F00E00DC9B81 /* Build configuration list for PBXNativeTarget "Soduto Files" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				845BC7141E69F00E00DC9B81 /* Debug */,

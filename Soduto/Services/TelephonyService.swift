@@ -14,9 +14,6 @@ import AVFoundation
 import CoreAudio
 import MediaPlayer
 
-// Define constants that aren't directly available
-private let MPNowPlayingInfoPropertyBundleIdentifier = "MPNowPlayingInfoPropertyBundleIdentifier"
-
 /// Show notifications for phone call or SMS events. Also allows to send SMS
 ///
 /// This service will display a notification each time a package with type

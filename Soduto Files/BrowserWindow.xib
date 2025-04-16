@@ -77,6 +77,9 @@ AAAAAAEGA
                             <rect key="frame" x="0.0" y="0.0" width="480" height="24"/>
                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                             <subviews>
+                                <visualEffectView blendingMode="withinWindow" material="titlebar" state="followsWindowActiveState" translatesAutoresizingMaskIntoConstraints="NO" id="Kfw-Uj-XcP">
+                                    <rect key="frame" x="0.0" y="0.0" width="480" height="24"/>
+                                </visualEffectView>
                                 <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="efX-7g-dO2">
                                     <rect key="frame" x="0.0" y="21" width="480" height="5"/>
                                 </box>
@@ -93,6 +96,10 @@ AAAAAAEGA
                             </subviews>
                             <constraints>
                                 <constraint firstAttribute="trailing" secondItem="efX-7g-dO2" secondAttribute="trailing" id="2p1-pj-ljv"/>
+                                <constraint firstItem="Kfw-Uj-XcP" firstAttribute="top" secondItem="mRC-eW-4xA" secondAttribute="top" id="3cK-iy-nNs"/>
+                                <constraint firstAttribute="trailing" secondItem="Kfw-Uj-XcP" secondAttribute="trailing" id="5KT-Jg-P9m"/>
+                                <constraint firstAttribute="bottom" secondItem="Kfw-Uj-XcP" secondAttribute="bottom" id="AeU-pZ-htF"/>
+                                <constraint firstItem="Kfw-Uj-XcP" firstAttribute="leading" secondItem="mRC-eW-4xA" secondAttribute="leading" id="GJh-dr-Yfl"/>
                                 <constraint firstItem="ajO-NK-nBV" firstAttribute="centerY" secondItem="mRC-eW-4xA" secondAttribute="centerY" id="T6q-jB-IBP"/>
                                 <constraint firstItem="efX-7g-dO2" firstAttribute="top" secondItem="mRC-eW-4xA" secondAttribute="top" id="TUA-g3-84j"/>
                                 <constraint firstAttribute="trailing" secondItem="ajO-NK-nBV" secondAttribute="trailing" constant="5" id="WZE-gi-Ljy"/>
@@ -103,14 +110,6 @@ AAAAAAEGA
                         <constraints>
                             <constraint firstAttribute="height" constant="24" id="lbX-vp-Eae"/>
                         </constraints>
-                        <backgroundFilters>
-                            <ciFilter name="CIGaussianBlur">
-                                <configuration>
-                                    <null key="inputImage"/>
-                                    <real key="inputRadius" value="10"/>
-                                </configuration>
-                            </ciFilter>
-                        </backgroundFilters>
                     </box>
                     <customView wantsLayer="YES" translatesAutoresizingMaskIntoConstraints="NO" id="1Nr-pP-6FY" userLabel="Status Bar">
                         <rect key="frame" x="0.0" y="0.0" width="480" height="24"/>

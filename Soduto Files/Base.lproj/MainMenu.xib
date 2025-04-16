@@ -16,11 +16,11 @@
         <customObject id="YLy-65-1bz" customClass="NSFontManager"/>
         <menu title="Main Menu" systemMenu="main" id="AYu-sK-qS6">
             <items>
-                <menuItem title="Soduto Browser" id="1Xt-HY-uBw" userLabel="Soduto Browser">
+                <menuItem title="Soduto Files" id="1Xt-HY-uBw" userLabel="Soduto Files">
                     <modifierMask key="keyEquivalentModifierMask"/>
-                    <menu key="submenu" title="Soduto Browser" systemMenu="apple" id="uQy-DD-JDr">
+                    <menu key="submenu" title="Soduto Files" systemMenu="apple" id="uQy-DD-JDr">
                         <items>
-                            <menuItem title="About Soduto Browser" tag="1" id="5kV-Vb-QxS">
+                            <menuItem title="About Soduto Files" tag="1" id="5kV-Vb-QxS">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
                                     <action selector="showAboutWindow:" target="Voe-Tx-rLC" id="G4i-K9-hoW"/>
@@ -34,7 +34,7 @@
                                 <menu key="submenu" title="Services" systemMenu="services" id="hz9-B4-Xy5"/>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="4je-JR-u6R"/>
-                            <menuItem title="Hide Soduto Browser" keyEquivalent="h" id="Olw-nP-bQN">
+                            <menuItem title="Hide Soduto Files" keyEquivalent="h" id="Olw-nP-bQN">
                                 <connections>
                                     <action selector="hide:" target="-1" id="PnN-Uc-m68"/>
                                 </connections>
@@ -52,7 +52,7 @@
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="kCx-OE-vgT"/>
-                            <menuItem title="Quit Soduto Browser" keyEquivalent="q" id="4sb-4s-VLi">
+                            <menuItem title="Quit Soduto Files" keyEquivalent="q" id="4sb-4s-VLi">
                                 <connections>
                                     <action selector="terminate:" target="-1" id="Te7-pn-YzF"/>
                                 </connections>

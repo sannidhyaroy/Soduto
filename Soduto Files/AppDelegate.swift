@@ -1,6 +1,6 @@
 //
 //  AppDelegate.swift
-//  SodutoBrowser
+//  Soduto Files
 //
 //  Created by Giedrius on 2017-03-03.
 //  Copyright © 2017 Soduto. All rights reserved.
