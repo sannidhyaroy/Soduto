@@ -51,7 +51,7 @@ class ServicePreferencesViewController: NSViewController {
 }
 
 
-// MARK: -
+// MARK: - ServicePreferencesViewController: NSControlTextEditingDelegate
 
 extension ServicePreferencesViewController : NSTableViewDataSource {
     
@@ -64,7 +64,7 @@ extension ServicePreferencesViewController : NSTableViewDataSource {
 }
 
 
-// MARK: -
+// MARK: - ServicePreferencesViewController: NSTableViewDelegate
 
 extension ServicePreferencesViewController: NSTableViewDelegate {
     
@@ -103,4 +103,3 @@ extension ServicePreferencesViewController: NSTableViewDelegate {
     }
     
 }
-

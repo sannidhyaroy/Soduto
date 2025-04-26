@@ -250,6 +250,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
         case hostDeviceId = "hostDeviceId"
         case hostCertificateName = "hostCertificateName"
         case launchOnLogin = "launchOnLogin"
+        case runCommands = "runCommands"
     }
     
     
@@ -370,6 +371,28 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                 if SMLoginItemSetEnabled("com.soduto.SodutoLauncher" as CFString, newValue) {
                     self.userDefaults.set(newValue, forKey: Property.launchOnLogin.rawValue)
                 }
+            }
+        }
+    }
+    
+    public var runCommands: [RunCommandService.Command] {
+        get {
+            if let data = self.userDefaults.data(forKey: Property.runCommands.rawValue) {
+                do {
+                    return try JSONDecoder().decode([RunCommandService.Command].self, from: data)
+                } catch {
+                    Log.error?.message("Failed to decode run commands: \(error)")
+                    return []
+                }
+            }
+            return []
+        }
+        set {
+            do {
+                let data = try JSONEncoder().encode(newValue)
+                self.userDefaults.set(data, forKey: Property.runCommands.rawValue)
+            } catch {
+                Log.error?.message("Failed to encode run commands: \(error)")
             }
         }
     }

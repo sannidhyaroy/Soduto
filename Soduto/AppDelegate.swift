@@ -81,6 +81,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: ConnectivityReportService())
         self.serviceManager.add(service: FindMyPhoneService())
         self.serviceManager.add(service: RemoteKeyboardService())
+        self.serviceManager.add(service: RunCommandService())
         un.delegate = self
         self.updateValidDevices()
         let notificationName = "com.Soduto.Share" as CFString

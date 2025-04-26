@@ -396,7 +396,7 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 }
 
 
-// MARK: -
+// MARK: - FileSystem
 
 extension FileItem {
     
@@ -421,7 +421,7 @@ extension FileItem {
 }
 
 
-// MARK: -
+// MARK: - NMSFTPFile
 
 extension NMSFTPFile {
     
@@ -436,7 +436,7 @@ extension NMSFTPFile {
 }
 
 
-// MARK: -
+// MARK: - NMSSHSession
 
 extension NMSSHChannel {
     

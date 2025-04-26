@@ -38,6 +38,18 @@ public class PreferencesWindowController: NSWindowController {
         let screenRect = NSScreen.main?.frame ?? NSRect.zero
         self.window?.setFrame(NSRect(x: screenRect.width / 2 - 340, y: screenRect.height / 2 - 200, width: 680, height: 400), display: false)
         
+        // Configure window for modern macOS appearance
+        if let window = self.window {
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.styleMask.insert(.fullSizeContentView)
+            
+            // Remove title but preserve window controls (close, minimize, zoom buttons)
+            if let titlebarView = window.standardWindowButton(.closeButton)?.superview {
+                titlebarView.superview?.wantsLayer = true
+            }
+        }
+        
         self.preferencesTabViewController?.deviceDataSource = self.deviceDataSource
         self.preferencesTabViewController?.config = self.config
     }
@@ -53,7 +65,7 @@ public class PreferencesWindowController: NSWindowController {
 }
 
 
-// MARK: -
+// MARK: - PreferencesTabViewController
 
 class PreferencesTabViewController: NSTabViewController {
     

@@ -19,6 +19,48 @@ public class DeviceListItemView: NSTableCellView {
     @IBOutlet weak var infoLabel: NSTextField?
     @IBOutlet weak var actionButton: NSButton?
     
+    private lazy var infoButton: NSButton = {
+        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        button.bezelStyle = .inline
+        button.isBordered = false
+        button.contentTintColor = NSColor.secondaryLabelColor
+        
+        if #available(macOS 11.0, *) {
+            button.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Info")
+        } else {
+            button.image = NSImage(named: NSImage.Name.info)
+        }
+        
+        button.imagePosition = .imageOnly
+        button.target = self
+        button.action = #selector(showDeviceInfo(_:))
+
+        return button
+    }()
+    
+    public override func awakeFromNib() {
+        super.awakeFromNib()
+        addInfoButton()
+        applyActionButtonStyling()
+    }
+    
+    private func addInfoButton() {
+        // Add the info button next to the action button
+        self.addSubview(infoButton)
+        
+        // Position the info button
+        if let actionButton = self.actionButton {
+            infoButton.translatesAutoresizingMaskIntoConstraints = false
+            
+            NSLayoutConstraint.activate([
+                infoButton.centerYAnchor.constraint(equalTo: actionButton.centerYAnchor),
+                infoButton.trailingAnchor.constraint(equalTo: actionButton.leadingAnchor, constant: -8),
+                infoButton.widthAnchor.constraint(equalToConstant: 24),
+                infoButton.heightAnchor.constraint(equalToConstant: 24)
+            ])
+        }
+    }
+    
     @IBAction func actionButtonAction(sender: NSButton) {
         guard let device = self.device else { return }
         
@@ -31,6 +73,20 @@ public class DeviceListItemView: NSTableCellView {
             break
         default:
             break
+        }
+    }
+    
+    @objc private func showDeviceInfo(_ sender: NSButton) {
+        guard let device = self.device else { return }
+        
+        let controller = DeviceInfoWindowController.loadController()
+        controller.device = device
+        
+        guard let window = controller.window,
+              let parentWindow = self.window else { return }
+        
+        parentWindow.beginSheet(window) { _ in
+            controller.window = nil // just to keep controller until sheet ends
         }
     }
     
@@ -51,15 +107,66 @@ public class DeviceListItemView: NSTableCellView {
             self.imageView?.image = device.type.icon?.copy() as? NSImage
             self.imageView?.image?.isTemplate = true
             self.imageView?.alphaValue = device.isReachable ? 0.8 : 0.4
+            
+            // Show the info button for all devices
+            self.infoButton.isHidden = false
         }
         else {
             self.textField?.stringValue = self.defaultTextString
             self.infoLabel?.stringValue = self.defaultInfoString
             self.actionButton?.isHidden = true
             self.imageView?.image = self.defaultImage
+            
+            // Hide the info button when there's no device
+            self.infoButton.isHidden = true
         }
+        
+        applyActionButtonStyling()
     }
     
+    private func applyActionButtonStyling() {
+        if let actionButton = self.actionButton {
+            actionButton.bezelStyle = .push
+            actionButton.controlSize = .small
+            actionButton.isBordered = true
+
+            if #available(macOS 10.14, *) {
+                actionButton.contentTintColor = NSColor.controlAccentColor
+            }
+        }
+        
+        infoButton.bezelStyle = .inline
+        infoButton.isBordered = false
+        infoButton.contentTintColor = NSColor.secondaryLabelColor
+        
+        if #available(macOS 11.0, *) {
+            infoButton.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Info")
+        } else {
+            infoButton.image = NSImage(named: NSImage.Name.info)
+        }
+        
+        infoButton.imagePosition = .imageOnly
+        
+        if let textField = self.textField {
+            textField.font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+            textField.textColor = .labelColor
+        }
+        
+        if let infoLabel = self.infoLabel {
+            infoLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+            infoLabel.textColor = .secondaryLabelColor
+        }
+        
+        self.imageView?.imageScaling = .scaleProportionallyUpOrDown
+        if let imageView = self.imageView, let device = self.device {
+            imageView.alphaValue = device.isReachable ? 0.8 : 0.4
+        } else if let imageView = self.imageView {
+            imageView.alphaValue = 0.4
+        }
+        if #available(macOS 10.14, *) {
+            self.imageView?.contentTintColor = .labelColor
+        }
+    }
 }
 
 extension DeviceType {

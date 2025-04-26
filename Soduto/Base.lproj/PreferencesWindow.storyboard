@@ -9,8 +9,8 @@
         <scene sceneID="CyF-16-nXU">
             <objects>
                 <windowController id="QIk-mV-oFh" customClass="PreferencesWindowController" customModule="Soduto" customModuleProvider="target" sceneMemberID="viewController">
-                    <window key="window" title="Soduto Preferences" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" frameAutosaveName="" animationBehavior="default" id="7Xx-Hj-IV7">
-                        <windowStyleMask key="styleMask" titled="YES" closable="YES"/>
+                    <window key="window" title="Soduto Preferences" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" frameAutosaveName="" animationBehavior="default" titlebarAppearsTransparent="YES" titleVisibility="hidden" id="7Xx-Hj-IV7">
+                        <windowStyleMask key="styleMask" titled="YES" closable="YES" fullSizeContentView="YES"/>
                         <rect key="contentRect" x="196" y="240" width="680" height="400"/>
                         <rect key="screenRect" x="0.0" y="0.0" width="1440" height="878"/>
                         <value key="minSize" type="size" width="520" height="280"/>
@@ -80,8 +80,28 @@
                                     <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>
                             </textField>
+                            <button verticalHuggingPriority="750" toolTip="Edit custom commands to run on your devices" translatesAutoresizingMaskIntoConstraints="NO" id="y8R-df-guQ">
+                                <rect key="frame" x="18" y="124" width="140" height="32"/>
+                                <buttonCell key="cell" type="push" title="Edit Run Commands" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="qwZ-7s-2mP">
+                                    <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                                    <font key="font" metaFont="system"/>
+                                </buttonCell>
+                                <connections>
+                                    <action selector="openRunCommandsWindow:" target="DvB-YZ-h1x" id="13s-ht-p4a"/>
+                                </connections>
+                            </button>
+                            <button toolTip="Enable/Disable Automatic Check for App Updates" verticalHuggingPriority="750" allowsExpansionToolTips="YES" translatesAutoresizingMaskIntoConstraints="NO" id="C5M-Oh-OEn">
+                                <rect key="frame" x="18" y="94" width="194" height="18"/>
+                                <buttonCell key="cell" type="check" title="Auto-check for Updates" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="qwh-KK-lNU">
+                                    <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                    <font key="font" metaFont="system"/>
+                                </buttonCell>
+                                <connections>
+                                    <action selector="autoCheckForUpdates:" target="DvB-YZ-h1x" id="ixf-vU-HKD"/>
+                                </connections>
+                            </button>
                             <button toolTip="Doesn't ask to select a device when dragging files to the menu bar if only a single device is connected" verticalHuggingPriority="750" allowsExpansionToolTips="YES" translatesAutoresizingMaskIntoConstraints="NO" id="4Sw-sK-E8z">
-                                <rect key="frame" x="18" y="45" width="194" height="18"/>
+                                <rect key="frame" x="18" y="70" width="194" height="18"/>
                                 <buttonCell key="cell" type="check" title="Disable Share Popup" bezelStyle="regularSquare" imagePosition="left" inset="2" id="8v1-8T-Akj">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
                                     <font key="font" metaFont="system"/>
@@ -91,7 +111,7 @@
                                 </connections>
                             </button>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="c5D-ye-GR9">
-                                <rect key="frame" x="18" y="22" width="79" height="16"/>
+                                <rect key="frame" x="18" y="45" width="79" height="16"/>
                                 <textFieldCell key="cell" lineBreakMode="clipping" title="Device Type" id="wje-l1-7nw">
                                     <font key="font" metaFont="system"/>
                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
@@ -99,7 +119,7 @@
                                 </textFieldCell>
                             </textField>
                             <popUpButton verticalHuggingPriority="750" allowsExpansionToolTips="YES" translatesAutoresizingMaskIntoConstraints="NO" id="5yr-UB-BDO" userLabel="Device Type">
-                                <rect key="frame" x="100" y="16" width="116" height="25"/>
+                                <rect key="frame" x="100" y="39" width="116" height="25"/>
                                 <popUpButtonCell key="cell" type="push" title="Desktop" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" selectedItem="MPI-Ne-BeW" id="OB3-tj-G4P">
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                     <font key="font" metaFont="menu"/>
@@ -119,49 +139,28 @@
                                     <action selector="deviceTypeAction:" target="DvB-YZ-h1x" id="8zP-va-MSG"/>
                                 </connections>
                             </popUpButton>
-                            <button toolTip="Enable/Disable Automatic Check for App Updates" verticalHuggingPriority="750" allowsExpansionToolTips="YES" translatesAutoresizingMaskIntoConstraints="NO" id="C5M-Oh-OEn">
-                                <rect key="frame" x="18" y="69" width="194" height="18"/>
-                                <buttonCell key="cell" type="check" title="Auto-check for Updates" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="qwh-KK-lNU">
-                                    <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
-                                    <font key="font" metaFont="system"/>
-                                </buttonCell>
-                                <connections>
-                                    <action selector="autoCheckForUpdates:" target="DvB-YZ-h1x" id="ixf-vU-HKD"/>
-                                </connections>
-                            </button>
-                            <textField toolTip="These settings are experimental and might affect your app's functionality." verticalHuggingPriority="750" allowsExpansionToolTips="YES" textCompletion="NO" translatesAutoresizingMaskIntoConstraints="NO" id="2Zr-7Z-Yh4">
-                                <rect key="frame" x="18" y="94" width="196" height="21"/>
-                                <constraints>
-                                    <constraint firstAttribute="height" constant="21" id="5Zu-99-Yux"/>
-                                </constraints>
-                                <textFieldCell key="cell" lineBreakMode="truncatingTail" enabled="NO" allowsUndo="NO" sendsActionOnEndEditing="YES" alignment="left" title="Experimental Settings:" usesSingleLineMode="YES" id="z1g-Ys-1fu">
-                                    <font key="font" metaFont="systemBold"/>
-                                    <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
-                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
-                                </textFieldCell>
-                            </textField>
                         </subviews>
                         <constraints>
                             <constraint firstItem="c5D-ye-GR9" firstAttribute="leading" secondItem="4Sw-sK-E8z" secondAttribute="leading" id="00d-6A-Mbr"/>
-                            <constraint firstItem="1St-dx-ejH" firstAttribute="leading" secondItem="2Zr-7Z-Yh4" secondAttribute="trailing" constant="28" id="2Nj-Ss-8G9"/>
                             <constraint firstItem="1St-dx-ejH" firstAttribute="leading" secondItem="JI8-Vn-Ayd" secondAttribute="trailing" constant="8" id="6sN-f4-H1h"/>
+                            <constraint firstAttribute="bottom" secondItem="1St-dx-ejH" secondAttribute="bottom" constant="20" id="9RV-HS-hY2"/>
                             <constraint firstItem="JI8-Vn-Ayd" firstAttribute="leading" secondItem="gnx-Qc-teH" secondAttribute="leading" constant="20" id="AyK-rz-M9I"/>
                             <constraint firstAttribute="trailing" secondItem="1St-dx-ejH" secondAttribute="trailing" constant="20" id="B8B-bW-Eho"/>
-                            <constraint firstItem="C5M-Oh-OEn" firstAttribute="top" secondItem="2Zr-7Z-Yh4" secondAttribute="bottom" constant="8" symbolic="YES" id="FmZ-PK-lKK"/>
+                            <constraint firstItem="C5M-Oh-OEn" firstAttribute="top" secondItem="y8R-df-guQ" secondAttribute="bottom" constant="15" id="FmZ-PK-lKK"/>
                             <constraint firstItem="C5M-Oh-OEn" firstAttribute="trailing" secondItem="4Sw-sK-E8z" secondAttribute="trailing" id="G3E-PJ-9Yh"/>
                             <constraint firstItem="1St-dx-ejH" firstAttribute="leading" secondItem="Nu6-PX-g25" secondAttribute="trailing" constant="28" id="IVQ-J9-Sgi"/>
-                            <constraint firstItem="1St-dx-ejH" firstAttribute="bottom" secondItem="4Sw-sK-E8z" secondAttribute="bottom" constant="26" id="Kq5-rS-3Ft"/>
                             <constraint firstItem="1St-dx-ejH" firstAttribute="leading" secondItem="gnx-Qc-teH" secondAttribute="leading" constant="240" id="LFH-bh-UmZ"/>
                             <constraint firstItem="5yr-UB-BDO" firstAttribute="trailing" secondItem="4Sw-sK-E8z" secondAttribute="trailing" id="P5B-Kw-NDD"/>
                             <constraint firstItem="JI8-Vn-Ayd" firstAttribute="top" secondItem="Nu6-PX-g25" secondAttribute="bottom" constant="28" id="QD6-OX-pYh"/>
                             <constraint firstItem="1St-dx-ejH" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="5yr-UB-BDO" secondAttribute="trailing" constant="8" symbolic="YES" id="SBp-kc-wPZ"/>
-                            <constraint firstAttribute="bottom" secondItem="5yr-UB-BDO" secondAttribute="bottom" constant="20" symbolic="YES" id="Z5s-t0-AXc"/>
                             <constraint firstItem="Nu6-PX-g25" firstAttribute="top" secondItem="gnx-Qc-teH" secondAttribute="top" constant="40" id="ZKF-dG-sIu"/>
-                            <constraint firstItem="2Zr-7Z-Yh4" firstAttribute="leading" secondItem="4Sw-sK-E8z" secondAttribute="leading" id="aVW-bA-nCR"/>
-                            <constraint firstItem="4Sw-sK-E8z" firstAttribute="top" secondItem="2Zr-7Z-Yh4" secondAttribute="bottom" constant="32" id="agz-0S-IZ3"/>
+                            <constraint firstItem="4Sw-sK-E8z" firstAttribute="top" secondItem="C5M-Oh-OEn" secondAttribute="bottom" constant="8" id="agz-0S-IZ3"/>
+                            <constraint firstAttribute="bottom" secondItem="5yr-UB-BDO" secondAttribute="bottom" constant="40" id="b7t-un-KxW"/>
                             <constraint firstItem="c5D-ye-GR9" firstAttribute="centerY" secondItem="5yr-UB-BDO" secondAttribute="centerY" id="d2Y-SC-RxZ"/>
-                            <constraint firstItem="c5D-ye-GR9" firstAttribute="top" secondItem="4Sw-sK-E8z" secondAttribute="bottom" constant="8" symbolic="YES" id="fMh-9p-RKp"/>
+                            <constraint firstItem="c5D-ye-GR9" firstAttribute="top" secondItem="4Sw-sK-E8z" secondAttribute="bottom" constant="10" id="fMh-9p-RKp"/>
+                            <constraint firstItem="y8R-df-guQ" firstAttribute="top" secondItem="JI8-Vn-Ayd" secondAttribute="bottom" constant="100" id="pa2-WF-272"/>
                             <constraint firstItem="4Sw-sK-E8z" firstAttribute="trailing" secondItem="Nu6-PX-g25" secondAttribute="trailing" id="pi2-DE-UuM"/>
+                            <constraint firstItem="y8R-df-guQ" firstAttribute="leading" secondItem="JI8-Vn-Ayd" secondAttribute="leading" id="tK3-Kf-Uar"/>
                             <constraint firstItem="1St-dx-ejH" firstAttribute="top" secondItem="gnx-Qc-teH" secondAttribute="top" constant="20" id="uOG-og-lRx"/>
                             <constraint firstItem="Nu6-PX-g25" firstAttribute="leading" secondItem="gnx-Qc-teH" secondAttribute="leading" constant="40" id="vEl-YV-B8O"/>
                             <constraint firstItem="4Sw-sK-E8z" firstAttribute="leading" secondItem="JI8-Vn-Ayd" secondAttribute="leading" id="wJp-uZ-2HB"/>
@@ -174,6 +173,7 @@
                         <outlet property="deviceTypeButton" destination="5yr-UB-BDO" id="NQn-Db-wtj"/>
                         <outlet property="disableSharePopUpCheckbox" destination="4Sw-sK-E8z" id="0Ki-k4-394"/>
                         <outlet property="hostNameLabel" destination="JI8-Vn-Ayd" id="y72-cI-p8V"/>
+                        <outlet property="runCommandsButton" destination="y8R-df-guQ" id="laW-vh-BPp"/>
                     </connections>
                 </viewController>
                 <customObject id="c2y-hy-LHA" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>

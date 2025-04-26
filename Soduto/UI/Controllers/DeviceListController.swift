@@ -19,14 +19,14 @@ class DeviceListController: NSViewController {
         self.deviceList.reloadData()
     }
     
-    
     override func viewDidLoad() {
         refreshDeviceList()
+        ModernUIStyleKit.applyModernStyleToTableView(to: deviceList)
     }
     
     override func viewWillAppear() {
         // Resize first column to full table width
-        self.deviceList.tableColumns.first?.width = self.deviceList.frame.width - self.deviceList.intercellSpacing.width
+        self.deviceList.tableColumns.first?.width = self.deviceList.frame.width - self.deviceList.intercellSpacing.width - 8
         
         NotificationCenter.default.post(name: ConnectionProvider.broadcastAnnouncementNotification, object: nil)
     }
@@ -54,7 +54,7 @@ class DeviceListController: NSViewController {
     
 }
 
-// MARK: -
+// MARK: - DeviceListController DataSource
 
 extension DeviceListController : NSTableViewDataSource {
     
@@ -66,7 +66,7 @@ extension DeviceListController : NSTableViewDataSource {
 }
 
 
-// MARK: -
+// MARK: - DeviceListController Delegate
 
 extension DeviceListController: NSTableViewDelegate {
     
@@ -103,4 +103,8 @@ extension DeviceListController: NSTableViewDelegate {
         return nil
     }
     
+    public func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let rowView = ModernTableRowView()
+        return rowView
+    }
 }

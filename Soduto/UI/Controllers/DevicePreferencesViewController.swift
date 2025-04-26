@@ -27,8 +27,10 @@ class DevicePreferencesViewController: NSViewController {
     @IBOutlet weak var automaticCheckForUpdates: NSButton!
     @IBOutlet weak var disableSharePopUpCheckbox: NSButton!
     @IBOutlet weak var deviceTypeButton: NSPopUpButton!
+    @IBOutlet weak var runCommandsButton: NSButton!
     
     private weak var deviceListController: DeviceListController?
+    private var runCommandsWindowController: RunCommandsWindowController?
     
     
     // MARK: Public methods
@@ -55,6 +57,13 @@ class DevicePreferencesViewController: NSViewController {
         }
         else {
             self.hostNameLabel.stringValue = ""
+        }
+        
+        if self.runCommandsButton != nil {
+            self.runCommandsButton.isEnabled = true
+            self.runCommandsButton.title = NSLocalizedString("Edit Run Commands", comment: "")
+            self.runCommandsButton.action = #selector(openRunCommandsWindow(_:))
+            self.runCommandsButton.target = self
         }
         
         self.deviceListController?.deviceDataSource = self.deviceDataSource
@@ -104,5 +113,27 @@ class DevicePreferencesViewController: NSViewController {
         let checkBoxState = automaticCheckForUpdates.state
         let state: Bool = (checkBoxState == .on) ? true : false
         updater.automaticallyChecksForUpdates = state
+    }
+    
+    @IBAction func openRunCommandsWindow(_ sender: Any?) {
+        if runCommandsWindowController == nil {
+            runCommandsWindowController = RunCommandsWindowController()
+            runCommandsWindowController?.delegate = self
+        }
+        
+        runCommandsWindowController?.showWindow(sender)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+// MARK: - RunCommandsWindowControllerDelegate
+
+extension DevicePreferencesViewController: RunCommandsWindowControllerDelegate {
+    func getLocalCommands() -> [RunCommandService.Command]? {
+        return AppDelegate.shared().config.runCommands
+    }
+    
+    func saveLocalCommands(_ commands: [RunCommandService.Command]) {
+        AppDelegate.shared().config.runCommands = commands
     }
 }

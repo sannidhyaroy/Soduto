@@ -37,6 +37,11 @@ public class FindMyPhoneService: NSObject, Service {
     private var windowController: NSWindowController? = nil
     private var hoverTrackingArea: NSTrackingArea? = nil // Store a reference to the tracking area
     private var hoverButton: NSButton? = nil // Reference to the button for hover effects
+    private var visualEffectView: NSVisualEffectView? = nil
+    private var iconView: NSImageView? = nil
+    private var titleLabel: NSTextField? = nil
+    private var subtitleLabel: NSTextField? = nil
+    private var initiatorName: String = ""
     
     // MARK: Service properties
     
@@ -88,6 +93,7 @@ public class FindMyPhoneService: NSObject, Service {
     
     private func startRinging(initiator: String) {
         deviceRinging = true
+        initiatorName = initiator
         
         // Create and start playing system sound in a loop
         if let soundURL = NSURL(fileURLWithPath: "/System/Library/Sounds/Ping.aiff") as URL? {
@@ -161,6 +167,7 @@ public class FindMyPhoneService: NSObject, Service {
         visualEffectView.state = .active
         visualEffectView.wantsLayer = true
         visualEffectView.layer?.cornerRadius = 20
+        self.visualEffectView = visualEffectView
         
         // Create a container for content with some padding
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 220))
@@ -170,6 +177,7 @@ public class FindMyPhoneService: NSObject, Service {
         let iconWidth: CGFloat = 130
         let iconHeight: CGFloat = 70
         let iconView = NSImageView(frame: NSRect(x: (400 - iconWidth)/2, y: 135, width: iconWidth, height: iconHeight))
+        self.iconView = iconView
         
         // Create a modern phone icon
         let icon = NSImage(size: NSSize(width: iconWidth, height: iconHeight))
@@ -236,6 +244,7 @@ public class FindMyPhoneService: NSObject, Service {
         titleLabel.isBezeled = false
         titleLabel.isEditable = false
         titleLabel.drawsBackground = false
+        self.titleLabel = titleLabel
         
         // Create subtitle label
         let subtitleLabel = NSTextField(frame: NSRect(x: 20, y: 80, width: 360, height: 20))
@@ -246,6 +255,7 @@ public class FindMyPhoneService: NSObject, Service {
         subtitleLabel.isBezeled = false
         subtitleLabel.isEditable = false
         subtitleLabel.drawsBackground = false
+        self.subtitleLabel = subtitleLabel
         
         // Create a properly styled button that looks good without hover effects
         let buttonWidth: CGFloat = 160
@@ -304,13 +314,172 @@ public class FindMyPhoneService: NSObject, Service {
         windowController = NSWindowController(window: window)
         findMyPhoneWindow = window
         
+        // Add observer for appearance changes using the effectiveAppearance property
+        NotificationCenter.default.addObserver(
+            self, 
+            selector: #selector(updateUIForAppearanceChange(_:)),
+            name: NSNotification.Name("AppleColorPreferencesChangedNotification"), 
+            object: nil)
+            
+        // Also set up a polling timer as a fallback
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            if self?.deviceRinging == false {
+                timer.invalidate()
+                return
+            }
+            self?.updateUIForCurrentAppearance()
+        }
+        
         // Show window
         windowController?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
+        
+        // Update UI for current appearance
+        updateUIForCurrentAppearance()
     }
     
     @objc private func stopRingingAction() {
         stopRinging()
+    }
+    
+    private func updateUIForCurrentAppearance() {
+        guard let visualEffectView = self.visualEffectView else { return }
+        
+        // Determine if we're in dark mode
+        let isEffectivelyDarkMode = visualEffectView.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        
+        // Force layout update to ensure appearance changes are applied
+        visualEffectView.needsLayout = true
+        visualEffectView.needsDisplay = true
+        
+        // Update the phone icon
+        if let iconView = self.iconView {
+            updatePhoneIcon(iconView, width: iconView.frame.width, height: iconView.frame.height)
+            iconView.needsDisplay = true
+        }
+        
+        // Update text colors for labels - ensure they change with appearance
+        if let titleLabel = self.titleLabel {
+            titleLabel.textColor = isEffectivelyDarkMode ? NSColor.white : NSColor.black
+            // Force refresh
+            titleLabel.needsDisplay = true
+        }
+        
+        if let subtitleLabel = self.subtitleLabel {
+            subtitleLabel.textColor = isEffectivelyDarkMode ? NSColor.white : NSColor.darkGray
+            // Force refresh the label
+            subtitleLabel.stringValue = "\(initiatorName) is looking for this device"
+            subtitleLabel.needsDisplay = true
+        }
+        
+        // Update button appearance
+        if let button = self.hoverButton {
+            // Clear previous styling
+            button.contentTintColor = nil
+            
+            // Apply new styling based on current appearance
+            if isEffectivelyDarkMode {
+                button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.2).cgColor
+                button.contentTintColor = NSColor.white
+            } else {
+                button.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.1).cgColor
+                button.contentTintColor = NSColor.black
+            }
+            
+            // Force refresh the button
+            button.needsDisplay = true
+            
+            // Update the hover tracking area with the new appearance info
+            if let oldTrackingArea = self.hoverTrackingArea {
+                button.removeTrackingArea(oldTrackingArea)
+            }
+            
+            let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeInActiveApp]
+            self.hoverTrackingArea = NSTrackingArea(rect: button.bounds,
+                                                   options: options,
+                                                   owner: self,
+                                                   userInfo: ["isDark": isEffectivelyDarkMode])
+            button.addTrackingArea(self.hoverTrackingArea!)
+        }
+        
+        // Force window to update
+        if let window = findMyPhoneWindow {
+            window.contentView?.needsDisplay = true
+            window.display()
+        }
+    }
+    
+    private func updatePhoneIcon(_ iconView: NSImageView, width: CGFloat, height: CGFloat) {
+        guard let visualEffectView = self.visualEffectView else { return }
+        
+        // Detect if we're in dark mode
+        let isEffectivelyDarkMode = visualEffectView.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        
+        // Create a new icon image with the appropriate color for current appearance
+        let icon = NSImage(size: NSSize(width: width, height: height))
+        icon.lockFocus()
+        
+        // Use color based on current appearance
+        let foregroundColor = isEffectivelyDarkMode ? NSColor.white : NSColor.black
+        foregroundColor.setFill()
+        
+        // Draw modern phone shape
+        let phoneWidth: CGFloat = 30
+        let phoneHeight: CGFloat = 50
+        let phoneX = (width - phoneWidth) / 2
+        let phoneY = (height - phoneHeight) / 2
+        
+        // Draw phone body with more rounded corners
+        let cornerRadius: CGFloat = 8.0
+        let phoneRect = NSRect(x: phoneX, y: phoneY, width: phoneWidth, height: phoneHeight)
+        let roundedPath = NSBezierPath(roundedRect: phoneRect, xRadius: cornerRadius, yRadius: cornerRadius)
+        roundedPath.fill()
+        
+        // Draw screen
+        let screenInset: CGFloat = 1.0
+        let screenRect = NSRect(
+            x: phoneX + screenInset, 
+            y: phoneY + screenInset, 
+            width: phoneWidth - (screenInset * 2), 
+            height: phoneHeight - (screenInset * 2)
+        )
+        let screenPath = NSBezierPath(roundedRect: screenRect, xRadius: cornerRadius - screenInset, yRadius: cornerRadius - screenInset)
+        NSColor.lightGray.withAlphaComponent(0.3).setFill()
+        screenPath.fill()
+        
+        // Draw signal waves
+        let phoneCenterX = phoneX + (phoneWidth / 2)
+        let phoneCenterY = phoneY + (phoneHeight / 2)
+        
+        for i in 0..<3 {
+            let waveSize: CGFloat = phoneWidth + 50.0 + CGFloat(i * 10)
+            let wavePath = NSBezierPath()
+            
+            wavePath.appendArc(
+                withCenter: NSPoint(x: phoneCenterX, y: phoneCenterY),
+                radius: waveSize/2,
+                startAngle: -30,
+                endAngle: 30)
+            
+            foregroundColor.withAlphaComponent(0.6 - CGFloat(i) * 0.15).setStroke()
+            wavePath.lineWidth = 2.0
+            wavePath.stroke()
+        }
+        
+        icon.unlockFocus()
+        
+        // Update the image view with the new icon
+        iconView.image = icon
+    }
+
+    deinit {
+        // Clean up notification observers
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    @objc private func updateUIForAppearanceChange(_ notification: Notification) {
+        // Update UI for appearance changes
+        updateUIForCurrentAppearance()
     }
 }
 
@@ -329,20 +498,34 @@ extension FindMyPhoneService: NSWindowDelegate {
 extension FindMyPhoneService {
     // Called when mouse enters the button area
     @objc public func mouseEntered(_ event: NSEvent) {
-        if let button = self.hoverButton {
+        if let button = self.hoverButton, 
+           let userInfo = event.trackingArea?.userInfo as? [String: Any],
+           let isDark = userInfo["isDark"] as? Bool {
+            
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.15
-                button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.4).cgColor
+                if isDark {
+                    button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.4).cgColor
+                } else {
+                    button.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.2).cgColor
+                }
             })
         }
     }
     
     // Called when mouse exits the button area
     @objc public func mouseExited(_ event: NSEvent) {
-        if let button = self.hoverButton {
+        if let button = self.hoverButton,
+           let userInfo = event.trackingArea?.userInfo as? [String: Any],
+           let isDark = userInfo["isDark"] as? Bool {
+            
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.15
-                button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.2).cgColor
+                if isDark {
+                    button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.2).cgColor
+                } else {
+                    button.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.1).cgColor
+                }
             })
         }
     }
