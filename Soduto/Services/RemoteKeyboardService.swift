@@ -131,51 +131,31 @@ public class RemoteKeyboardService: Service {
     }
     
     private func simulateKeyPress(_ key: String, withModifiers modifiers: KeyModifiers) {
-        guard let firstChar = key.unicodeScalars.first else { return }
-        
         // Create a source for the CGEvent
         guard let source = CGEventSource(stateID: .hidSystemState) else {
             Log.error?.message("Failed to create CGEventSource")
             return
         }
         
-        // For most characters, using the unicode approach is more reliable
-        if key.count == 1 {
-            // Create a CGEvent for key down with Unicode character
-            if let keyDownEvent = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) {
-                keyDownEvent.flags = modifiers.flags
-                
-                // Convert UInt32 unicode scalar to UInt16 (UniChar)
-                let unicodeScalar = UInt16(truncatingIfNeeded: firstChar.value)
-                keyDownEvent.keyboardSetUnicodeString(stringLength: 1, unicodeString: [unicodeScalar])
-                keyDownEvent.post(tap: .cghidEventTap)
-            }
+        // For emoji and complex Unicode characters, we need to handle them as a complete string
+        // rather than individual Unicode scalars
+        
+        // Convert the string to UTF-16 representation which is what CGEvent expects
+        let utf16Array = Array(key.utf16)
+        
+        // Create a key down event
+        if let keyDownEvent = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) {
+            keyDownEvent.flags = modifiers.flags
             
-            // Create a CGEvent for key up with Unicode character
-            if let keyUpEvent = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
-                keyUpEvent.flags = modifiers.flags
-                keyUpEvent.post(tap: .cghidEventTap)
-            }
-        } else {
-            // For multi-character strings, simulate typing each character
-            for scalar in key.unicodeScalars {
-                if let keyDownEvent = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) {
-                    keyDownEvent.flags = modifiers.flags
-                    
-                    // Convert UInt32 unicode scalar to UInt16 (UniChar)
-                    let unicodeScalar = UInt16(truncatingIfNeeded: scalar.value)
-                    keyDownEvent.keyboardSetUnicodeString(stringLength: 1, unicodeString: [unicodeScalar])
-                    keyDownEvent.post(tap: .cghidEventTap)
-                }
-                
-                if let keyUpEvent = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
-                    keyUpEvent.flags = modifiers.flags
-                    keyUpEvent.post(tap: .cghidEventTap)
-                }
-                
-                // Small delay to ensure character registration
-                usleep(1000) // 1ms delay
-            }
+            // Set the entire string at once for proper emoji/complex character support
+            keyDownEvent.keyboardSetUnicodeString(stringLength: utf16Array.count, unicodeString: utf16Array)
+            keyDownEvent.post(tap: .cghidEventTap)
+        }
+        
+        // Create a key up event
+        if let keyUpEvent = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
+            keyUpEvent.flags = modifiers.flags
+            keyUpEvent.post(tap: .cghidEventTap)
         }
     }
     
