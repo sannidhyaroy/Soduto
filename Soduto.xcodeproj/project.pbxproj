@@ -134,10 +134,12 @@
 		84FA45ED1DDF525200EF3992 /* PingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FA45EC1DDF525200EF3992 /* PingService.swift */; };
 		84FFDA2A1E1D8D370069AC9A /* SimplePing.m in Sources */ = {isa = PBXBuildFile; fileRef = 84FFDA291E1D8D370069AC9A /* SimplePing.m */; };
 		8FC977F11D4778E9001ADF7E /* StatusBarMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC977F01D4778E9001ADF7E /* StatusBarMenuController.swift */; };
+		F80E30722DBE0D880047D068 /* MacToRemoteInputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */; };
 		F826E6C72DB302F000E736CE /* RunCommandService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6C62DB302F000E736CE /* RunCommandService.swift */; };
 		F826E6C92DB419AF00E736CE /* RunCommandsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6C82DB419AF00E736CE /* RunCommandsWindowController.swift */; };
 		F826E6CD2DB4F12500E736CE /* ModernUIStyleKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6CC2DB4F12500E736CE /* ModernUIStyleKit.swift */; };
 		F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */; };
+		F8B4FE5D2DDCE7D500D383C8 /* MPRISService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B4FE5C2DDCE7D500D383C8 /* MPRISService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -376,10 +378,12 @@
 		84FFDA1F1E1D8D0D0069AC9A /* SimplePing.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SimplePing.h; sourceTree = "<group>"; };
 		84FFDA291E1D8D370069AC9A /* SimplePing.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SimplePing.m; sourceTree = "<group>"; };
 		8FC977F01D4778E9001ADF7E /* StatusBarMenuController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StatusBarMenuController.swift; sourceTree = "<group>"; };
+		F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacToRemoteInputService.swift; sourceTree = "<group>"; };
 		F826E6C62DB302F000E736CE /* RunCommandService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCommandService.swift; sourceTree = "<group>"; };
 		F826E6C82DB419AF00E736CE /* RunCommandsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCommandsWindowController.swift; sourceTree = "<group>"; };
 		F826E6CC2DB4F12500E736CE /* ModernUIStyleKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernUIStyleKit.swift; sourceTree = "<group>"; };
 		F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityReportService.swift; sourceTree = "<group>"; };
+		F8B4FE5C2DDCE7D500D383C8 /* MPRISService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MPRISService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -762,8 +766,10 @@
 		84FA45EB1DDF51EB00EF3992 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */,
 				F826E6C62DB302F000E736CE /* RunCommandService.swift */,
 				F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */,
+				F8B4FE5C2DDCE7D500D383C8 /* MPRISService.swift */,
 				84651A711E599A3C00D17601 /* BatteryService.swift */,
 				840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */,
 				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
@@ -1034,6 +1040,7 @@
 				0248E0FF1F23C4AF00C411F7 /* DevicePreferencesViewController.swift in Sources */,
 				84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */,
 				84C613E31DECBF6C00CE7F7A /* UploadTask.swift in Sources */,
+				F80E30722DBE0D880047D068 /* MacToRemoteInputService.swift in Sources */,
 				84FA45E81DDE088B00EF3992 /* ServiceManager.swift in Sources */,
 				F826E6CD2DB4F12500E736CE /* ModernUIStyleKit.swift in Sources */,
 				F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */,
@@ -1071,6 +1078,7 @@
 				F826E6C72DB302F000E736CE /* RunCommandService.swift in Sources */,
 				8456F4AA1D7DEA47006EFE19 /* DefaultPairingHandler.swift in Sources */,
 				8492379F1DE1C87600D95BBA /* ServiceActionMenuItem.swift in Sources */,
+				F8B4FE5D2DDCE7D500D383C8 /* MPRISService.swift in Sources */,
 				8436DEFA1E958ABA00529362 /* FileManager.swift in Sources */,
 				0225F6111F06E2380021BFE2 /* NSAttributedString.swift in Sources */,
 				843B670C1DF3087800289EC9 /* URL.swift in Sources */,
