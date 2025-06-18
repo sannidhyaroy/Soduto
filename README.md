@@ -52,7 +52,33 @@ Do note that currently there's no Homebrew formulae for my forked version and th
     
     `XCODE_XCCONFIG_FILE="./carthage.xcconfig" carthage update --platform macOS --use-xcframeworks`
 
-* Compile universal openssl and libssh2 library using [iSSH2](https://github.com/Frugghi/iSSH2):
+* If build fails with error that looks something like this:
+
+    ```
+    Unable to open file '/Users/sidevesh/Projects/soduto/Carthage/Checkouts/CleanroomLogger/carthage.xcconfig' referenced by XCODE_XCCONFIG_FILE environment variable.
+    ```
+    
+    Then you need to copy the carthage.xcconfig file from the root of this repository to the the submodules that have been checked out. You can do this by running the following command in the root of this repository:
+
+    ```bash
+    find Carthage/Checkouts -name "*.xcodeproj" -exec dirname {} \; | xargs -I {} cp carthage.xcconfig {}/carthage.xcconfig
+    ```
+
+* If you get an error in Xcode that says:
+
+    ```
+    While building for macOS, no library for this platform was found in '/path/to/NMSSH.xcframework'.
+    ```
+    
+    This means the NMSSH framework was built for iOS instead of macOS. To fix this, temporarily rename the Examples workspace and rebuild NMSSH:
+
+    ```bash
+    mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak
+    XCODE_XCCONFIG_FILE="./carthage.xcconfig" carthage build NMSSH --platform macOS --use-xcframeworks --no-use-binaries
+    mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace
+    ```
+
+* Compile universal openssl and libssh2 library using [iSSH2](https://github.com/sidevesh/iSSH2):
 
     `./build_lib.sh`
 
