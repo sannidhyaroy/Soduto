@@ -11,6 +11,7 @@ import Foundation
 import CleanroomLogger
 import UserNotifications
 import Sparkle
+import MediaPlayer
 
 let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
 
@@ -83,6 +84,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: RemoteKeyboardService())
         self.serviceManager.add(service: RunCommandService())
         self.serviceManager.add(service: MacToRemoteInputService())
+        self.serviceManager.add(service: MPRISService())
         un.delegate = self
         self.updateValidDevices()
         let notificationName = "com.Soduto.Share" as CFString
