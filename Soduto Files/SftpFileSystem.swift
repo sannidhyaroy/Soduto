@@ -47,7 +47,9 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
     private let fileOperationsQueue = OperationQueue()
     private let browseSession: NMSSHSession
     private let fileOperationsSession: NMSSHSession
-    
+    private let thumbnailQueue = OperationQueue()
+    private let thumbnailSession: NMSSHSession
+    private let thumbnailSessionLock = NSLock()
     
     // MARK: Setup / Cleanup
     
@@ -57,6 +59,7 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         let hostWithPort = port != nil ? "\(host):\(port!)" : host
         self.browseSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
         self.fileOperationsSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
+        self.thumbnailSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
         
         let directoryPath = path.hasSuffix("/") ? path : path + "/"
         guard let rootUrl = URL.url(scheme: "sftp", host: host, port: port, user: user, path: directoryPath) else { throw SftpError.rootUrlInitializationFailed }
@@ -66,6 +69,8 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         self.browseQueue.qualityOfService = .userInteractive
         self.fileOperationsQueue.maxConcurrentOperationCount = 1
         self.fileOperationsQueue.qualityOfService = .userInitiated
+        self.thumbnailQueue.maxConcurrentOperationCount = 4
+        self.thumbnailQueue.qualityOfService = .utility
     }
     
     private static func initSession(host: String, user: String, password: String) throws -> NMSSHSession {
@@ -393,6 +398,54 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 //            self.delegate?.fileSystem(self, didAddFileAt: url)
 //        }
 //    }
+
+func loadData(at url: URL, completionHandler: @escaping ((Data?, Error?) -> Void)) {
+    assert(isUnderRoot(url), "URL (\(url)) is outside root tree (\(self.rootUrl)).")
+
+    thumbnailQueue.addOperation { [weak self] in
+        guard let self = self else { return }
+
+        let memoryStream = OutputStream.toMemory()
+        memoryStream.open()
+        
+        var readSuccess = false
+        var operationError: Error?
+        
+        // Lock Begin
+        self.thumbnailSessionLock.lock()
+
+        if self.thumbnailSession.sftp.readFile(atPath: url.path, to: memoryStream) {
+            readSuccess = true
+        } else {
+            operationError = self.thumbnailSession.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
+        }
+
+        self.thumbnailSessionLock.unlock()
+        // Lock End
+        
+        guard readSuccess else {
+          let error = operationError!
+            Log.error?.message("Failed to read file data from [\(url)]: \(error)")
+            memoryStream.close()
+            DispatchQueue.main.async { completionHandler(nil, error) }
+          return
+        }
+
+        memoryStream.close()
+
+        // Failed
+        guard let data = memoryStream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data else {
+            Log.error?.message("Failed to extract data from memory stream for [\(url)]")
+            DispatchQueue.main.async { completionHandler(nil, SftpError.downloadingFileFailed(at: url)) }
+            return
+        }
+
+        // Success
+        DispatchQueue.main.async { completionHandler(data, nil) }
+    }
+}
+
+
 }
 
 

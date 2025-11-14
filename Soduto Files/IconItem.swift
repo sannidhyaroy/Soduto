@@ -7,6 +7,7 @@
 //
 
 import Cocoa
+import CleanroomLogger
 
 public protocol IconItemDelegate: class {
     func iconItem(_ iconItem: IconItem, didChangeName: String)
@@ -17,24 +18,60 @@ public class IconItem: NSCollectionViewItem {
     // MARK: Properties
     
     public weak var delegate: IconItemDelegate?
+    weak var fileSystem: FileSystem?
+
+    private var currentLoadingURL: URL?
+    private let imageExtensions = ["jpg", "jpeg", "png", "heic", "gif", "bmp", "webp"]
     
     public var iconView: IconItemView? { return self.view as? IconItemView }
     
     public var fileItem: FileItem? {
         didSet {
-            guard isViewLoaded else { return }
-            if let fileItem = self.fileItem, !fileItem.flags.contains(.isDeleted) {
-                self.imageView?.image = fileItem.icon
-                self.iconView?.label = fileItem.name
-                self.iconView?.isHiddenItem = fileItem.flags.contains(.isHidden)
-                self.iconView?.isBusy = fileItem.flags.contains(.isBusy)
-            } else {
-                self.imageView?.image = nil
-                self.iconView?.label = ""
-                self.iconView?.isHiddenItem = false
-                self.iconView?.isBusy = false
-            }
+          guard isViewLoaded else { return }
+
+          currentLoadingURL = nil
+
+          if let fileItem = self.fileItem, !fileItem.flags.contains(.isDeleted) {
+              self.imageView?.image = fileItem.icon
+              self.iconView?.label = fileItem.name
+              self.iconView?.isHiddenItem = fileItem.flags.contains(.isHidden)
+              self.iconView?.isBusy = fileItem.flags.contains(.isBusy)
+
+              let ext = fileItem.url.pathExtension.lowercased()
+              if imageExtensions.contains(ext) {
+                  loadThumbnail(for: fileItem)
+              }
+
+          } else {
+              self.imageView?.image = nil
+              self.iconView?.label = ""
+              self.iconView?.isHiddenItem = false
+              self.iconView?.isBusy = false
+          }
             
+        }
+    }
+
+    private func loadThumbnail(for fileItem: FileItem) {
+        let urlToLoad = fileItem.url
+        self.currentLoadingURL = urlToLoad
+
+        (self.fileSystem as? SftpFileSystem)?.loadData(at: urlToLoad) { [weak self] (data, error) in
+            guard let self = self else { return }
+
+            guard self.currentLoadingURL == urlToLoad else {
+                return
+            }
+
+            self.currentLoadingURL = nil
+
+            if let data = data, let image = NSImage(data: data) {
+                self.imageView?.image = image
+            } else {
+                if let error = error {
+                     Log.info?.message("Failed to load thumbnail for \(urlToLoad.lastPathComponent): \(error.localizedDescription)")
+                }
+            }
         }
     }
     

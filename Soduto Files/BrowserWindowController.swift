@@ -973,6 +973,7 @@ extension BrowserWindowController : NSCollectionViewDataSource {
         
         iconItem.fileItem = fileItems[indexPath.item]
         iconItem.delegate = self
+        iconItem.fileSystem = self.fileSystem
         
         return item
     }
