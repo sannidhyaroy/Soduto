@@ -11,6 +11,7 @@ import CleanroomLogger
 import Cocoa
 
 class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
+        private let thumbnailConcurrentOprationCount = 16
     
     // MARK: Types
     
@@ -48,8 +49,10 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
     private let browseSession: NMSSHSession
     private let fileOperationsSession: NMSSHSession
     private let thumbnailQueue = OperationQueue()
-    private let thumbnailSession: NMSSHSession
-    private let thumbnailSessionLock = NSLock()
+
+    private let hostWithPort: String
+    private let user: String
+    private let password: String
     
     // MARK: Setup / Cleanup
     
@@ -59,7 +62,10 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         let hostWithPort = port != nil ? "\(host):\(port!)" : host
         self.browseSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
         self.fileOperationsSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
-        self.thumbnailSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
+
+        self.hostWithPort = hostWithPort
+        self.user = user
+        self.password = password
         
         let directoryPath = path.hasSuffix("/") ? path : path + "/"
         guard let rootUrl = URL.url(scheme: "sftp", host: host, port: port, user: user, path: directoryPath) else { throw SftpError.rootUrlInitializationFailed }
@@ -69,7 +75,7 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         self.browseQueue.qualityOfService = .userInteractive
         self.fileOperationsQueue.maxConcurrentOperationCount = 1
         self.fileOperationsQueue.qualityOfService = .userInitiated
-        self.thumbnailQueue.maxConcurrentOperationCount = 4
+        self.thumbnailQueue.maxConcurrentOperationCount = thumbnailConcurrentOprationCount
         self.thumbnailQueue.qualityOfService = .utility
     }
     
@@ -417,51 +423,49 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
                 return
             }
 
+            var localSession: NMSSHSession?
+            var operationError: Error?
+            var readSuccess = false
+            let memoryStream = OutputStream.toMemory()
+
             // -- Thumbnail Download Operation --
-            // This block runs on a background thread from the thumbnailQueue.
             defer {
-              Log.debug?.message("SftpFileSystem loadData: <<< Operation FINISHED for \(url.lastPathComponent) >>>")
+                memoryStream.close()
+                localSession?.disconnect()
+                Log.debug?.message("SftpFileSystem loadData: <<< Operation FINISHED for \(url.lastPathComponent) >>>")
             }
 
-            let memoryStream = OutputStream.toMemory()
-            memoryStream.open()
-            
-            var readSuccess = false
-            var operationError: Error?
-            
-            // Lock Begin
-            Log.debug?.message("SftpFileSystem loadData: Acquiring lock for \(url.lastPathComponent)...")
             do {
-                self.thumbnailSessionLock.lock()
-                Log.debug?.message("SftpFileSystem loadData: Lock acquired for \(url.lastPathComponent).")
+                // Create a session
+                Log.debug?.message("SftpFileSystem loadData: Creating new session for \(url.lastPathComponent)...")
+                localSession = try type(of: self).initSession(host: self.hostWithPort, user: self.user, password: self.password)
 
-                defer {
-                    self.thumbnailSessionLock.unlock()
-                    Log.debug?.message("SftpFileSystem loadData: Lock released (via defer) for \(url.lastPathComponent).")
-                }
+                memoryStream.open()
 
-                if self.thumbnailSession.sftp.readFile(atPath: url.path, to: memoryStream) {
+                // Download
+                Log.debug?.message("SftpFileSystem loadData: Download starting for \(url.lastPathComponent).")
+                if localSession!.sftp.readFile(atPath: url.path, to: memoryStream) {
                     readSuccess = true
                     Log.debug?.message("SftpFileSystem loadData: Download success for \(url.lastPathComponent).")
                 } else {
-                    operationError = self.thumbnailSession.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
+                    operationError = localSession!.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
                     Log.debug?.message("""
                         SftpFileSystem loadData: Download failed for \(url.lastPathComponent):
                             \(operationError?.localizedDescription ?? "Unknown SFTP error")
                         """)
                 }
+            } catch {
+                // Session init failed
+                Log.debug?.message("SftpFileSystem loadData: Session init failed for \(url.lastPathComponent): \(error.localizedDescription)")
+                operationError = error
             }
 
-            // Lock End
-
+            // Completion Handler
             guard readSuccess else {
-              let error = operationError!
-                memoryStream.close()
+                let error = operationError!
                 DispatchQueue.main.async { completionHandler(nil, error) }
-              return
+                return
             }
-
-            memoryStream.close()
 
             // Failed
             guard let data = memoryStream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data else {
