@@ -23,6 +23,7 @@ public class IconItem: NSCollectionViewItem {
     private var currentLoadingURL: URL?
     private var retryTimer: Timer?
     private let imageExtensions = ["jpg", "jpeg", "png", "heic", "gif", "bmp", "webp"]
+    private let maxThumbnailFileSize: UInt64 = 50*1024*1024 // 50MB
     
     public var iconView: IconItemView? { return self.view as? IconItemView }
     
@@ -58,10 +59,33 @@ public class IconItem: NSCollectionViewItem {
                 self.iconView?.isBusy = fileItem.flags.contains(.isBusy)
 
                 let ext = fileItem.url.pathExtension.lowercased()
-                if imageExtensions.contains(ext) {
-                    Log.debug?.message("IconItem: Requesting thumbnail for \(fileItem.name)")
-                    loadThumbnail(for: fileItem)
+
+                // Check if thumbnails should be displayed
+
+                // 1. extension
+                guard imageExtensions.contains(ext) else {
+                    return
                 }
+
+                // 2. not directory
+                guard !fileItem.isDirectory else {
+                    return
+                }
+
+                // 3. file size > 0
+                guard fileItem.fileSize > 0 else {
+                    Log.debug?.message("IconItem: Skipping thumbnail for \(fileItem.name) (size 0)")
+                    return
+                }
+
+                // 4. file size < max
+                guard fileItem.fileSize <= maxThumbnailFileSize else {
+                    Log.debug?.message("IconItem: Skipping thumbnail for \(fileItem.name) (size \(fileItem.fileSize) exceeds limit)")
+                    return
+                }
+
+                Log.debug?.message("IconItem: Requesting thumbnail for \(fileItem.name)")
+                loadThumbnail(for: fileItem)
 
             } else {
                 // The fileItem is nil or marked as deleted, clear the view.

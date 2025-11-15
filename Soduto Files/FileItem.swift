@@ -29,6 +29,7 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
     public let url: URL
     public let name: String
     public let icon: NSImage
+    public let fileSize: UInt64
     public let staticFlags: Flags
     public var dynamicFlags: Flags = []
     
@@ -42,25 +43,28 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
     @objc dynamic public var canRead: Bool { return self.isReadable && !self.isBusy && !self.isDeleted }
     @objc dynamic public var canModify: Bool { return self.isWritable && !self.isBusy && !self.isDeleted }
     
-    public init(url: URL, name: String, icon: NSImage, flags: Flags) {
+    public init(url: URL, name: String, icon: NSImage, flags: Flags, fileSize: UInt64) {
         self.url = url
         self.name = name
         self.icon = icon
         self.staticFlags = flags
+        self.fileSize = fileSize
     }
     
     public convenience init(url: URL) {
         if url.isFileURL {
             let icon = NSWorkspace.shared.icon(forFile: url.path)
             do {
-                let resourceValues = try url.resourceValues(forKeys: [URLResourceKey.isHiddenKey, URLResourceKey.localizedNameKey, URLResourceKey.isDirectoryKey])
+                let resourceKeys: Set<URLResourceKey> = [ .isHiddenKey, .localizedNameKey, .isDirectoryKey, .fileSizeKey ]
+                let resourceValues = try url.resourceValues(forKeys: resourceKeys)
                 let name = resourceValues.localizedName ?? url.lastPathComponent
+                let fileSize = (resourceValues.fileSize as NSNumber?)?.uint64Value ?? 0
                 var flags: Flags = []
                 if resourceValues.isDirectory == true { flags.insert(.isDirectory) }
                 if resourceValues.isHidden == true { flags.insert(.isHidden) }
                 if FileManager.default.isReadableFile(atPath: url.path) { flags.insert(.isReadable) }
                 if FileManager.default.isWritableFile(atPath: url.path) { flags.insert(.isWritable) }
-                self.init(url: url, name: name, icon: icon, flags: flags)
+                self.init(url: url, name: name, icon: icon, flags: flags, fileSize: fileSize)
             }
             catch {
                 Log.error?.message("Failed retrieving file resource information for url [\(url)]: \(error)")
@@ -70,7 +74,7 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
                 if url.lastPathComponent.hasPrefix(".") { flags.insert(.isHidden) }
                 if FileManager.default.isReadableFile(atPath: url.path) { flags.insert(.isReadable) }
                 if FileManager.default.isWritableFile(atPath: url.path) { flags.insert(.isWritable) }
-                self.init(url: url, name: name, icon: icon, flags: flags)
+                self.init(url: url, name: name, icon: icon, flags: flags, fileSize: 0)
             }
         }
         else {
@@ -80,7 +84,7 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
             if url.lastPathComponent.hasPrefix(".") { flags.insert(.isHidden) }
             let fileType: String = flags.contains(.isDirectory) ? String(kUTTypeDirectory) : url.pathExtension
             let icon = flags.contains(.isDirectory) ? NSImage(named: NSImage.Name.folder)! : NSWorkspace.shared.icon(forFileType: fileType)
-            self.init(url: url, name: name, icon: icon, flags: flags)
+            self.init(url: url, name: name, icon: icon, flags: flags, fileSize: 0)
 
         }
     }

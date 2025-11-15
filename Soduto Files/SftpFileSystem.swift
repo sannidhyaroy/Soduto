@@ -637,25 +637,26 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 // MARK: - FileSystem
 
 extension FileItem {
-    
+
     fileprivate convenience init?(sftpFile: NMSFTPFile, parentUrl: URL, user: String) {
         guard var name = sftpFile.filename else { return nil }
         if name.hasSuffix("/") { name = String(name.dropLast()) }
-        
+
         let url = parentUrl.appendingPathComponent(name, isDirectory: sftpFile.isDirectory)
-        
+
         var flags: Flags = []
         if sftpFile.isWritable(by: user) { flags.insert(.isWritable) }
         if sftpFile.isReadable(by: user) { flags.insert(.isReadable) }
         if sftpFile.isDirectory { flags.insert(.isDirectory) }
         if name.hasPrefix(".") { flags.insert(.isHidden) }
-        
+
         let fileType: String = flags.contains(.isDirectory) ? String(kUTTypeDirectory) : url.pathExtension
         let icon = flags.contains(.isDirectory) ? NSImage(named: NSImage.Name.folder)! : NSWorkspace.shared.icon(forFileType: fileType)
-        
-        self.init(url: url, name: name, icon: icon, flags: flags)
+
+        let fileSize = sftpFile.fileSize?.uint64Value ?? 0
+        self.init(url: url, name: name, icon: icon, flags: flags, fileSize: fileSize)
     }
-    
+
 }
 
 
