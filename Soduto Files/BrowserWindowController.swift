@@ -973,9 +973,9 @@ extension BrowserWindowController : NSCollectionViewDataSource {
         let fileItems = self.arrangedItems
         guard fileItems.count > indexPath.item else { assertionFailure("indexPath.item (\(indexPath.item)) out of arrangedItems bounds (0..<\(fileItems.count))."); return item }
         
-        iconItem.fileItem = fileItems[indexPath.item]
         iconItem.delegate = self
         iconItem.fileSystem = self.fileSystem
+        iconItem.fileItem = fileItems[indexPath.item]
         
         return item
     }

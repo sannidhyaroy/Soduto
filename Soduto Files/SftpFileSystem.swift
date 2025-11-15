@@ -419,6 +419,9 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 
             // -- Thumbnail Download Operation --
             // This block runs on a background thread from the thumbnailQueue.
+            defer {
+              Log.debug?.message("SftpFileSystem loadData: <<< Operation FINISHED for \(url.lastPathComponent) >>>")
+            }
 
             let memoryStream = OutputStream.toMemory()
             memoryStream.open()
@@ -428,24 +431,29 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
             
             // Lock Begin
             Log.debug?.message("SftpFileSystem loadData: Acquiring lock for \(url.lastPathComponent)...")
-            self.thumbnailSessionLock.lock()
-            Log.debug?.message("SftpFileSystem loadData: Lock acquired for \(url.lastPathComponent).")
+            do {
+                self.thumbnailSessionLock.lock()
+                Log.debug?.message("SftpFileSystem loadData: Lock acquired for \(url.lastPathComponent).")
 
-            if self.thumbnailSession.sftp.readFile(atPath: url.path, to: memoryStream) {
-                readSuccess = true
-                Log.debug?.message("SftpFileSystem loadData: Download success for \(url.lastPathComponent).")
-            } else {
-                operationError = self.thumbnailSession.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
-                Log.debug?.message("""
-                    SftpFileSystem loadData: Download failed for \(url.lastPathComponent):
-                        \(operationError?.localizedDescription ?? "Unknown SFTP error")
-                    """)
+                defer {
+                    self.thumbnailSessionLock.unlock()
+                    Log.debug?.message("SftpFileSystem loadData: Lock released (via defer) for \(url.lastPathComponent).")
+                }
+
+                if self.thumbnailSession.sftp.readFile(atPath: url.path, to: memoryStream) {
+                    readSuccess = true
+                    Log.debug?.message("SftpFileSystem loadData: Download success for \(url.lastPathComponent).")
+                } else {
+                    operationError = self.thumbnailSession.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
+                    Log.debug?.message("""
+                        SftpFileSystem loadData: Download failed for \(url.lastPathComponent):
+                            \(operationError?.localizedDescription ?? "Unknown SFTP error")
+                        """)
+                }
             }
 
-            self.thumbnailSessionLock.unlock()
-            Log.debug?.message("SftpFileSystem loadData: Lock released for \(url.lastPathComponent).")
             // Lock End
-            
+
             guard readSuccess else {
               let error = operationError!
                 memoryStream.close()
@@ -468,8 +476,6 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
                     Returning \(data.count) bytes for \(url.lastPathComponent).
                 """)
             DispatchQueue.main.async { completionHandler(data, nil) }
-
-            Log.debug?.message("SftpFileSystem loadData: <<< Operation FINISHED for \(url.lastPathComponent) >>>")
         }
     }
 }
