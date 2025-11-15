@@ -1208,7 +1208,19 @@ extension BrowserWindowController: NSCollectionViewDelegate {
      */
 //    @available(OSX 10.11, *)
 //    optional public func collectionView(_ collectionView: NSCollectionView, transitionLayoutForOldLayout fromLayout: NSCollectionViewLayout, newLayout toLayout: NSCollectionViewLayout) -> NSCollectionViewTransitionLayout
-    
+
+    /* Sent to notify the delegate that the CollectionView is no longer displaying the given NSCollectionViewItem instance.  This happens when the model changes, or when an item is scrolled out of view.
+     */
+    public func collectionView(_ collectionView: NSCollectionView, didEndDisplaying item: NSCollectionViewItem, forRepresentedObjectAt indexPath: IndexPath) {
+        // This item is no longer visible, cancel its thumbnail load.
+        guard let iconItem = item as? IconItem, let fileItem = iconItem.fileItem else {
+            return
+        }
+
+        // We can just ask to cancel. If no task is running, nothing will happen.
+        Log.debug?.message("BrowserWindowController: Did end displaying \(fileItem.name). Requesting cancel.")
+        (self.fileSystem as? SftpFileSystem)?.cancelLoad(for: fileItem.url)
+    }
 }
 
 

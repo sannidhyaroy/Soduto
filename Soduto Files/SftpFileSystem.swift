@@ -53,6 +53,11 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
     private let hostWithPort: String
     private let user: String
     private let password: String
+
+    // A dictionary to track ongoing and queued download operations by their URL.
+    private var downloadTasks: [URL: Operation] = [:]
+    // A lock to make the downloadTasks dictionary thread-safe.
+    private let downloadTasksLock = NSLock()
     
     // MARK: Setup / Cleanup
     
@@ -409,19 +414,31 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         assert(isUnderRoot(url), "URL (\(url)) is outside root tree (\(self.rootUrl)).")
 
         // This function is called by IconItem to fetch thumbnail data.
+
+        // Task Duplicate Check
+        downloadTasksLock.lock()
+        if downloadTasks[url] != nil {
+            downloadTasksLock.unlock()
+            Log.debug?.message("SftpFileSystem loadData: Download for \(url.lastPathComponent) is already queued. Skipping.")
+            // Do not call completionHandler, as the original request will handle it.
+            return
+        }
+        downloadTasksLock.unlock()
+
         Log.debug?.message("""
         SftpFileSystem loadData: Queuing download for \(url.lastPathComponent).
             Queue count: \(thumbnailQueue.operationCount)
         """)
 
-        thumbnailQueue.addOperation { [weak self] in
-            Log.debug?.message("SftpFileSystem loadData: <<< Operation STARTING for \(url.lastPathComponent) >>>")
+        let operation = BlockOperation()
 
-            guard let self = self else {
-                Log.debug?.message("SftpFileSystem loadData operation: self is nil. Request was for \(url.lastPathComponent).")
-                DispatchQueue.main.async { completionHandler(nil, SftpError.connectionFailed) } // Use a relevant error
+        operation.addExecutionBlock { [weak self, weak operation] in
+            // Check if self or operation are nil, or if operation was cancelled before starting
+            guard let self = self, let strongOperation = operation, !strongOperation.isCancelled else {
+                Log.debug?.message("SftpFileSystem loadData: Operation was nil or cancelled before starting for \(url.lastPathComponent).")
                 return
             }
+            Log.debug?.message("SftpFileSystem loadData: <<< Operation STARTING for \(url.lastPathComponent) >>>")
 
             var localSession: NMSSHSession?
             var operationError: Error?
@@ -444,20 +461,35 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 
                 // Download
                 Log.debug?.message("SftpFileSystem loadData: Download starting for \(url.lastPathComponent).")
-                if localSession!.sftp.readFile(atPath: url.path, to: memoryStream) {
+                if localSession!.sftp.readFile(atPath: url.path, to: memoryStream, progress: { _, _ in
+                    // Abort if a cancellation occurs
+                    return !strongOperation.isCancelled
+                }) {
                     readSuccess = true
                     Log.debug?.message("SftpFileSystem loadData: Download success for \(url.lastPathComponent).")
                 } else {
-                    operationError = localSession!.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
-                    Log.debug?.message("""
-                        SftpFileSystem loadData: Download failed for \(url.lastPathComponent):
-                            \(operationError?.localizedDescription ?? "Unknown SFTP error")
-                        """)
+                    if strongOperation.isCancelled {
+                      Log.debug?.message("SftpFileSystem loadData: Download cancelled in progress for \(url.lastPathComponent).")
+                    } else {
+                        operationError = localSession!.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
+                        Log.debug?.message("""
+                            SftpFileSystem loadData: Download failed for \(url.lastPathComponent):
+                                \(operationError?.localizedDescription ?? "Unknown SFTP error")
+                            """)
+                    }
                 }
             } catch {
-                // Session init failed
-                Log.debug?.message("SftpFileSystem loadData: Session init failed for \(url.lastPathComponent): \(error.localizedDescription)")
-                operationError = error
+                if !strongOperation.isCancelled {
+                  // Session init failed
+                  Log.debug?.message("SftpFileSystem loadData: Session init failed for \(url.lastPathComponent): \(error.localizedDescription)")
+                  operationError = error
+                }
+            }
+
+            // If cancelled, don't call completion handler
+            if strongOperation.isCancelled {
+                Log.debug?.message("SftpFileSystem loadData: Operation finished but was cancelled for \(url.lastPathComponent). No callback.")
+                return
             }
 
             // Completion Handler
@@ -480,6 +512,35 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
                     Returning \(data.count) bytes for \(url.lastPathComponent).
                 """)
             DispatchQueue.main.async { completionHandler(data, nil) }
+        }
+
+        operation.completionBlock = { [weak self] in
+            self?.downloadTasksLock.lock()
+            self?.downloadTasks.removeValue(forKey: url)
+            Log.debug?.message("SftpFileSystem: Removed task for \(url.lastPathComponent) from tracking. Remaining: \(self?.downloadTasks.count ?? 0)")
+            self?.downloadTasksLock.unlock()
+        }
+
+        // Add the operation to the tracking dictionary before queueing it.
+        downloadTasksLock.lock()
+        downloadTasks[url] = operation
+        downloadTasksLock.unlock()
+
+        thumbnailQueue.addOperation(operation)
+    }
+
+    /**
+     Cancels any queued or ongoing thumbnail download for the specified URL.
+     */
+    public func cancelLoad(for url: URL) {
+        downloadTasksLock.lock()
+        defer { downloadTasksLock.unlock() }
+
+        if let operation = downloadTasks[url] {
+            if !operation.isFinished && !operation.isCancelled {
+                operation.cancel()
+                Log.debug?.message("SftpFileSystem: Cancel request for \(url.lastPathComponent).")
+            }
         }
     }
 }

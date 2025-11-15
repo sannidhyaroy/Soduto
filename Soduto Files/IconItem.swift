@@ -29,6 +29,16 @@ public class IconItem: NSCollectionViewItem {
         didSet {
             guard isViewLoaded else { return }
 
+            // Cancel the request for the previous FileItem this cell represented.
+            if let oldUrl = oldValue?.url, oldUrl != fileItem?.url {
+                (self.fileSystem as? SftpFileSystem)?.cancelLoad(for: oldUrl)
+            }
+
+            // Cancel any pending request for this cell instance before assigning a new one.
+            if let pendingUrl = self.currentLoadingURL {
+                (self.fileSystem as? SftpFileSystem)?.cancelLoad(for: pendingUrl)
+            }
+
             // This property observer is the entry point for updating the cell's view.
             // When a new FileItem model is set, we reset the view state.
             Log.debug?.message("IconItem fileItem.didSet: \(fileItem?.name ?? "nil")")
