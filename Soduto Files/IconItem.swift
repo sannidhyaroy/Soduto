@@ -21,6 +21,7 @@ public class IconItem: NSCollectionViewItem {
     public weak var imageLoader: ImageLoader?
 
     private var currentLoadingURL: URL?
+    private var retryTimer: Timer?
     private let imageExtensions = ["jpg", "jpeg", "png", "heic", "gif", "bmp", "webp"]
     
     public var iconView: IconItemView? { return self.view as? IconItemView }
@@ -28,6 +29,9 @@ public class IconItem: NSCollectionViewItem {
     public var fileItem: FileItem? {
         didSet {
             guard isViewLoaded else { return }
+
+            retryTimer?.invalidate()
+            retryTimer = nil
 
             // Cancel the request for the previous FileItem this cell represented.
             if let oldUrl = oldValue?.url, oldUrl != fileItem?.url {
@@ -74,11 +78,15 @@ public class IconItem: NSCollectionViewItem {
         // Store the URL we are starting to load.
         self.currentLoadingURL = urlToLoad
 
+        // Invalidate any pending retry, as we are starting a new load.
+        retryTimer?.invalidate()
+        retryTimer = nil
+
         Log.debug?.message("IconItem loadThumbnail: Loading data for \(urlToLoad.lastPathComponent)")
 
         // Request the SftpFileSystem to load the raw data for the file URL.
         // This is an async operation.
-        imageLoader?.loadThumbnail(for: urlToLoad) { [weak self] (image) in
+        imageLoader?.loadThumbnail(for: urlToLoad) { [weak self] (image, error) in
             // This is the completion handler.
             // It runs on the main thread when the download/resize is finished or has failed.
 
@@ -108,14 +116,61 @@ public class IconItem: NSCollectionViewItem {
                 // Success: we got an NSImage.
                 Log.debug?.message("IconItem loadThumbnail success: Set thumbnail for \(urlToLoad.lastPathComponent)")
                 self.imageView?.image = image
+            } else if let error = error {
+                let isRetryable: Bool
+
+                if let imageLoaderError = error as? ImageLoaderError {
+                    switch imageLoaderError {
+                    case .downloadFailed:
+                        isRetryable = true
+                    case .resizeFailed:
+                        isRetryable = false
+                    }
+                } else {
+                  isRetryable = false
+                  Log.debug?.message("IconItem loadThumbnail: Received unknown error type. Not retrying.")
+                }
+
+                if isRetryable {
+                     Log.debug?.message("""
+                        IconItem loadThumbnail FAILED (Retryable) for \(urlToLoad.lastPathComponent). Scheduling retry.
+                        Error: \(error.localizedDescription)
+                        """)
+                    self.scheduleRetry(for: fileItem)
+                } else {
+                    Log.debug?.message("""
+                        IconItem loadThumbnail FAILED (Non-retryable) for \(urlToLoad.lastPathComponent).
+                        Error: \(error.localizedDescription)
+                        """)
+                }
             } else {
-                // Failure: not downloaded, broken data, or cancelled.
-              Log.debug?.message(
-                    "IconItem loadThumbnail failed (or cancelled) for \(urlToLoad.lastPathComponent)")
+                // Not Hard Failure: just a cancel. (image == nil && error == nil)
+                Log.debug?.message(
+                    "IconItem loadThumbnail cancelled for \(urlToLoad.lastPathComponent)")
             }
         }
     }
-    
+
+    /**
+     Schedules a retry attempt after a short delay.
+     */
+    private func scheduleRetry(for fileItem: FileItem) {
+        retryTimer?.invalidate() // Invalidate previous timer just in case
+
+        retryTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+
+            // Check if we *still* care about this item before retrying
+            guard self.fileItem?.url == fileItem.url else {
+                Log.debug?.message("IconItem: Retry timer fired, but cell was reused. Cancelling retry.")
+                return
+            }
+
+            Log.debug?.message("IconItem: Retry timer fired. Retrying load for \(fileItem.name).")
+            self.loadThumbnail(for: fileItem)
+        }
+    }
+
     public override var isSelected: Bool {
         didSet {
             guard self.isSelected != oldValue else { return }
@@ -138,6 +193,7 @@ public class IconItem: NSCollectionViewItem {
     // MARK: Setup / Cleanup
     
     deinit {
+        retryTimer?.invalidate()
         cancelEditing()
     }
     
