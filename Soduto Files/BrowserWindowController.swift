@@ -75,6 +75,7 @@ class BrowserWindowController: NSWindowController {
     private var freeSpace: Int64?
     
     public let fileSystem: FileSystem
+    public let imageLoader: ImageLoader
     public private(set) var url: URL
     private var backHistory: [URL] = []
     private var forwardHistory: [URL] = []
@@ -101,6 +102,10 @@ class BrowserWindowController: NSWindowController {
     
     init(fileSystem: FileSystem) {
         self.fileSystem = fileSystem
+        guard let sftpFs = fileSystem as? SftpFileSystem else {
+            fatalError("BrowserWindowController requires an SftpFileSystem to initialize ImageLoader.")
+        }
+        self.imageLoader = ImageLoader(fileSystem: sftpFs)
         self.url = fileSystem.defaultPlace.url
         
         super.init(window: nil)
@@ -974,7 +979,7 @@ extension BrowserWindowController : NSCollectionViewDataSource {
         guard fileItems.count > indexPath.item else { assertionFailure("indexPath.item (\(indexPath.item)) out of arrangedItems bounds (0..<\(fileItems.count))."); return item }
         
         iconItem.delegate = self
-        iconItem.fileSystem = self.fileSystem
+        iconItem.imageLoader = self.imageLoader
         iconItem.fileItem = fileItems[indexPath.item]
         
         return item
@@ -1219,7 +1224,7 @@ extension BrowserWindowController: NSCollectionViewDelegate {
 
         // We can just ask to cancel. If no task is running, nothing will happen.
         Log.debug?.message("BrowserWindowController: Did end displaying \(fileItem.name). Requesting cancel.")
-        (self.fileSystem as? SftpFileSystem)?.cancelLoad(for: fileItem.url)
+        self.imageLoader.cancelLoad(for: fileItem.url)
     }
 }
 

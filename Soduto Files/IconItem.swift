@@ -18,7 +18,7 @@ public class IconItem: NSCollectionViewItem {
     // MARK: Properties
     
     public weak var delegate: IconItemDelegate?
-    weak var fileSystem: FileSystem?
+    public weak var imageLoader: ImageLoader?
 
     private var currentLoadingURL: URL?
     private let imageExtensions = ["jpg", "jpeg", "png", "heic", "gif", "bmp", "webp"]
@@ -31,12 +31,12 @@ public class IconItem: NSCollectionViewItem {
 
             // Cancel the request for the previous FileItem this cell represented.
             if let oldUrl = oldValue?.url, oldUrl != fileItem?.url {
-                (self.fileSystem as? SftpFileSystem)?.cancelLoad(for: oldUrl)
+                imageLoader?.cancelLoad(for: oldUrl)
             }
 
             // Cancel any pending request for this cell instance before assigning a new one.
             if let pendingUrl = self.currentLoadingURL {
-                (self.fileSystem as? SftpFileSystem)?.cancelLoad(for: pendingUrl)
+                imageLoader?.cancelLoad(for: pendingUrl)
             }
 
             // This property observer is the entry point for updating the cell's view.
@@ -78,9 +78,9 @@ public class IconItem: NSCollectionViewItem {
 
         // Request the SftpFileSystem to load the raw data for the file URL.
         // This is an async operation.
-        (self.fileSystem as? SftpFileSystem)?.loadData(at: urlToLoad) { [weak self] (data, error) in
+        imageLoader?.loadThumbnail(for: urlToLoad) { [weak self] (image) in
             // This is the completion handler.
-            // It runs on the main thread when the download is finished or has failed.
+            // It runs on the main thread when the download/resize is finished or has failed.
 
             guard let self = self else {
                 // nill
@@ -104,21 +104,14 @@ public class IconItem: NSCollectionViewItem {
             // We have the correct data for the current cell. Clear the loading URL.
             self.currentLoadingURL = nil
 
-            if let data = data, let image = NSImage(data: data) {
+            if let image = image {
                 // Success: we got an NSImage.
                 Log.debug?.message("IconItem loadThumbnail success: Set thumbnail for \(urlToLoad.lastPathComponent)")
                 self.imageView?.image = image
             } else {
-                // Failure: not downloaded or broken data.
-                if let error = error {
-                    Log.debug?.message(
-                    "IconItem loadThumbnail failed for \(urlToLoad.lastPathComponent): \(error.localizedDescription)")
-                } else {
-                    Log.debug?.message("""
-                    IconItem loadThumbnail failed: Received data for \(urlToLoad.lastPathComponent),
-                        but it was not a valid image.
-                    """)
-                }
+                // Failure: not downloaded, broken data, or cancelled.
+              Log.debug?.message(
+                    "IconItem loadThumbnail failed (or cancelled) for \(urlToLoad.lastPathComponent)")
             }
         }
     }

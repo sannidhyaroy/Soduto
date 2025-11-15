@@ -425,17 +425,22 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         }
         downloadTasksLock.unlock()
 
-        Log.debug?.message("""
-        SftpFileSystem loadData: Queuing download for \(url.lastPathComponent).
-            Queue count: \(thumbnailQueue.operationCount)
-        """)
+        //Log.debug?.message("""
+        //SftpFileSystem loadData: Queuing download for \(url.lastPathComponent).
+        //    Queue count: \(thumbnailQueue.operationCount)
+        //""")
+
+        let opCount = thumbnailQueue.operationCount
+        Log.debug?.message(">>> QUEUEING operation for \(url.lastPathComponent). Current queue size: \(opCount)")
 
         let operation = BlockOperation()
 
         operation.addExecutionBlock { [weak self, weak operation] in
+            Log.debug?.message(">>> STARTING operation for \(url.lastPathComponent).")
             // Check if self or operation are nil, or if operation was cancelled before starting
             guard let self = self, let strongOperation = operation, !strongOperation.isCancelled else {
                 Log.debug?.message("SftpFileSystem loadData: Operation was nil or cancelled before starting for \(url.lastPathComponent).")
+                DispatchQueue.main.async { completionHandler(nil, nil) }
                 return
             }
             Log.debug?.message("SftpFileSystem loadData: <<< Operation STARTING for \(url.lastPathComponent) >>>")
@@ -486,23 +491,20 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
                 }
             }
 
-            // If cancelled, don't call completion handler
+            // Completion Handler
+
+            // Cancelled
             if strongOperation.isCancelled {
                 Log.debug?.message("SftpFileSystem loadData: Operation finished but was cancelled for \(url.lastPathComponent). No callback.")
+                DispatchQueue.main.async { completionHandler(nil, nil) }
                 return
             }
 
-            // Completion Handler
-            guard readSuccess else {
-                let error = operationError!
+            // Failure
+            guard readSuccess, let data = memoryStream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data else {
+                Log.debug?.message("SftpFileSystem loadData: Failed to get data for \(url.lastPathComponent).")
+                let error = operationError ?? SftpError.downloadingFileFailed(at: url)
                 DispatchQueue.main.async { completionHandler(nil, error) }
-                return
-            }
-
-            // Failed
-            guard let data = memoryStream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data else {
-                Log.debug?.message("Failed to extract data from memory stream for [\(url)] (Data was nil)")
-                DispatchQueue.main.async { completionHandler(nil, SftpError.downloadingFileFailed(at: url)) }
                 return
             }
 
