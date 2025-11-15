@@ -119,6 +119,8 @@ class BrowserWindowController: NSWindowController {
     public override func windowDidLoad() {
         super.windowDidLoad()
         
+        Log.debug?.message("===BrowserWindowController loaded===");
+        
         self.window?.delegate = self
         let autosaveNameID = self.fileSystem.name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
         self.window?.setFrameAutosaveName(NSWindow.FrameAutosaveName(rawValue: "com.soduto.SodutoBrowser.window-\(autosaveNameID)"))

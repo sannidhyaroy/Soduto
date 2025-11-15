@@ -399,53 +399,79 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 //        }
 //    }
 
-func loadData(at url: URL, completionHandler: @escaping ((Data?, Error?) -> Void)) {
-    assert(isUnderRoot(url), "URL (\(url)) is outside root tree (\(self.rootUrl)).")
+    func loadData(at url: URL, completionHandler: @escaping ((Data?, Error?) -> Void)) {
+        assert(isUnderRoot(url), "URL (\(url)) is outside root tree (\(self.rootUrl)).")
 
-    thumbnailQueue.addOperation { [weak self] in
-        guard let self = self else { return }
+        // This function is called by IconItem to fetch thumbnail data.
+        Log.debug?.message("""
+        SftpFileSystem loadData: Queuing download for \(url.lastPathComponent).
+            Queue count: \(thumbnailQueue.operationCount)
+        """)
 
-        let memoryStream = OutputStream.toMemory()
-        memoryStream.open()
-        
-        var readSuccess = false
-        var operationError: Error?
-        
-        // Lock Begin
-        self.thumbnailSessionLock.lock()
+        thumbnailQueue.addOperation { [weak self] in
+            Log.debug?.message("SftpFileSystem loadData: <<< Operation STARTING for \(url.lastPathComponent) >>>")
 
-        if self.thumbnailSession.sftp.readFile(atPath: url.path, to: memoryStream) {
-            readSuccess = true
-        } else {
-            operationError = self.thumbnailSession.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
-        }
+            guard let self = self else {
+                Log.debug?.message("SftpFileSystem loadData operation: self is nil. Request was for \(url.lastPathComponent).")
+                DispatchQueue.main.async { completionHandler(nil, SftpError.connectionFailed) } // Use a relevant error
+                return
+            }
 
-        self.thumbnailSessionLock.unlock()
-        // Lock End
-        
-        guard readSuccess else {
-          let error = operationError!
-            Log.error?.message("Failed to read file data from [\(url)]: \(error)")
+            // -- Thumbnail Download Operation --
+            // This block runs on a background thread from the thumbnailQueue.
+
+            let memoryStream = OutputStream.toMemory()
+            memoryStream.open()
+            
+            var readSuccess = false
+            var operationError: Error?
+            
+            // Lock Begin
+            Log.debug?.message("SftpFileSystem loadData: Acquiring lock for \(url.lastPathComponent)...")
+            self.thumbnailSessionLock.lock()
+            Log.debug?.message("SftpFileSystem loadData: Lock acquired for \(url.lastPathComponent).")
+
+            if self.thumbnailSession.sftp.readFile(atPath: url.path, to: memoryStream) {
+                readSuccess = true
+                Log.debug?.message("SftpFileSystem loadData: Download success for \(url.lastPathComponent).")
+            } else {
+                operationError = self.thumbnailSession.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
+                Log.debug?.message("""
+                    SftpFileSystem loadData: Download failed for \(url.lastPathComponent):
+                        \(operationError?.localizedDescription ?? "Unknown SFTP error")
+                    """)
+            }
+
+            self.thumbnailSessionLock.unlock()
+            Log.debug?.message("SftpFileSystem loadData: Lock released for \(url.lastPathComponent).")
+            // Lock End
+            
+            guard readSuccess else {
+              let error = operationError!
+                memoryStream.close()
+                DispatchQueue.main.async { completionHandler(nil, error) }
+              return
+            }
+
             memoryStream.close()
-            DispatchQueue.main.async { completionHandler(nil, error) }
-          return
+
+            // Failed
+            guard let data = memoryStream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data else {
+                Log.debug?.message("Failed to extract data from memory stream for [\(url)] (Data was nil)")
+                DispatchQueue.main.async { completionHandler(nil, SftpError.downloadingFileFailed(at: url)) }
+                return
+            }
+
+            // Success
+            Log.debug?.message("""
+                SftpFileSystem loadData: Download complete.
+                    Returning \(data.count) bytes for \(url.lastPathComponent).
+                """)
+            DispatchQueue.main.async { completionHandler(data, nil) }
+
+            Log.debug?.message("SftpFileSystem loadData: <<< Operation FINISHED for \(url.lastPathComponent) >>>")
         }
-
-        memoryStream.close()
-
-        // Failed
-        guard let data = memoryStream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data else {
-            Log.error?.message("Failed to extract data from memory stream for [\(url)]")
-            DispatchQueue.main.async { completionHandler(nil, SftpError.downloadingFileFailed(at: url)) }
-            return
-        }
-
-        // Success
-        DispatchQueue.main.async { completionHandler(data, nil) }
     }
-}
-
-
 }
 
 

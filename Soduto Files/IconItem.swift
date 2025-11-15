@@ -27,49 +27,87 @@ public class IconItem: NSCollectionViewItem {
     
     public var fileItem: FileItem? {
         didSet {
-          guard isViewLoaded else { return }
+            guard isViewLoaded else { return }
 
-          currentLoadingURL = nil
+            // This property observer is the entry point for updating the cell's view.
+            // When a new FileItem model is set, we reset the view state.
+            Log.debug?.message("IconItem fileItem.didSet: \(fileItem?.name ?? "nil")")
 
-          if let fileItem = self.fileItem, !fileItem.flags.contains(.isDeleted) {
-              self.imageView?.image = fileItem.icon
-              self.iconView?.label = fileItem.name
-              self.iconView?.isHiddenItem = fileItem.flags.contains(.isHidden)
-              self.iconView?.isBusy = fileItem.flags.contains(.isBusy)
+            // Clear any pending load operation for the previous item.
+            currentLoadingURL = nil
 
-              let ext = fileItem.url.pathExtension.lowercased()
-              if imageExtensions.contains(ext) {
-                  loadThumbnail(for: fileItem)
-              }
+            if let fileItem = self.fileItem, !fileItem.flags.contains(.isDeleted) {
+                // Set default icon and text immediately.
+                self.imageView?.image = fileItem.icon
+                self.iconView?.label = fileItem.name
+                self.iconView?.isHiddenItem = fileItem.flags.contains(.isHidden)
+                self.iconView?.isBusy = fileItem.flags.contains(.isBusy)
 
-          } else {
-              self.imageView?.image = nil
-              self.iconView?.label = ""
-              self.iconView?.isHiddenItem = false
-              self.iconView?.isBusy = false
-          }
-            
+                let ext = fileItem.url.pathExtension.lowercased()
+                if imageExtensions.contains(ext) {
+                    Log.debug?.message("IconItem: Requesting thumbnail for \(fileItem.name)")
+                    loadThumbnail(for: fileItem)
+                }
+
+            } else {
+                // The fileItem is nil or marked as deleted, clear the view.
+                self.imageView?.image = nil
+                self.iconView?.label = ""
+                self.iconView?.isHiddenItem = false
+                self.iconView?.isBusy = false
+            }
         }
     }
 
     private func loadThumbnail(for fileItem: FileItem) {
         let urlToLoad = fileItem.url
+        // Store the URL we are starting to load.
         self.currentLoadingURL = urlToLoad
 
-        (self.fileSystem as? SftpFileSystem)?.loadData(at: urlToLoad) { [weak self] (data, error) in
-            guard let self = self else { return }
+        Log.debug?.message("IconItem loadThumbnail: Loading data for \(urlToLoad.lastPathComponent)")
 
-            guard self.currentLoadingURL == urlToLoad else {
+        // Request the SftpFileSystem to load the raw data for the file URL.
+        // This is an async operation.
+        (self.fileSystem as? SftpFileSystem)?.loadData(at: urlToLoad) { [weak self] (data, error) in
+            // This is the completion handler.
+            // It runs on the main thread when the download is finished or has failed.
+
+            guard let self = self else {
+                // nill
+                Log.debug?.message("""
+                    IconItem loadThumbnail completion: self is nil.
+                        Request was for \(urlToLoad.lastPathComponent).
+                    """)
                 return
             }
 
+            guard self.currentLoadingURL == urlToLoad else {
+                // It's too late
+                Log.debug?.message("""
+                    IconItem loadThumbnail completion: Stale request. Call reused.
+                        Loaded \(urlToLoad.lastPathComponent) but current is 
+                            \(self.currentLoadingURL?.lastPathComponent ?? "nil").
+                    """)
+                return
+            }
+
+            // We have the correct data for the current cell. Clear the loading URL.
             self.currentLoadingURL = nil
 
             if let data = data, let image = NSImage(data: data) {
+                // Success: we got an NSImage.
+                Log.debug?.message("IconItem loadThumbnail success: Set thumbnail for \(urlToLoad.lastPathComponent)")
                 self.imageView?.image = image
             } else {
+                // Failure: not downloaded or broken data.
                 if let error = error {
-                     Log.info?.message("Failed to load thumbnail for \(urlToLoad.lastPathComponent): \(error.localizedDescription)")
+                    Log.debug?.message(
+                    "IconItem loadThumbnail failed for \(urlToLoad.lastPathComponent): \(error.localizedDescription)")
+                } else {
+                    Log.debug?.message("""
+                    IconItem loadThumbnail failed: Received data for \(urlToLoad.lastPathComponent),
+                        but it was not a valid image.
+                    """)
                 }
             }
         }
