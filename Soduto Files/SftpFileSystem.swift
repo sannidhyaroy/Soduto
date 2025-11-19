@@ -64,8 +64,8 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 
     // A dictionary to track ongoing and queued download operations by their URL.
     private var downloadTasks: [URL: Operation] = [:]
-    // A lock to make the downloadTasks dictionary thread-safe.
-    private let downloadTasksLock = NSLock()
+    private var downloadCompletionHandlers = [URL: [(Data?, Error?) -> Void]]()
+    private let downloadHandlersLock = NSLock()
     
     // MARK: Setup / Cleanup
     
@@ -291,25 +291,38 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         Log.debug?.message("Replacing dead session...")
         deadSession.disconnect()
 
-        var newSession: NMSSHSession?
-        do {
-            newSession = try type(of: self).initSession(host: self.hostWithPort, user: self.user, password: self.password)
-            Log.debug?.message("Dead session replaced successfully.")
-        } catch {
-            Log.debug?.message("Failed to create replacement session: \(error.localizedDescription)")
-        }
+        asynchronouslyRecreateAndAddSession()
+    }
 
-        // Add the new session to the pool (if we created one)
-        poolLock.lock()
-        if let session = newSession {
-            thumbnailSessionPool.append(session)
-        }
-        poolLock.unlock()
+    private func asynchronouslyRecreateAndAddSession() {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
 
-        // Always release the permit, even if replacement failed.
-        // This just means the pool size temporarily shrinks.
-        poolSemaphore.signal()
-        Log.debug?.message("Session replacement finished. Pool size: \(thumbnailSessionPool.count)")
+            let retryInterval: TimeInterval = 5.0
+
+            while true {
+                Log.debug?.message("Attempting to recreate a session...")
+                do {
+                    let newSession = try type(of: self).initSession(
+                        host: self.hostWithPort,
+                        user: self.user,
+                        password: self.password
+                    )
+
+                    Log.debug?.message("Session recreated successfully.")
+                    self.poolLock.lock()
+                    self.thumbnailSessionPool.append(newSession)
+                    self.poolLock.unlock()
+
+                    self.poolSemaphore.signal()
+
+                    break
+                } catch {
+                    Log.error?.message("Failed to recreate session: \(error.localizedDescription). Retrying in \(retryInterval)s...")
+                    Thread.sleep(forTimeInterval: retryInterval)
+                }
+            }
+        }
     }
 
     // MARK: Private stuff
@@ -505,28 +518,38 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         // This function is called by IconItem to fetch thumbnail data.
 
         // Task Duplicate Check
-        downloadTasksLock.lock()
+        downloadHandlersLock.lock()
+
+        downloadCompletionHandlers[url, default: []].append(completionHandler)
+
         if downloadTasks[url] != nil {
-            downloadTasksLock.unlock()
-            Log.debug?.message("SftpFileSystem loadData: Download for \(url.lastPathComponent) is already queued. Skipping.")
+            // Duplicated
+            downloadHandlersLock.unlock()
+            Log.debug?.message("SftpFileSystem loadData: Piggybacking request for \(url.lastPathComponent).")
             // Do not call completionHandler, as the original request will handle it.
             return
         }
-        downloadTasksLock.unlock()
 
+        // new request
         let opCount = thumbnailQueue.operationCount
         Log.debug?.message(">>> QUEUEING operation for \(url.lastPathComponent). Current queue size: \(opCount)")
 
         let operation = BlockOperation()
 
+        downloadTasks[url] = operation
+        downloadHandlersLock.unlock()
+
         operation.addExecutionBlock { [weak self, weak operation] in
             Log.debug?.message(">>> STARTING operation for \(url.lastPathComponent).")
-            // Check if self or operation are nil, or if operation was cancelled before starting
-            guard let self = self, let strongOperation = operation, !strongOperation.isCancelled else {
-                Log.debug?.message("SftpFileSystem loadData: Operation was nil or cancelled before starting for \(url.lastPathComponent).")
-                DispatchQueue.main.async { completionHandler(nil, nil) }
+
+            guard let self = self, let strongOperation = operation else { return }
+
+            if strongOperation.isCancelled {
+                Log.debug?.message("SftpFileSystem loadData: Operation was cancelled before starting for \(url.lastPathComponent).")
+                self.notifyAllHandlers(for: url, data: nil, error: nil)
                 return
             }
+
             Log.debug?.message("SftpFileSystem loadData: <<< Operation STARTING for \(url.lastPathComponent) >>>")
 
             // 1. Acquire a session from the pool
@@ -582,7 +605,7 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
             // Cancelled
             if strongOperation.isCancelled {
                 Log.debug?.message("SftpFileSystem loadData: Operation finished but was cancelled for \(url.lastPathComponent). No callback.")
-                DispatchQueue.main.async { completionHandler(nil, nil) }
+                self.notifyAllHandlers(for: url, data: nil, error: nil)
                 return
             }
 
@@ -603,26 +626,39 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         }
 
         operation.completionBlock = { [weak self] in
-            self?.downloadTasksLock.lock()
+            self?.downloadHandlersLock.lock()
             self?.downloadTasks.removeValue(forKey: url)
             Log.debug?.message("SftpFileSystem: Removed task for \(url.lastPathComponent) from tracking. Remaining: \(self?.downloadTasks.count ?? 0)")
-            self?.downloadTasksLock.unlock()
+            self?.downloadHandlersLock.unlock()
         }
 
-        // Add the operation to the tracking dictionary before queueing it.
-        downloadTasksLock.lock()
-        downloadTasks[url] = operation
-        downloadTasksLock.unlock()
-
         thumbnailQueue.addOperation(operation)
+    }
+
+    /**
+     Notifies all waiting completion handlers for a given URL.
+     This method is thread-safe.
+     */
+    private func notifyAllHandlers(for url: URL, data: Data?, error: Error?) {
+        downloadHandlersLock.lock()
+        // Get and REMOVE all handlers for this URL
+        let handlers = downloadCompletionHandlers.removeValue(forKey: url) ?? []
+        downloadHandlersLock.unlock()
+
+        Log.debug?.message("SftpFileSystem: Notifying \(handlers.count) handlers for \(url.lastPathComponent).")
+
+        // Call them back on the main thread
+        DispatchQueue.main.async {
+            handlers.forEach { $0(data, error) }
+        }
     }
 
     /**
      Cancels any queued or ongoing thumbnail download for the specified URL.
      */
     public func cancelLoad(for url: URL) {
-        downloadTasksLock.lock()
-        defer { downloadTasksLock.unlock() }
+        downloadHandlersLock.lock()
+        defer { downloadHandlersLock.unlock() }
 
         if let operation = downloadTasks[url] {
             if !operation.isFinished && !operation.isCancelled {
