@@ -64,8 +64,8 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 
     // A dictionary to track ongoing and queued download operations by their URL.
     private var downloadTasks: [URL: Operation] = [:]
-    private var downloadCompletionHandlers = [URL: [(Data?, Error?) -> Void]]()
-    private let downloadHandlersLock = NSLock()
+    // A lock to make the downloadTasks dictionary thread-safe.
+    private let downloadTasksLock = NSLock()
     
     // MARK: Setup / Cleanup
     
@@ -518,17 +518,15 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         // This function is called by IconItem to fetch thumbnail data.
 
         // Task Duplicate Check
-        downloadHandlersLock.lock()
-
-        downloadCompletionHandlers[url, default: []].append(completionHandler)
-
+        downloadTasksLock.lock()
         if downloadTasks[url] != nil {
             // Duplicated
-            downloadHandlersLock.unlock()
-            Log.debug?.message("SftpFileSystem loadData: Piggybacking request for \(url.lastPathComponent).")
+            downloadTasksLock.unlock()
+            Log.debug?.message("SftpFileSystem loadData: Download for \(url.lastPathComponent) is already queued. Skipping.")
             // Do not call completionHandler, as the original request will handle it.
             return
         }
+        downloadTasksLock.unlock()
 
         // new request
         let opCount = thumbnailQueue.operationCount
@@ -536,20 +534,14 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 
         let operation = BlockOperation()
 
-        downloadTasks[url] = operation
-        downloadHandlersLock.unlock()
-
         operation.addExecutionBlock { [weak self, weak operation] in
             Log.debug?.message(">>> STARTING operation for \(url.lastPathComponent).")
-
-            guard let self = self, let strongOperation = operation else { return }
-
-            if strongOperation.isCancelled {
-                Log.debug?.message("SftpFileSystem loadData: Operation was cancelled before starting for \(url.lastPathComponent).")
-                self.notifyAllHandlers(for: url, data: nil, error: nil)
+            // Check if self or operation are nil, or if operation was cancelled before starting
+            guard let self = self, let strongOperation = operation, !strongOperation.isCancelled else {
+                Log.debug?.message("SftpFileSystem loadData: Operation was nil or cancelled before starting for \(url.lastPathComponent).")
+                DispatchQueue.main.async { completionHandler(nil, nil) }
                 return
             }
-
             Log.debug?.message("SftpFileSystem loadData: <<< Operation STARTING for \(url.lastPathComponent) >>>")
 
             // 1. Acquire a session from the pool
@@ -605,7 +597,7 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
             // Cancelled
             if strongOperation.isCancelled {
                 Log.debug?.message("SftpFileSystem loadData: Operation finished but was cancelled for \(url.lastPathComponent). No callback.")
-                self.notifyAllHandlers(for: url, data: nil, error: nil)
+                DispatchQueue.main.async { completionHandler(nil, nil) }
                 return
             }
 
@@ -626,39 +618,26 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         }
 
         operation.completionBlock = { [weak self] in
-            self?.downloadHandlersLock.lock()
+            self?.downloadTasksLock.lock()
             self?.downloadTasks.removeValue(forKey: url)
             Log.debug?.message("SftpFileSystem: Removed task for \(url.lastPathComponent) from tracking. Remaining: \(self?.downloadTasks.count ?? 0)")
-            self?.downloadHandlersLock.unlock()
+            self?.downloadTasksLock.unlock()
         }
+
+        // Add the operation to the tracking dictionary before queueing it.
+        downloadTasksLock.lock()
+        downloadTasks[url] = operation
+        downloadTasksLock.unlock()
 
         thumbnailQueue.addOperation(operation)
-    }
-
-    /**
-     Notifies all waiting completion handlers for a given URL.
-     This method is thread-safe.
-     */
-    private func notifyAllHandlers(for url: URL, data: Data?, error: Error?) {
-        downloadHandlersLock.lock()
-        // Get and REMOVE all handlers for this URL
-        let handlers = downloadCompletionHandlers.removeValue(forKey: url) ?? []
-        downloadHandlersLock.unlock()
-
-        Log.debug?.message("SftpFileSystem: Notifying \(handlers.count) handlers for \(url.lastPathComponent).")
-
-        // Call them back on the main thread
-        DispatchQueue.main.async {
-            handlers.forEach { $0(data, error) }
-        }
     }
 
     /**
      Cancels any queued or ongoing thumbnail download for the specified URL.
      */
     public func cancelLoad(for url: URL) {
-        downloadHandlersLock.lock()
-        defer { downloadHandlersLock.unlock() }
+        downloadTasksLock.lock()
+        defer { downloadTasksLock.unlock() }
 
         if let operation = downloadTasks[url] {
             if !operation.isFinished && !operation.isCancelled {
