@@ -111,6 +111,11 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         }
         Log.debug?.message("Thumbnail session pool initialized with \(self.thumbnailSessionPool.count) sessions.")
     }
+
+    deinit {
+        Log.debug?.message("SftpFileSystem deinit: Cancelling all thumbnail operations.")
+        thumbnailQueue.cancelAllOperations()
+    }
     
     private static func initSession(host: String, user: String, password: String) throws -> NMSSHSession {
         guard let session = NMSSHSession.connect(toHost: host, withUsername: user) else { throw SftpError.connectionFailed }
