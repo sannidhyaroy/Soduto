@@ -1,6 +1,7 @@
 // ImageLoader.swift
 import Cocoa
 import CleanroomLogger
+import ImageIO
 
 public enum ImageLoaderError: Error {
     case downloadFailed(Error)
@@ -155,26 +156,24 @@ public class ImageLoader {
      This is a CPU-intensive operation and should be run on a background queue.
      */
     private func resizeImage(from data: Data, targetSize: CGSize) -> NSImage? {
-        guard let image = NSImage(data: data) else {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
             return nil
         }
-        
-        let newImage = NSImage(size: targetSize)
-        
-        newImage.lockFocus()
-        // Use a high-quality interpolation
-        NSGraphicsContext.current?.imageInterpolation = .high
-        
-        // Draw the original image into the new smaller rect
-        image.draw(
-            in: NSRect(origin: .zero, size: targetSize),
-            from: NSRect(origin: .zero, size: image.size),
-            operation: .sourceOver,
-            fraction: 1.0
-        )
-        
-        newImage.unlockFocus()
-        
-        return newImage
+
+        let maxPixelSize = max(targetSize.width, targetSize.height)
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
+
+        guard let thumbnailCGImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+
+        let width = CGFloat(thumbnailCGImage.width)
+        let height = CGFloat(thumbnailCGImage.height)
+
+        return NSImage(cgImage: thumbnailCGImage, size: NSSize(width: width, height: height))
     }
 }

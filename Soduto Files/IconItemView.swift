@@ -52,6 +52,7 @@ public class IconItemView: NSBox, NSTextFieldDelegate {
         self.iconView = iconView
         self.iconView.unregisterDraggedTypes()
         
+        self.iconView.imageScaling = .scaleProportionallyUpOrDown
         self.iconBackgroundView = iconBackgroundView
         self.iconBackgroundView.wantsLayer = true
         self.iconBackgroundView.layer?.cornerRadius = 3.0
