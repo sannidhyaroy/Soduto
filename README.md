@@ -1,3 +1,5 @@
+This is a fork of [the hottest Soduto fork](https://github.com/sidevesh/Soduto).<br>
+This version focuses on camera photo usage. The `nightly` branch implements thumbnail display, though it is currently a work in progress.
 <div align="center">
   <img src="Soduto/Assets.xcassets/AppIcon.appiconset/1024.png" alt="Soduto Logo" width="200"/>
   <h1 style="font-weight: 700; font-size: 4em; margin: 0; padding-top: 0;">Soduto</h1>
