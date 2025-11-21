@@ -668,8 +668,11 @@ extension FileItem {
         let fileType: String = flags.contains(.isDirectory) ? String(kUTTypeDirectory) : url.pathExtension
         let icon = flags.contains(.isDirectory) ? NSImage(named: NSImage.Name.folder)! : NSWorkspace.shared.icon(forFileType: fileType)
 
-        let fileSize = sftpFile.fileSize?.uint64Value ?? 0
-        self.init(url: url, name: name, icon: icon, flags: flags, fileSize: fileSize)
+        let fileSize = sftpFile.fileSize?.int64Value ?? 0
+
+        let modate = sftpFile.modificationDate
+
+        self.init(url: url, name: name, icon: icon, flags: flags, fileSize: fileSize, modate: modate)
     }
 
 }

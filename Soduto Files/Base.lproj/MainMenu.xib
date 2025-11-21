@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="21507" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24412" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
-        <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="21507"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24412"/>
     </dependencies>
     <objects>
         <customObject id="-2" userLabel="File's Owner" customClass="NSApplication">
@@ -12,7 +11,7 @@
         </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
-        <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="SodutoBrowser" customModuleProvider="target"/>
+        <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="Soduto_Files" customModuleProvider="target"/>
         <customObject id="YLy-65-1bz" customClass="NSFontManager"/>
         <menu title="Main Menu" systemMenu="main" id="AYu-sK-qS6">
             <items>
@@ -164,6 +163,50 @@ CA
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <menu key="submenu" title="Sort By" id="9q0-QF-k0C">
                                     <items>
+                                        <menuItem title="None" id="g9S-l1-rey">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="sortByNone:" target="-1" id="SVp-1H-5AJ"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Name" id="AkO-q6-PBY">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="sortByName:" target="-1" id="pla-Gy-W9q"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Size" id="8O9-kZ-gWx">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="sortBySize:" target="-1" id="adJ-fa-qJz"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Date" id="eNf-fV-7Wj">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="sortByDate:" target="-1" id="QtN-dk-2mH"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Extension" id="HWs-qG-nlQ">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="sortByExtension:" target="-1" id="7ea-yY-AYT"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem isSeparatorItem="YES" id="8Fz-kY-dYt"/>
+                                        <menuItem title="Ascending" id="kfN-Ag-Y9i">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="setSortOrderAscending:" target="-1" id="cDR-nI-n7V"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Descending" id="WcG-zN-4IL">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="setSortOrderDescending:" target="-1" id="RnW-Tg-bh1"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem isSeparatorItem="YES" id="EwW-oF-pvE"/>
                                         <menuItem title="Folders Always First" tag="2101" id="OvW-Xe-6Wv">
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>

@@ -22,6 +22,16 @@ class BrowserWindowController: NSWindowController {
         static let showHiddenFiles = "com.soduto.SodutoBrowser.showHiddenFiles"
         static let foldersAlwaysFirst = "com.soduto.SodutoBrowser.foldersAlwaysFirst"
         static let iconsSize = "com.soduto.SodutoBrowser.iconsSize"
+        static let sortKey = "com.soduto.SodutoBrowser.sortKey"
+        static let sortAscending = "com.soduto.SodutoBrowser.sortAscending"
+    }
+
+    enum SortKey: String {
+      case none = "none"
+      case name = "name"
+      case date = "date"
+      case size = "size"
+      case extType = "extType"
     }
     
     
@@ -52,6 +62,23 @@ class BrowserWindowController: NSWindowController {
             guard iconsSize != oldValue else { return }
             UserDefaults.standard.set(iconsSize, forKey: SettingKeys.iconsSize)
             updateIconsSize()
+        }
+    }
+
+    var sortKey: SortKey = {
+        let raw = BrowserWindowController.userDefaults.string(forKey: SettingKeys.sortKey) ?? SortKey.name.rawValue
+        return SortKey(rawValue: raw) ?? .name
+    }() {
+        didSet {
+            BrowserWindowController.userDefaults.set(sortKey.rawValue, forKey: SettingKeys.sortKey)
+            updateSorting()
+        }
+    }
+
+    var isAscending: Bool = BrowserWindowController.userDefaults.bool(forKey: SettingKeys.sortAscending) {
+        didSet {
+            BrowserWindowController.userDefaults.set(isAscending, forKey: SettingKeys.sortAscending)
+            updateSorting()
         }
     }
     
@@ -91,7 +118,9 @@ class BrowserWindowController: NSWindowController {
         UserDefaults.standard.register(defaults: [
             SettingKeys.showHiddenFiles: false,
             SettingKeys.foldersAlwaysFirst: true,
-            SettingKeys.iconsSize: 48
+            SettingKeys.iconsSize: 48,
+            SettingKeys.sortKey: SortKey.none.rawValue,
+            SettingKeys.sortAscending: true,
             ])
         
         return UserDefaults.standard
@@ -290,11 +319,33 @@ class BrowserWindowController: NSWindowController {
         if isFoldersAlwaysFirst {
             descriptors.append(NSSortDescriptor(key: "isDirectory", ascending: false))
         }
+
+        switch sortKey {
+        case .none:
+            break
+
+        case .name:
+            descriptors.append(NSSortDescriptor(key: "name", ascending: isAscending, selector: #selector(NSString.localizedCaseInsensitiveCompare(_:))))
+
+        case .date:
+            descriptors.append(NSSortDescriptor(key: "modate", ascending: isAscending))
+
+        case .size:
+            descriptors.append(NSSortDescriptor(key: "fileSize", ascending: isAscending))
+
+        case .extType:
+            descriptors.append(NSSortDescriptor(key: "ext", ascending: isAscending, selector: #selector(NSString.localizedCaseInsensitiveCompare(_:))))
+        }
+
+        if sortKey != .none && sortKey != .name {
+            descriptors.append(NSSortDescriptor(key: "name", ascending: true, selector: #selector(NSString.localizedCaseInsensitiveCompare(_:))))
+        }
+
         self.itemArrayController.sortDescriptors = descriptors
         self.collectionView.reloadData()
         updateStatusInfo()
     }
-    
+
     private func updateBusyItems() {
         guard !isLoadingContents else { return } // we dont want to add busy items suring loadin new content - only after it is loaded
         
@@ -810,7 +861,39 @@ class BrowserWindowController: NSWindowController {
     
     
     // MARK: Actions
-    
+
+    @IBAction func toggleSortOrder(_ sender: Any?) {
+        self.isAscending = !self.isAscending
+    }
+
+    @IBAction func setSortOrderAscending(_ sender: Any?) {
+        self.isAscending = true
+    }
+
+    @IBAction func setSortOrderDescending(_ sender: Any?) {
+        self.isAscending = false
+    }
+
+    @IBAction func sortByName(_ sender: Any?) {
+        self.sortKey = .name
+    }
+
+    @IBAction func sortByDate(_ sender: Any?) {
+        self.sortKey = .date
+    }
+
+    @IBAction func sortBySize(_ sender: Any?) {
+        self.sortKey = .size
+    }
+
+    @IBAction func sortByExtension(_ sender: Any?) {
+        self.sortKey = .extType
+    }
+
+    @IBAction func sortByNone(_ sender: Any?) {
+        self.sortKey = .none
+    }
+
     @objc func collectionItemViewLabelClick(_ sender: NSCollectionViewItem) {
         guard let item = sender as? IconItem else { return }
         guard self.collectionView.selectionIndexes.count == 1 else { return }
@@ -925,7 +1008,35 @@ class BrowserWindowController: NSWindowController {
         case AppDelegate.MenuItemTags.open: return self.canOpen
         default: break
         }
-        
+
+        if let action = menuItem.action {
+            switch action {
+            case #selector(sortByName(_:)):
+                menuItem.state = (self.sortKey == .name) ? .on : .off
+                return true
+            case #selector(sortByDate(_:)):
+                menuItem.state = (self.sortKey == .date) ? .on : .off
+                return true
+            case #selector(sortBySize(_:)):
+                menuItem.state = (self.sortKey == .size) ? .on : .off
+                return true
+            case #selector(sortByExtension(_:)):
+                menuItem.state = (self.sortKey == .extType) ? .on : .off
+                return true
+            case #selector(sortByNone(_:)):
+                menuItem.state = (self.sortKey == .none) ? .on : .off
+                return true
+            case #selector(setSortOrderAscending(_:)):
+                menuItem.state = self.isAscending ? .on : .off
+                return true
+            case #selector(setSortOrderDescending(_:)):
+                menuItem.state = !self.isAscending ? .on : .off
+                return true
+            default:
+                break
+            }
+        }
+
         guard let action = menuItem.action else { return super.validateMenuItem(menuItem) }
         switch action {
         case #selector(copy(_:)): return self.canWriteFileItems(at: self.collectionView.selectionIndexPaths, to: NSPasteboard.general)
