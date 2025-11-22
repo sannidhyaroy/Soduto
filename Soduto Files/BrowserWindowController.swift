@@ -72,6 +72,7 @@ class BrowserWindowController: NSWindowController {
         didSet {
             BrowserWindowController.userDefaults.set(sortKey.rawValue, forKey: SettingKeys.sortKey)
             updateSorting()
+            updateSortMenuState()
         }
     }
 
@@ -79,6 +80,7 @@ class BrowserWindowController: NSWindowController {
         didSet {
             BrowserWindowController.userDefaults.set(isAscending, forKey: SettingKeys.sortAscending)
             updateSorting()
+            updateSortMenuState()
         }
     }
     
@@ -88,6 +90,7 @@ class BrowserWindowController: NSWindowController {
     @IBOutlet weak var statusLabel: NSTextField!
     @IBOutlet weak var progressIndicator: NSProgressIndicator!
     @IBOutlet weak var pathControl: NSPathControl!
+    @IBOutlet weak var sortMenuButton: NSPopUpButton!
     
     @objc private var items: [FileItem] = [] {
         didSet {
@@ -169,6 +172,7 @@ class BrowserWindowController: NSWindowController {
         updateSorting()
         updateIconsSize()
         updateStatusInfo()
+        updateSortMenuState()
         
         goTo(self.fileSystem.defaultPlace.url, updateHistory: false)
     }
@@ -858,9 +862,54 @@ class BrowserWindowController: NSWindowController {
             openFile(fileItem)
         }
     }
-    
-    
+
+    private func updateSortMenuState() {
+        guard sortMenuButton != nil else { return }
+
+        for item in sortMenuButton.menu?.items ?? [] {
+            item.state = .off
+
+            switch item.tag {
+            case 0: if sortKey == .name { item.state = .on }
+            case 1: if sortKey == .date { item.state = .on }
+            case 2: if sortKey == .size { item.state = .on }
+            case 3: if sortKey == .extType { item.state = .on }
+            case 4: if sortKey == .none { item.state = .on }
+
+            case 10: if isAscending { item.state = .on }
+            case 11: if !isAscending { item.state = .on }
+
+            default: break
+            }
+        }
+    }
+
     // MARK: Actions
+
+    @IBAction func changeSortOption(_ sender: Any) {
+        let tag: Int
+        if let item = sender as? NSMenuItem {
+            tag = item.tag
+        }
+        else if let button = sender as? NSPopUpButton, let item = button.selectedItem {
+            tag = item.tag
+        }
+        else {
+            return
+        }
+        switch tag {
+        case 0: self.sortKey = .name
+        case 1: self.sortKey = .date
+        case 2: self.sortKey = .size
+        case 3: self.sortKey = .extType
+        case 4: self.sortKey = .none
+
+        case 10: self.isAscending = true
+        case 11: self.isAscending = false
+
+        default: break
+        }
+    }
 
     @IBAction func toggleSortOrder(_ sender: Any?) {
         self.isAscending = !self.isAscending
@@ -1052,7 +1101,7 @@ class BrowserWindowController: NSWindowController {
             view.setEnabled(self.canGoBack, forSegment: 0)
             view.setEnabled(self.canGoForward, forSegment: 1)
             return true
-        default: return false
+        default: return true
         }
     }
 }
