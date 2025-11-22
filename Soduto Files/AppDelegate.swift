@@ -25,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
         
         // View menu
         static let toggleHiddenFiles: Int = 2001
+        static let toggleThumbnails: Int = 2002
         static let foldersAlwaysFirst: Int = 2101
         
         // File menu

@@ -223,6 +223,12 @@ CA
                                     <action selector="toggleHiddenFiles:" target="-1" id="fjk-mj-wV3"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Show Thumbnails" tag="2002" id="PPr-r5-77l">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="toggleThumbnails:" target="-1" id="MB8-zC-ND5"/>
+                                </connections>
+                            </menuItem>
                         </items>
                     </menu>
                 </menuItem>

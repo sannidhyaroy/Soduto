@@ -19,6 +19,7 @@ public class IconItem: NSCollectionViewItem {
     
     public weak var delegate: IconItemDelegate?
     public weak var imageLoader: ImageLoader?
+    public var showThumbnails: Bool = true
 
     private var currentLoadingURL: URL?
     private var retryTimer: Timer?
@@ -61,6 +62,10 @@ public class IconItem: NSCollectionViewItem {
                 let ext = fileItem.url.pathExtension.lowercased()
 
                 // Check if thumbnails should be displayed
+
+                guard showThumbnails else {
+                  return
+                }
 
                 // 1. extension
                 guard imageExtensions.contains(ext) else {

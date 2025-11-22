@@ -24,6 +24,7 @@ class BrowserWindowController: NSWindowController {
         static let iconsSize = "com.soduto.SodutoBrowser.iconsSize"
         static let sortKey = "com.soduto.SodutoBrowser.sortKey"
         static let sortAscending = "com.soduto.SodutoBrowser.sortAscending"
+        static let showThumbnails = "com.soduto.SodutoBrowser.showThumbnails"
     }
 
     enum SortKey: String {
@@ -62,6 +63,14 @@ class BrowserWindowController: NSWindowController {
             guard iconsSize != oldValue else { return }
             UserDefaults.standard.set(iconsSize, forKey: SettingKeys.iconsSize)
             updateIconsSize()
+        }
+    }
+
+    public var isThumbnailsVisible: Bool = BrowserWindowController.userDefaults.bool(forKey: SettingKeys.showThumbnails) {
+      didSet {
+            guard isThumbnailsVisible != oldValue else { return }
+            UserDefaults.standard.set(isThumbnailsVisible, forKey: SettingKeys.showThumbnails)
+            self.collectionView.reloadData()
         }
     }
 
@@ -124,6 +133,7 @@ class BrowserWindowController: NSWindowController {
             SettingKeys.iconsSize: 48,
             SettingKeys.sortKey: SortKey.none.rawValue,
             SettingKeys.sortAscending: true,
+            SettingKeys.showThumbnails: true,
             ])
         
         return UserDefaults.standard
@@ -886,6 +896,10 @@ class BrowserWindowController: NSWindowController {
 
     // MARK: Actions
 
+    @IBAction func toggleThumbnails(_ sender: Any?) {
+        self.isThumbnailsVisible = !self.isThumbnailsVisible
+    }
+
     @IBAction func changeSortOption(_ sender: Any) {
         let tag: Int
         if let item = sender as? NSMenuItem {
@@ -1055,6 +1069,9 @@ class BrowserWindowController: NSWindowController {
         case AppDelegate.MenuItemTags.deleteFiles: return !self.collectionView.selectionIndexPaths.isEmpty
         case AppDelegate.MenuItemTags.newFolder: return true
         case AppDelegate.MenuItemTags.open: return self.canOpen
+        case AppDelegate.MenuItemTags.toggleThumbnails:
+            menuItem.state = self.isThumbnailsVisible ? .on : .off
+            return true
         default: break
         }
 
@@ -1140,6 +1157,7 @@ extension BrowserWindowController : NSCollectionViewDataSource {
         
         iconItem.delegate = self
         iconItem.imageLoader = self.imageLoader
+        iconItem.showThumbnails = self.isThumbnailsVisible
         iconItem.fileItem = fileItems[indexPath.item]
         
         return item
