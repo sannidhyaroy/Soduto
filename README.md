@@ -1,5 +1,3 @@
-This is a fork of [the hottest Soduto fork](https://github.com/sidevesh/Soduto).<br>
-This version focuses on camera photo usage. The `nightly` branch implements thumbnail display, though it is currently a work in progress.
 <div align="center">
   <img src="Soduto/Assets.xcassets/AppIcon.appiconset/1024.png" alt="Soduto Logo" width="200"/>
   <h1 style="font-weight: 700; font-size: 4em; margin: 0; padding-top: 0;">Soduto</h1>
@@ -44,53 +42,64 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 
 * Clone this repo and update submodules
 
-  `git clone && git submodule update --init`
+  ```bash
+  git clone && git submodule update --init
+  ```
 
 * Install [Carthage](https://github.com/Carthage/Carthage#installing-carthage):
 
-    `brew install carthage`
+  ```bash
+  brew install carthage
+  ```
     
 * Fetch and build frameworks using Carthage:
     
-    `XCODE_XCCONFIG_FILE="./carthage.xcconfig" carthage update --platform macOS --use-xcframeworks`
+  ```bash
+  XCODE_XCCONFIG_FILE="$(pwd)/carthage.xcconfig" carthage update --platform macOS --use-xcframeworks
+  ```
 
-* If build fails with error that looks something like this:
+>  [!NOTE]
+>  If there are errors similar to the following:
+>  ```
+>  *** Skipped downloading CleanroomLogger binary due to the error:
+>      "Bad credentials"
+>  *** Downloading binary-only framework Sparkle at "https://sparkle-project.org/Carthage/Sparkle.json"
+>  *** Skipped downloading CocoaAsyncSocket binary due to the error:
+>      "Bad credentials"
+>  *** Skipped downloading NMSSH binary due to the error:
+>      "Bad credentials"
+>  *** Skipped downloading Reachability.swift binary due to the error:
+>      "Bad credentials"
+>  ```
+>
+>  This is likely due to GitHub Rate Limits. You can create a [GitHub Token](https://github.com/settings/tokens) and export it as an environment variable:
+>  ```bash
+>  export GITHUB_ACCESS_TOKEN=<INSERT YOUR TOKEN HERE> // example: GITHUB_ACCESS_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+>  ```
+        
 
-    ```
-    Unable to open file '/Users/sidevesh/Projects/soduto/Carthage/Checkouts/CleanroomLogger/carthage.xcconfig' referenced by XCODE_XCCONFIG_FILE environment variable.
-    ```
-    
-    Then you need to copy the carthage.xcconfig file from the root of this repository to the the submodules that have been checked out. You can do this by running the following command in the root of this repository:
+>  [!TIP]
+>  If you get an error in Xcode that says:
+>
+>  `While building for macOS, no library for this platform was found in '/path/to/NMSSH.xcframework'.`
+>
+>  This means the NMSSH framework was built for iOS instead of macOS. To fix this, temporarily rename the Examples workspace and rebuild NMSSH:
+>
+>  ```bash
+>  mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak
+>  XCODE_XCCONFIG_FILE="./carthage.xcconfig" carthage build NMSSH --platform macOS --use-xcframeworks --no-use-binaries
+>  mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace
+>  ```
+
+* Compile universal openssl and libssh2 library using [iSSH2](https://github.com/sannidhyaroy/iSSH2):
 
     ```bash
-    find Carthage/Checkouts -name "*.xcodeproj" -exec dirname {} \; | xargs -I {} cp carthage.xcconfig {}/carthage.xcconfig
+    ./build_lib.sh
     ```
 
-* If you get an error in Xcode that says:
-
-    ```
-    While building for macOS, no library for this platform was found in '/path/to/NMSSH.xcframework'.
-    ```
-    
-    This means the NMSSH framework was built for iOS instead of macOS. To fix this, temporarily rename the Examples workspace and rebuild NMSSH:
-
-    ```bash
-    mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak
-    XCODE_XCCONFIG_FILE="./carthage.xcconfig" carthage build NMSSH --platform macOS --use-xcframeworks --no-use-binaries
-    mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace
-    ```
-
-* Compile universal openssl and libssh2 library using [iSSH2](https://github.com/sidevesh/iSSH2):
-
-    `./build_lib.sh`
-
-* Open project `Soduto.xcodeproj` with XCode
-* Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `App Groups` section, copy the `App Group key`.
-* Open the `SharedUserDefaults.swift` file & paste the key in the `suiteName` variable.
-
-    `static let suiteName = "<your key here>"`
-
-* Make sure you have the same `App Group key` for `Soduto Share`.
+* Open project `Soduto.xcodeproj` with XCode (select the Soduto Application in Xcode Project Navigator).
+* Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `Signing` section, ensure your appropriate `Team` is selected.
+* Make sure you have the same `App Group key` for `Soduto Share` and also verify that the same `Team` is selected for each target.
 * Build target `Soduto`
 
 ---
