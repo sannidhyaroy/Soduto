@@ -26,6 +26,8 @@
 		02EC48B51F229CCE00C9370F /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B41F229CCE00C9370F /* Configuration.swift */; };
 		02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
+		31711BA82F17435000E3B9FE /* MPRISService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BA72F17435000E3B9FE /* MPRISService.swift */; };
+		31711BAC2F17638000E3B9FE /* ImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BAB2F17638000E3B9FE /* ImageLoader.swift */; };
 		31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		319CBA282939662400DAE301 /* Phone.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA272939662400DAE301 /* Phone.png */; };
@@ -139,7 +141,6 @@
 		F826E6C92DB419AF00E736CE /* RunCommandsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6C82DB419AF00E736CE /* RunCommandsWindowController.swift */; };
 		F826E6CD2DB4F12500E736CE /* ModernUIStyleKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6CC2DB4F12500E736CE /* ModernUIStyleKit.swift */; };
 		F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */; };
-		F8B4FE5D2DDCE7D500D383C8 /* MPRISService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B4FE5C2DDCE7D500D383C8 /* MPRISService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -255,6 +256,8 @@
 		02EC48B41F229CCE00C9370F /* Configuration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Configuration.swift; path = Configuration/Configuration.swift; sourceTree = "<group>"; };
 		02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceConfiguration.swift; sourceTree = "<group>"; };
 		312E76FD2938A93F00F29BFA /* Messages.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messages.png; sourceTree = "<group>"; };
+		31711BA72F17435000E3B9FE /* MPRISService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MPRISService.swift; sourceTree = "<group>"; };
+		31711BAB2F17638000E3B9FE /* ImageLoader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImageLoader.swift; sourceTree = "<group>"; };
 		31864DCE293C3CE100334902 /* SharedUserDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUserDefaults.swift; sourceTree = SOURCE_ROOT; };
 		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
@@ -383,7 +386,6 @@
 		F826E6C82DB419AF00E736CE /* RunCommandsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCommandsWindowController.swift; sourceTree = "<group>"; };
 		F826E6CC2DB4F12500E736CE /* ModernUIStyleKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernUIStyleKit.swift; sourceTree = "<group>"; };
 		F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityReportService.swift; sourceTree = "<group>"; };
-		F8B4FE5C2DDCE7D500D383C8 /* MPRISService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MPRISService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -645,6 +647,7 @@
 				8499277E1E6C5CA600AF8CF4 /* IconItem.swift */,
 				8499277F1E6C5CA600AF8CF4 /* IconItem.xib */,
 				845BC7291E6A0CF100DC9B81 /* IconItemView.swift */,
+				31711BAB2F17638000E3B9FE /* ImageLoader.swift */,
 				845BC7131E69F00E00DC9B81 /* Info.plist */,
 				8440FD061E6CA6CA00E5BFA9 /* LocalFileSystem.swift */,
 				845BC7101E69F00E00DC9B81 /* MainMenu.xib */,
@@ -766,16 +769,16 @@
 		84FA45EB1DDF51EB00EF3992 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */,
-				F826E6C62DB302F000E736CE /* RunCommandService.swift */,
-				F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */,
-				F8B4FE5C2DDCE7D500D383C8 /* MPRISService.swift */,
 				84651A711E599A3C00D17601 /* BatteryService.swift */,
+				F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */,
 				840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */,
 				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
+				31711BA72F17435000E3B9FE /* MPRISService.swift */,
+				F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */,
 				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
 				84FA45EC1DDF525200EF3992 /* PingService.swift */,
 				842505E81ED1BD3C00AEE25F /* RemoteKeyboardService.swift */,
+				F826E6C62DB302F000E736CE /* RunCommandService.swift */,
 				84651A751E5AEBE100D17601 /* SftpService.swift */,
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
 				847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */,
@@ -1078,7 +1081,7 @@
 				F826E6C72DB302F000E736CE /* RunCommandService.swift in Sources */,
 				8456F4AA1D7DEA47006EFE19 /* DefaultPairingHandler.swift in Sources */,
 				8492379F1DE1C87600D95BBA /* ServiceActionMenuItem.swift in Sources */,
-				F8B4FE5D2DDCE7D500D383C8 /* MPRISService.swift in Sources */,
+				31711BA82F17435000E3B9FE /* MPRISService.swift in Sources */,
 				8436DEFA1E958ABA00529362 /* FileManager.swift in Sources */,
 				0225F6111F06E2380021BFE2 /* NSAttributedString.swift in Sources */,
 				843B670C1DF3087800289EC9 /* URL.swift in Sources */,
@@ -1122,6 +1125,7 @@
 			files = (
 				845BE2E71EC2476500F3BD62 /* HoverButton.swift in Sources */,
 				849927801E6C5CA600AF8CF4 /* IconItem.swift in Sources */,
+				31711BAC2F17638000E3B9FE /* ImageLoader.swift in Sources */,
 				84C545E01EABC14E005A8107 /* SftpFileSystem.swift in Sources */,
 				849927831E6C5CD600AF8CF4 /* FileItem.swift in Sources */,
 				84A16BE01E9EBADD00DE2C0B /* Sequence.swift in Sources */,
@@ -1256,8 +1260,8 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				CURRENT_PROJECT_VERSION = 23;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1296,8 +1300,8 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				CURRENT_PROJECT_VERSION = 23;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1444,7 +1448,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 23;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1485,7 +1489,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 23;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(LOCAL_LIBRARY_DIR)/Frameworks",
@@ -1522,7 +1526,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -1544,7 +1548,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = SodutoLauncher/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -1566,7 +1570,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = "Soduto Files/Info.plist";
@@ -1595,7 +1599,7 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = D492BH5DH9;
+				DEVELOPMENT_TEAM = P8CGT2P7HB;
 				FRAMEWORK_SEARCH_PATHS = "";
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = "Soduto Files/Info.plist";

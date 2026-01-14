@@ -44,5 +44,7 @@
 	<string>n0eebZ3Df6AWfesZYWLU1rD+dAsF2iHb6Kn/BXzdGa8=</string>
 	<key>SUFeedURL</key>
 	<string>https://soduto.thenoton.com/appcast.xml</string>
+	<key>TeamIdentifierPrefix</key>
+	<string>$(TeamIdentifierPrefix)</string>
 </dict>
 </plist>

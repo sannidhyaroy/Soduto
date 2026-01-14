@@ -9,7 +9,7 @@
 import Foundation
 
 struct SharedUserDefaults {
-    static let suiteName = "D492BH5DH9.com.soduto.Soduto"
+    static let suiteName = (Bundle.main.object(forInfoDictionaryKey: "TeamIdentifierPrefix") as? String ?? "") + "com.soduto.Soduto"
     static let preferencesSuite = "com.soduto.Soduto.Preferences.Keys"
     
     struct Keys {
