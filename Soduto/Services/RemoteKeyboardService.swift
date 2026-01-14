@@ -401,7 +401,7 @@ public class RemoteKeyboardService: Service {
                                    wheelCount: 2,
                                    wheel1: Int32(dy),
                                    wheel2: Int32(dx),
-                                   wheel3: 0,
+                                   wheel3: 0
         ) {
             scrollEvent.post(tap: .cghidEventTap)
         } else {
