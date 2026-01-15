@@ -21,7 +21,7 @@ class DeviceInfoWindowController: NSWindowController {
     @IBOutlet weak var remoteCertificateLabel: NSTextField?
     
     static func loadController() -> DeviceInfoWindowController {
-        return DeviceInfoWindowController(windowNibName: NSNib.Name(rawValue: "DeviceInfoWindow"))
+        return DeviceInfoWindowController(windowNibName: "DeviceInfoWindow")
     }
     
     deinit {

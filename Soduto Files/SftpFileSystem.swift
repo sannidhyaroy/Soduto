@@ -671,7 +671,7 @@ extension FileItem {
         if name.hasPrefix(".") { flags.insert(.isHidden) }
 
         let fileType: String = flags.contains(.isDirectory) ? String(kUTTypeDirectory) : url.pathExtension
-        let icon = flags.contains(.isDirectory) ? NSImage(named: NSImage.Name.folder)! : NSWorkspace.shared.icon(forFileType: fileType)
+        let icon = flags.contains(.isDirectory) ? NSWorkspace.shared.icon(forFileType: kUTTypeFolder as String) : NSWorkspace.shared.icon(forFileType: fileType)
 
         let fileSize = sftpFile.fileSize?.int64Value ?? 0
 

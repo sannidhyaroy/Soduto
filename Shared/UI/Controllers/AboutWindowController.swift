@@ -21,7 +21,7 @@ public class AboutWindowController: NSWindowController {
     
     public static func showAboutWindow() {
         if controller == nil {
-            let storyboard = NSStoryboard(name: NSStoryboard.Name(rawValue: "AboutWindow"), bundle: nil)
+            let storyboard = NSStoryboard(name: "AboutWindow", bundle: nil)
             controller = storyboard.instantiateInitialController() as? AboutWindowController
         }
         assert(controller != nil, "Could not load about window controller.")

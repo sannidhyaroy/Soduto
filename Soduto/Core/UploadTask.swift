@@ -94,7 +94,7 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
             return nil
         }
         
-        RunLoop.current.add(self.listenTimeoutTimer, forMode: .commonModes)
+        RunLoop.current.add(self.listenTimeoutTimer, forMode: RunLoop.Mode.common)
     }
     
     deinit {

@@ -21,20 +21,20 @@ extension NSAttributedString {
 
 extension NSMutableAttributedString {
     
-    public func applyDefaultAttributes(_ attributes: [NSAttributedStringKey:Any]) {
+    public func applyDefaultAttributes(_ attributes: [NSAttributedString.Key:Any]) {
         let origString = NSAttributedString(attributedString: self)
         let wholeRange = NSMakeRange(0, length)
         for attr in attributes {
             addAttribute(attr.key, value: attr.value, range: wholeRange)
         }
-        origString.enumerateAttribute(NSAttributedStringKey.font, in: wholeRange, options: []) { (value, range, _) in
+        origString.enumerateAttribute(NSAttributedString.Key.font, in: wholeRange, options: []) { (value, range, _) in
             guard let font = value as? NSFont else { return }
-            self.addAttribute(NSAttributedStringKey.font, value: font, range: range)
+            self.addAttribute(NSAttributedString.Key.font, value: font, range: range)
         }
     }
     
     public func applyDefaultFont(_ defaultFont: NSFont) {
-        applyDefaultAttributes([NSAttributedStringKey.font: defaultFont])
+        applyDefaultAttributes([NSAttributedString.Key.font: defaultFont])
     }
     
     public func replaceMarkdownWithLinks() {
@@ -47,11 +47,11 @@ extension NSMutableAttributedString {
             
             let linkText = source.substring(with: result.range(at: 1))
             let linkUrl = source.substring(with: result.range(at: 2))
-            let linkAttributes: [NSAttributedStringKey:Any]?
+            let linkAttributes: [NSAttributedString.Key:Any]?
             if let url = URL(string: linkUrl) {
                 linkAttributes = [
-                    NSAttributedStringKey.link: url,
-                    NSAttributedStringKey.foregroundColor: NSColor.keyboardFocusIndicatorColor
+                    NSAttributedString.Key.link: url,
+                    NSAttributedString.Key.foregroundColor: NSColor.keyboardFocusIndicatorColor
                 ]
             }
             else {

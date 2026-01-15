@@ -104,7 +104,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         }
         
         // A workaround for items dragged from dock stack - in such case performDragOperation is not called
-        if !dragOperationPerformed && self.statusBarItem.button?.frame.contains(sender.draggingLocation()) == true {
+        if !dragOperationPerformed && self.statusBarItem.button?.frame.contains(sender.draggingLocation) == true {
             _ = performDragOperation(sender)
         }
     }
@@ -221,8 +221,8 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
                 mainIcon.draw(in: rect)
 
                 let percentage = "\(batteryStatus.currentCharge)%" as NSString
-                let attr = [NSAttributedStringKey.font: NSFont.systemFont(ofSize: 10),
-                           NSAttributedStringKey.foregroundColor: NSColor.black,]
+                let attr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
+                            NSAttributedString.Key.foregroundColor: NSColor.black,]
                 percentage.draw(in: NSRect(x: currentX + 26, y: 2, width: 28, height: 10), withAttributes: attr)
                 
                 let fullWidth: CGFloat = 16
@@ -248,8 +248,8 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
                                     (networkType == "GSM" || networkType == "CDMA" || networkType == "iDEN" || networkType == "EDGE") ? "2G" : "")
                 
                 if !networkLabel.isEmpty {
-                    let netAttr = [NSAttributedStringKey.font: NSFont.systemFont(ofSize: 10),
-                                  NSAttributedStringKey.foregroundColor: NSColor.black,]
+                    let netAttr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
+                                   NSAttributedString.Key.foregroundColor: NSColor.black,]
                     (networkLabel as NSString).draw(in: NSRect(x: currentX, y: 2, width: 15, height: 10), withAttributes: netAttr)
                 }
                 
@@ -263,8 +263,8 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
                     }
                 } else {
                     // Draw X for no signal
-                    let noSignalAttr = [NSAttributedStringKey.font: NSFont.systemFont(ofSize: 10),
-                                      NSAttributedStringKey.foregroundColor: NSColor.black,]
+                    let noSignalAttr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
+                                        NSAttributedString.Key.foregroundColor: NSColor.black,]
                     ("X" as NSString).draw(in: NSRect(x: currentX + 16, y: 2, width: 10, height: 10), withAttributes: noSignalAttr)
                 }
             }

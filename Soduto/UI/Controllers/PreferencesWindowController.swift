@@ -24,7 +24,7 @@ public class PreferencesWindowController: NSWindowController {
     }
     
     static func loadController() -> PreferencesWindowController {
-        let storyboard = NSStoryboard(name: NSStoryboard.Name(rawValue: "PreferencesWindow"), bundle: nil)
+        let storyboard = NSStoryboard(name: "PreferencesWindow", bundle: nil)
         return storyboard.instantiateInitialController() as! PreferencesWindowController
     }
     

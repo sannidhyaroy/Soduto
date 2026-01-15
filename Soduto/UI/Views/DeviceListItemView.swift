@@ -24,13 +24,7 @@ public class DeviceListItemView: NSTableCellView {
         button.bezelStyle = .inline
         button.isBordered = false
         button.contentTintColor = NSColor.secondaryLabelColor
-        
-        if #available(macOS 11.0, *) {
-            button.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Info")
-        } else {
-            button.image = NSImage(named: NSImage.Name.info)
-        }
-        
+        button.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Info")
         button.imagePosition = .imageOnly
         button.target = self
         button.action = #selector(showDeviceInfo(_:))
@@ -138,13 +132,7 @@ public class DeviceListItemView: NSTableCellView {
         infoButton.bezelStyle = .inline
         infoButton.isBordered = false
         infoButton.contentTintColor = NSColor.secondaryLabelColor
-        
-        if #available(macOS 11.0, *) {
-            infoButton.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Info")
-        } else {
-            infoButton.image = NSImage(named: NSImage.Name.info)
-        }
-        
+        infoButton.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Info")
         infoButton.imagePosition = .imageOnly
         
         if let textField = self.textField {

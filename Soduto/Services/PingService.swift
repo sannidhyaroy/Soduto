@@ -126,7 +126,7 @@ public class PingService: Service {
                     
                     pingnotification.title = device.name
                     pingnotification.body = "Device was pinged for testing connection status!"
-                    pingnotification.sound = UNNotificationSound.default()
+                    pingnotification.sound = UNNotificationSound.default
                     
                     let id = "\(self.id).\(device.id)"
 //                    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)

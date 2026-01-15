@@ -142,7 +142,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     private func showWelcomeWindow() {
         guard self.config.knownDeviceConfigs().filter({ $0.isPaired }).isEmpty else { return }
         
-        let storyboard = NSStoryboard(name: NSStoryboard.Name(rawValue: "WelcomeWindow"), bundle: nil)
+        let storyboard = NSStoryboard(name: "WelcomeWindow", bundle: nil)
         guard let controller = storyboard.instantiateInitialController() as? WelcomeWindowController else { assertionFailure("Could not load welcome window controller."); return }
         
         NSApp.activate(ignoringOtherApps: true)
@@ -191,7 +191,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             do {
                 var isStale = false
                 let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-                ShareService().shareFile(url: url!, to: buttonTag)
+                ShareService().shareFile(url: url, to: buttonTag)
             } catch {
                 NotificationsService().ShowCustomNotification(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
             }

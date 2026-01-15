@@ -202,7 +202,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         guard self.validDevices.count > 0 else { return [] }
         
         let types: [String] = type(of: self).dragTypes.map { $0.rawValue }
-        let canRead: Bool = sender.draggingPasteboard().canReadItem(withDataConformingToTypes: types)
+        let canRead: Bool = sender.draggingPasteboard.canReadItem(withDataConformingToTypes: types)
         return canRead ? [.copy] : []
     }
     
@@ -214,7 +214,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         var textPackets: [DataPacket] = []
         
         let types = type(of: self).dragTypes
-        let items: [NSPasteboardItem] = sender.draggingPasteboard().pasteboardItems ?? []
+        let items: [NSPasteboardItem] = sender.draggingPasteboard.pasteboardItems ?? []
         for item in items {
             guard let type = item.availableType(from: types) else { continue }
             switch type.rawValue {
@@ -480,7 +480,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
                     let notification = UNMutableNotificationContent()
                     notification.title = title
                     notification.body = info
-                    notification.sound = UNNotificationSound.default()
+                    notification.sound = UNNotificationSound.default
                     if (self.notificationIconPath != nil) {
                         let notificationIconURL = URL(fileURLWithPath: self.notificationIconPath!)
                         do {
@@ -540,7 +540,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
                     if succeeded {
                         notification.body = info
                     }
-                    notification.sound = UNNotificationSound.default()
+                    notification.sound = UNNotificationSound.default
                     if (self.notificationIconPath != nil) {
                         let notificationIconURL = URL(fileURLWithPath: self.notificationIconPath!)
                         do {
@@ -615,7 +615,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
                     }
                     notification.title = title
                     notification.body = info
-                    notification.sound = UNNotificationSound.default()
+                    notification.sound = UNNotificationSound.default
                     if (self.notificationIconPath != nil) {
                         let notificationIconURL = URL(fileURLWithPath: self.notificationIconPath!)
                         do {
@@ -720,7 +720,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             menu.addItem(item)
         }
         
-        let position = sender.draggingDestinationWindow()?.frame.origin ?? NSEvent.mouseLocation
+        let position = sender.draggingDestinationWindow?.frame.origin ?? NSEvent.mouseLocation
         return menu.popUp(positioning: nil, at: position, in: nil)
     }
     

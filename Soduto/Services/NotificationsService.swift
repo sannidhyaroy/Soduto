@@ -272,7 +272,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     notification.title = title
                     notification.body = body
                     if sound {
-                        notification.sound = UNNotificationSound.default()
+                        notification.sound = UNNotificationSound.default
                     }
                     let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
                     self.un.add(request){ (error) in
@@ -472,7 +472,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                         
                         // Don't set notification sound if it's an answer to request packet or is a silent notification
                         if !dontPresent {
-                            notification.sound = UNNotificationSound.default()
+                            notification.sound = UNNotificationSound.default
                         }
                         
                         // Set Notification App Icon

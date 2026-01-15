@@ -250,7 +250,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                             }
                         }
                         
-                        notification.sound = UNNotificationSound.default()
+                        notification.sound = UNNotificationSound.default
                         notification.categoryIdentifier = "IncomingCall"
                         let id = notificationId
                         let mutecall = UNNotificationAction(identifier: "mutecall", title: "Mute call")
@@ -374,7 +374,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                         notification.userInfo = userInfo
                         notification.title = "SMS from  \(contactName) | \(device.name)"
                         notification.body = messageBody
-                        notification.sound = UNNotificationSound.default()
+                        notification.sound = UNNotificationSound.default
                         let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Messages"))
                         if (notificationIconPath != nil) {
                             let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)

@@ -715,7 +715,7 @@ class RunCommandsWindowController: NSWindowController, NSToolbarDelegate, NSWind
 // MARK: - NSTextFieldDelegate
 
 extension RunCommandsWindowController: NSTextFieldDelegate {
-    override func controlTextDidChange(_ obj: Notification) {
+    func controlTextDidChange(_ obj: Notification) {
         // This method can be used to implement real-time validation or UI updates
         // based on the text input changes
     }

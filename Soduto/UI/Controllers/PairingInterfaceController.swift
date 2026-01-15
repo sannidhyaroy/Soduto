@@ -50,7 +50,7 @@ public class PairingInterfaceController: UserNotificationActionHandler {
                     notification.userInfo = userInfo
                     notification.title = device.name
                     notification.body = "Do you want to pair this device?"
-                    notification.sound = UNNotificationSound.default()
+                    notification.sound = UNNotificationSound.default
                     notification.categoryIdentifier = "PairDevice"
                     let pair = UNNotificationAction(identifier: "pair", title: "Pair")
                     let decline = UNNotificationAction(identifier: "decline", title: "Decline")

@@ -44,7 +44,7 @@ class SendMessageWindowController: NSWindowController {
     
     
     static func loadController() -> SendMessageWindowController {
-        let controller = SendMessageWindowController(windowNibName: NSNib.Name(rawValue: "SendMessageWindow"))
+        let controller = SendMessageWindowController(windowNibName: "SendMessageWindow")
         
         // make sure window is loaded
         let _ = controller.window
@@ -91,11 +91,11 @@ class SendMessageWindowController: NSWindowController {
         }
     }
     
-    public override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    public func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         return true
     }
     
-    public override func controlTextDidChange(_ notification: Notification) {
+    public func controlTextDidChange(_ notification: Notification) {
         guard let view = notification.object as? NSView else { return }
         
         // To input

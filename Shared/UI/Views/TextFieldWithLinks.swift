@@ -64,8 +64,8 @@ public class TextFieldWithLinks: NSTextField {
                 paragraphStyle.lineSpacing = 1
             }
             string.applyDefaultAttributes([
-                NSAttributedStringKey.font: font,
-                NSAttributedStringKey.paragraphStyle: paragraphStyle
+                NSAttributedString.Key.font: font,
+                NSAttributedString.Key.paragraphStyle: paragraphStyle
             ])
         }
         
@@ -86,7 +86,7 @@ public class TextFieldWithLinks: NSTextField {
         let fullRange = NSMakeRange(0, string.length)
         var infos: [LinkInfo] = []
         
-        string.enumerateAttribute(NSAttributedStringKey.link, in: fullRange, options: []) { (value, range, stop) in
+        string.enumerateAttribute(NSAttributedString.Key.link, in: fullRange, options: []) { (value, range, stop) in
             guard let url = value as? NSURL else { return }
             
             var rects: [NSRect] = []
