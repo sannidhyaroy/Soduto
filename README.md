@@ -18,6 +18,9 @@
 - [Installation](#installation)
 - [Building](#building)
 - [Debugging](#debugging)
+- [Verifying Downloads](#verifying-downloads)
+  - [Signing Identity](#-signing-identity)
+  - [Verification Steps](#verification-steps)
 - [Limitations](#limitations)
 - [Workarounds](#workarounds)
 - [Get in touch](#get-in-touch)
@@ -115,6 +118,67 @@ Do note that currently there's no Homebrew formulae for my forked version and th
     `defaults write com.soduto.Soduto com.soduto.logLevel -int <level>`
     
     It is highly recommended to enable verbose logging levels only during debugging as sensitive data may be logged in plain text (like passwords copied into a clipboard).
+
+---
+## Verifying Downloads
+All releases published onwards `v2.0.0` in this repository are cryptographically signed.
+This allows you to verify that a downloaded release was published by the Soduto project and was not modified after publication.
+
+This step is **optional** and intended for users who want additional security guarantees.
+
+- The signing key is **not stored in this repository**.
+- The canonical source of truth for the signing key is the project domain.
+- The same key is discoverable automatically via standard OpenPGP mechanisms.
+- The DMG itself is not signed with GPG. Instead, the checksum file is signed to verify authenticity and integrity.
+- Sparkle handles update security separately.
+- Most users do not need to perform these steps, unless they wish to manually verify downloads.
+
+
+### 🔑 Signing Identity
+**Signed by**: _Soduto Releases (Soduto Release Signing Key)_ _`releases@soduto.thenoton.com`_
+
+**Key fingerprint:** _`4951 D786 1266 F77E A86D  2B3C D952 D26C 5D6D 9D22`_
+
+You can use the fingerprint above to manually verify that you have obtained the correct public key.
+
+### Verification steps:
+- The easiest way is to let GPG locate the key automatically.
+  ```bash
+  gpg --locate-keys releases@soduto.thenoton.com
+  ```
+
+  <details><summary>Not Working? 🥲</summary>
+
+  #### Try any of the following methods:
+
+  - Force **Web Key Directory (WKD)** (recommended):
+    ```bash
+    gpg --locate-keys --auto-key-locate wkd releases@soduto.thenoton.com
+    ```
+  - Force a **public keyserver lookup** (email-verified at [keys.openpgp.org](https://keys.openpgp.org)):
+    ```bash
+    gpg --locate-keys --keyserver hkps://keys.openpgp.org releases@soduto.thenoton.com
+    ```
+  - Final fallback - manual import:
+    ```bash
+    curl -o soduto-release-signing-key.asc https://raw.githubusercontent.com/sannidhyaroy/soduto-releases/refs/heads/main/.well-known/openpgpkey/hu/i4cdqgcarfjdjnba6y4jnf498asg8c6p
+    gpg --import soduto-release-signing-key.asc
+    ```
+
+  </details>
+- Download the [`.dmg`](https://github.com/sannidhyaroy/Soduto/releases/latest/download/Soduto.Nightly.dmg) file, the [`.dmg.sha256`](https://github.com/sannidhyaroy/Soduto/releases/latest/download/Soduto.Nightly.dmg.sha256) file and the [`.dmg.sha256.asc`](https://github.com/sannidhyaroy/Soduto/releases/latest/download/Soduto.Nightly.dmg.sha256.asc) file.
+- Open the directory where you downloaded the `.dmg` file, and run the following commands:
+  ```bash
+  gpg --verify Soduto-X.Y.Z.dmg.sha256.asc  # Enter correct path to the .dmg.sha256.asc file
+  shasum -a 256 -c Soduto-X.Y.Z.dmg.sha256  # Enter correct path to the .dmg.sha256 file
+  ```
+  Expected output includes:
+  ```
+  Good signature from "Soduto Releases <releases@soduto.example.org>"
+  ```
+  This confirms that:
+  - The checksum file (`.dmg.sha256`) was signed by the Soduto Release Signing Key.
+  - The downloaded `.dmg` matches the published SHA-256 checksum.
 
 ---
 ## Limitations
