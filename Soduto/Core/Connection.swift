@@ -16,7 +16,7 @@ public enum ConnectionError: Error {
     case IdentityAbsent
 }
 
-public protocol ConnectionDelegate: class {
+public protocol ConnectionDelegate: AnyObject {
     func connection(_ connection:Connection, didSwitchToState:Connection.State)
     func connection(_ connection:Connection, didSendPacket:DataPacket, uploadedPayload: Bool)
     func connection(_ connection:Connection, didReadPacket:DataPacket)
@@ -104,7 +104,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     private var pairingHandler: DefaultPairingHandler? = nil
     private var packetHandlers: [ConnectionDataPacketHandler] = []
     
-    static private let packetsDelimiter: Data = Data(bytes: [UInt8(ascii: "\n")])
+    static private let packetsDelimiter = Data("\n".utf8)
     
     
     // MARK: Initialization / Deinitialization
@@ -288,8 +288,8 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     public func socket(_ sock: GCDAsyncSocket, didWriteDataWithTag tag: Int) {
         Log.debug?.message("socket(<\(sock)> didWriteDataWithTag:<\(tag)>)")
         
-        assert(self.packetsSending.index(where: { Int($0.dataPacket.id) == tag }) != nil, "Data packet is not in the packetsSending list.")
-        guard let index = self.packetsSending.index(where: { Int($0.dataPacket.id) == tag }) else { return }
+        assert(self.packetsSending.firstIndex(where: { Int($0.dataPacket.id) == tag }) != nil, "Data packet is not in the packetsSending list.")
+        guard let index = self.packetsSending.firstIndex(where: { Int($0.dataPacket.id) == tag }) else { return }
         
         self.packetsSending[index].packetSent = true
         
@@ -353,8 +353,8 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
         Log.debug?.message("uploadTask(<\(task)> finishedWithSuccess:<\(payloadSent)>)")
         ShareService().showUploadFinishNotification(uploadTask: task, succeeded: payloadSent)
         
-        assert(self.packetsSending.index(where: { $0.uploadTask === task }) != nil, "Data packet is not in the packetsSending list.")
-        guard let index = self.packetsSending.index(where: { $0.uploadTask === task }) else { return }
+        assert(self.packetsSending.firstIndex(where: { $0.uploadTask === task }) != nil, "Data packet is not in the packetsSending list.")
+        guard let index = self.packetsSending.firstIndex(where: { $0.uploadTask === task }) else { return }
         
         self.packetsSending[index].payloadSent = true
         
@@ -479,7 +479,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
         Log.debug?.message("send(:\(packet) whenCompleted:\(String(describing: whenCompleted))) [\(self)]")
         
         if let bytes = try? packet.serialize() {
-            let data = Data(bytes: bytes)
+            let data = Data(bytes)
             self.socket.write(data, withTimeout: -1, tag: Int(packet.id))
             let info = DataPacketSendingInfo(dataPacket: packet, uploadTask: nil, completionHandler: whenCompleted)
             self.packetsSending.append(info)
@@ -504,7 +504,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
             uploadTask.delegate = self
             
             if let bytes = try? packet.serialize() {
-                let data = Data(bytes: bytes)
+                let data = Data(bytes)
                 self.socket.write(data, withTimeout: -1, tag: Int(packet.id))
                 let info = DataPacketSendingInfo(dataPacket: packet, uploadTask: uploadTask, completionHandler: whenCompleted)
                 self.packetsSending.append(info)

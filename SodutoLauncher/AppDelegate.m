@@ -20,7 +20,19 @@
     NSArray *pathComponents = [[[NSBundle mainBundle] bundlePath] pathComponents];
     pathComponents = [pathComponents subarrayWithRange:NSMakeRange(0, [pathComponents count] - 4)];
     NSString *path = [NSString pathWithComponents:pathComponents];
-    [[NSWorkspace sharedWorkspace] launchApplication:path];
+    NSURL *appURL = [NSURL fileURLWithPath:path];
+
+    NSWorkspaceOpenConfiguration *configuration = [NSWorkspaceOpenConfiguration configuration];
+    configuration.activates = YES;
+
+    [[NSWorkspace sharedWorkspace] openApplicationAtURL:appURL
+                                          configuration:configuration
+                                      completionHandler:^(NSRunningApplication * _Nullable app,
+                                                          NSError * _Nullable error) {
+        if (error) {
+            NSLog(@"Failed to launch main app: %@", error);
+        }
+    }];
 
 }
 

@@ -65,7 +65,7 @@ public class ConnectivityReportService: Service {
     public func cleanup(for device: Device) {
         self.statuses.removeValue(forKey: device.id)
         
-        if let index = self.devices.index(where: { $0.id == device.id }) {
+        if let index = self.devices.firstIndex(where: { $0.id == device.id }) {
             self.devices.remove(at: index)
         }
     }

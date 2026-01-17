@@ -123,31 +123,23 @@ public class IconItemView: NSBox, NSTextFieldDelegate {
     // MARK: Other
     
     private func updateStyle() {
-        self.iconBackgroundView.layer?.backgroundColor = self.isSelected || self.isEditing ? NSColor.secondarySelectedControlColor.cgColor : nil
-        self.labelView.layer?.backgroundColor = self.isSelected && !self.isEditing ? NSColor.alternateSelectedControlColor.cgColor : nil
-        self.labelView.textColor = self.isSelected && !self.isEditing ? NSColor.alternateSelectedControlTextColor : nil
-        
+        self.iconBackgroundView.layer?.backgroundColor = (self.isSelected || self.isEditing) ? NSColor.selectedContentBackgroundColor.cgColor : nil
+        self.labelView.layer?.backgroundColor = (self.isSelected && !self.isEditing) ? NSColor.selectedContentBackgroundColor.cgColor : nil
+        self.labelView.textColor = (self.isSelected && !self.isEditing) ? NSColor.alternateSelectedControlTextColor : nil
+
         if self.isBusy {
             self.iconView.alphaValue = 0.3
             self.iconView.contentFilters = [CIFilter(name: "CIPhotoEffectMono")!]
             self.labelView.alphaValue = 0.6
-        }
-        else if self.isHiddenItem {
+        } else if self.isHiddenItem {
             self.iconView.alphaValue = 0.5
             self.iconView.contentFilters = []
             self.labelView.alphaValue = 0.6
-        }
-        else {
+        } else {
             self.iconView.alphaValue = 1.0
             self.iconView.contentFilters = []
             self.labelView.alphaValue = 1.0
         }
-        
-        if self.isBusy {
-            self.overlayView.image = #imageLiteral(resourceName: "busyOverlayIcon")
-        }
-        else {
-            self.overlayView.image = nil
-        }
+        self.overlayView.image = self.isBusy ? #imageLiteral(resourceName: "busyOverlayIcon") : nil
     }
 }

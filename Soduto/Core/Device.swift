@@ -32,7 +32,7 @@ public enum DeviceError: Error {
 }
 
 /// Functionality for handling Device notifications.
-public protocol DeviceDelegate: class {
+public protocol DeviceDelegate: AnyObject {
     func device(_ device: Device, didChangePairingStatus pairingStatus: PairingStatus)
     func device(_ device: Device, didReceivePairingRequest pairingRequest: PairingRequest)
     func device(_ device: Device, didChangeReachabilityStatus isReachable: Bool)
@@ -40,7 +40,7 @@ public protocol DeviceDelegate: class {
 }
 
 /// Functionality for handling incoming data packets from devices.
-public protocol DeviceDataPacketHandler: class {
+public protocol DeviceDataPacketHandler: AnyObject {
     func handleDataPacket(_ dataPacket:DataPacket, fromDevice device:Device, onConnection connection:Connection) -> Bool
 }
 
@@ -157,7 +157,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         
         // remove connection of the same type if present
         // do it after new connection added to avoid unnecessary device state switches (especially to .Unavailable)
-        let index = self.connections.index { c in
+        let index = self.connections.firstIndex { c in
             guard c !== connection else { return false }
             return Swift.type(of: c) == Swift.type(of: connection)
         }
@@ -186,7 +186,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     /// Unregister data packet handler which was registered with such methods as 
     /// `addDataPacketHandler(_:)` or `addDataPacketHandlers(_:)`
     public func removeDataPacketHandler(_ handler: DeviceDataPacketHandler) {
-        let index = self.packetHandlers.index { $0 === handler }
+        let index = self.packetHandlers.firstIndex { $0 === handler }
         if index != nil {
             self.packetHandlers.remove(at: index!)
         }
@@ -236,12 +236,12 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
             // not the ones that have uploading in progress. However it is ok to remove connections with
             // uploads in progress as upload tasks and connections keep references to each other,
             // so connection will be alive until all uploads are finished and all completion handlers are executed
-            if let index = self.connections.index(of: connection) {
+            if let index = self.connections.firstIndex(of: connection) {
                 let connection = self.connections.remove(at: index)
                 self.reclaimUnsentPackets(from: connection)
                 self.updateReachabilityStatus()
             }
-            else if let index = self.lingeringConnections.index(of: connection) {
+            else if let index = self.lingeringConnections.firstIndex(of: connection) {
                 let connection = self.lingeringConnections.remove(at: index)
                 self.reclaimUnsentPackets(from: connection)
             }

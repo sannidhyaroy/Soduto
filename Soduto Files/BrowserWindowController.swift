@@ -11,7 +11,7 @@ import Cocoa
 import CleanroomLogger
 import UniformTypeIdentifiers
 
-protocol BrowserWindowControllerDelegate: class {
+protocol BrowserWindowControllerDelegate: AnyObject {
     func browserWindowWillClose(_ controller: BrowserWindowController)
 }
 
@@ -398,7 +398,7 @@ class BrowserWindowController: NSWindowController {
     }
     
     fileprivate func indexPath(for url: URL) -> IndexPath? {
-        guard let index =  self.arrangedItems.index(where: { $0.url == url }) else { return nil }
+        guard let index =  self.arrangedItems.firstIndex(where: { $0.url == url }) else { return nil }
         return IndexPath(indexes: [0, index])
     }
     
@@ -599,7 +599,7 @@ class BrowserWindowController: NSWindowController {
             
             let succeeded = !fileOperation.isCancelled && fileOperation.error == nil
             if succeeded {
-                if let indexPath = self.indexPath(for: srcUrl), let index = self.items.index(where: { $0.url == srcUrl }) {
+                if let indexPath = self.indexPath(for: srcUrl), let index = self.items.firstIndex(where: { $0.url == srcUrl }) {
                     self.resetBusyUrl(srcUrl, reload: false)
                     let newFileItem = FileItem(url: destUrl)
                     self.items[index] = newFileItem
@@ -684,7 +684,7 @@ class BrowserWindowController: NSWindowController {
             guard let destUrl = copyOperation.destination else { assertionFailure("Expected non-nil destination for rename operation (\(copyOperation))."); return }
             guard destUrl.isFileURL else { assertionFailure("Destination URL (\(destUrl)) expected to be a local file."); return }
             guard !destUrl.hasDirectoryPath else { assertionFailure("Destination URL (\(destUrl)) expected to be a simple file."); return }
-            NSWorkspace.shared.openFile(destUrl.path)
+            NSWorkspace.shared.open(destUrl)
         }
         completionOperation.addDependency(copyOperation)
         OperationQueue.main.addOperation(completionOperation)

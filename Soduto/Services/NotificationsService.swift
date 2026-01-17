@@ -183,7 +183,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
         Log.debug?.message("downloadTask(<\(task)> finishedWithSuccess:<\(success)>)")
         
-        guard let index = self.notificationIconDownloadInfos.index(where: { $0.task === task }) else { return }
+        guard let index = self.notificationIconDownloadInfos.firstIndex(where: { $0.task === task }) else { return }
         let info = self.notificationIconDownloadInfos.remove(at: index)
         if success {
             do {
@@ -316,7 +316,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         if (downloadFileHash != nil && cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!] != nil) {
             Log.debug?.message("Found cached icon for hash \(downloadFileHash!) at \(cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!)")
             do {
-                var copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!, notificationId: notificationId)
+                let copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!, notificationId: notificationId)
                 self.downloadedNotificationIconFileURLByNotificationId[notificationId] = copiedFromCacheFileURL
             }
             catch {}
@@ -393,7 +393,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
 
     private func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
-        var finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
+        let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
         for _ in 1...10000 {
             if !FileManager.default.fileExists(atPath: finalFileURL.path) {
                 do {
@@ -408,7 +408,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
 
     private func copyFileFromCache(url fileURL: URL, notificationId fileNotificationId: String) throws -> URL {
-        var finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileNotificationId).png")
+        let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileNotificationId).png")
         for _ in 1...10000 {
             if !FileManager.default.fileExists(atPath: finalFileURL.path) {
                 do {

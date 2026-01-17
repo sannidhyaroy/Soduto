@@ -405,10 +405,9 @@ class RunCommandsWindowController: NSWindowController, NSToolbarDelegate, NSWind
         stackView.layoutSubtreeIfNeeded()
         
         // Ensure the scrollview shows content from the top
-        if let documentView = scrollView.documentView {
-            scrollView.contentView.scroll(NSPoint(x: 0, y: 0))
-            scrollView.reflectScrolledClipView(scrollView.contentView)
-        }
+        guard scrollView.documentView != nil else { return }
+        scrollView.contentView.scroll(NSPoint(x: 0, y: 0))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
     
     private func createCommandItemView(command: RunCommandService.Command, index: Int) -> NSView {

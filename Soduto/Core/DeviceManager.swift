@@ -10,12 +10,12 @@ import Foundation
 import QuartzCore
 import CleanroomLogger
 
-public protocol DeviceManagerDelegate: class {
+public protocol DeviceManagerDelegate: AnyObject {
     func deviceManager(_ manager: DeviceManager, didChangeDeviceState device: Device)
     func deviceManager(_ manager: DeviceManager, didReceivePairingRequest request: PairingRequest, forDevice device: Device)
 }
 
-public protocol DeviceDataSource: class {
+public protocol DeviceDataSource: AnyObject {
     var unpairedDevices: [Device] { get }
     var pairedDevices: [Device] { get }
     var pairedRechableDevices: [Device] { get }

@@ -365,7 +365,7 @@ final class ContactPhoneNumber: NSObject {
                 guard contact.phoneNumbers.count > 0 else { return }
                 guard let contactFullName = CNContactFormatter.string(from: contact, style: .fullName) else { return }
                 guard contactFullName == fullName else { return }
-                guard let phoneIndex = contact.phoneNumbers.index(where: { (number: CNLabeledValue) -> Bool in
+                guard let phoneIndex = contact.phoneNumbers.firstIndex(where: { (number: CNLabeledValue) -> Bool in
                     return number.value.stringValue == phoneNumber
                 }) else { return }
                 contactMatch = contact

@@ -91,15 +91,15 @@ public class RemoteKeyboardService: Service {
         var alt = false
         
         if let shiftFlag = try? dataPacket.getShiftFlag() {
-            shift = shiftFlag ?? false
+            shift = shiftFlag
         }
         
         if let ctrlFlag = try? dataPacket.getCtrlFlag() {
-            ctrl = ctrlFlag ?? false
+            ctrl = ctrlFlag
         }
         
         if let altFlag = try? dataPacket.getAltFlag() {
-            alt = altFlag ?? false
+            alt = altFlag
         }
         
         let modifiers = KeyModifiers(shift: shift, control: ctrl, option: alt)

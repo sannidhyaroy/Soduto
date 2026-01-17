@@ -188,17 +188,18 @@ public class SftpService: NSObject, Service, NSWindowDelegate {
     }
     
     private func launchBrowser(for url: URL) {
-        do {
-            let appUrl = Bundle.main.bundleURL
-                .appendingPathComponent("Contents")
-                .appendingPathComponent("Helpers")
-                .appendingPathComponent("Soduto Files.app", isDirectory: false)
-            let files: [URL] = [url]
-            let options: NSWorkspace.LaunchOptions = NSWorkspace.LaunchOptions.default
-            _ = try NSWorkspace.shared.open(files, withApplicationAt: appUrl, options: options, configuration: [:])
-        }
-        catch {
-            Log.error?.message("Could not launch Soduto Files: \(error)")
+        let appURL = Bundle.main.bundleURL
+            .appendingPathComponent("Contents")
+            .appendingPathComponent("Helpers")
+            .appendingPathComponent("Soduto Files.app", isDirectory: false)
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+
+        NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
+            if let error = error {
+                Log.error?.message("Could not launch Soduto Files: \(error)")
+            }
         }
     }
 }

@@ -8,7 +8,7 @@
 
 import Foundation
 
-public protocol PairingHandlerDelegate: class {
+public protocol PairingHandlerDelegate: AnyObject {
     
     func send(_ packet: DataPacket) -> Bool
     

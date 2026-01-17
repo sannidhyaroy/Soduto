@@ -224,7 +224,7 @@ public class DeviceConfiguration: NSObject {
 }
 
 
-public protocol CapabilitiesDataSource: class {
+public protocol CapabilitiesDataSource: AnyObject {
     var incomingCapabilities: Set<Service.Capability> { get }
     var outgoingCapabilities: Set<Service.Capability> { get }
 }

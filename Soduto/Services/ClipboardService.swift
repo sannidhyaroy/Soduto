@@ -63,7 +63,7 @@ public class ClipboardService: Service {
     }
     
     public func cleanup(for device: Device) {
-        guard let index = self.devices.index(where: { $0.id == device.id }) else { return }
+        guard let index = self.devices.firstIndex(where: { $0.id == device.id }) else { return }
         
         self.devices.remove(at: index)
         

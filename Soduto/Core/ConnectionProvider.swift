@@ -16,7 +16,7 @@ enum ConnectionProviderError: Error {
     case IdentityAbsent
 }
 
-public protocol ConnectionProviderDelegate: class {
+public protocol ConnectionProviderDelegate: AnyObject {
     func isNewConnectionNeeded(byProvider provider: ConnectionProvider, deviceId: String) -> Bool
     func connectionProvider(_ provider: ConnectionProvider, didCreateConnection: Connection)
 }
@@ -137,7 +137,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
             ]
             let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
             if let bytes = try? packet.serialize() {
-                let data = Data(bytes: bytes)
+                let data = Data(bytes)
                 
                 var address = SocketAddress(ipv4: "255.255.255.255")!
                 address.port = ConnectionProvider.udpPort

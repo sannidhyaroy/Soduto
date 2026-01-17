@@ -114,7 +114,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
     // MARK: BrowserWindowControllerDelegate
     
     func browserWindowWillClose(_ controller: BrowserWindowController) {
-        guard let index = self.browserWindowControllers.index(of: controller) else { return }
+        guard let index = self.browserWindowControllers.firstIndex(of: controller) else { return }
         self.browserWindowControllers.remove(at: index)
     }
     

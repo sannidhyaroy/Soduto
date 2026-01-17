@@ -156,7 +156,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
         Log.debug?.message("downloadTask(<\(task)> finishedWithSuccess:<\(success)>)")
         
-        guard let index = self.downloadInfos.index(where: { $0.task === task }) else { return }
+        guard let index = self.downloadInfos.firstIndex(where: { $0.task === task }) else { return }
         let info = self.downloadInfos.remove(at: index)
         
         do {

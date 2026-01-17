@@ -21,7 +21,7 @@ public struct PairingRequest {
     
 }
 
-public protocol PairableDelegate: class {
+public protocol PairableDelegate: AnyObject {
     
     func pairable(_ pairable:Pairable, receivedRequest request:PairingRequest)
     func pairable(_ pairable:Pairable, failedWithError error:Error)
@@ -41,5 +41,5 @@ public protocol Pairable {
     func updatePairingStatus(globalStatus: PairingStatus)
 }
 
-public protocol PairableClass: class, Pairable {
+public protocol PairableClass: AnyObject, Pairable {
 }

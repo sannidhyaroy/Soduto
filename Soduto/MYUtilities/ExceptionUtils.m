@@ -182,7 +182,7 @@ BOOL IsGDBAttached( void )
 }
 
 
-void MYBreakpoint() {
+void MYBreakpoint(void) {
     pthread_kill(pthread_self(), SIGINT);
 }
 

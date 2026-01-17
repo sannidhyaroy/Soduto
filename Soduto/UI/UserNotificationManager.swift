@@ -22,7 +22,7 @@ public struct UserNotificationContext {
     }
 }
 
-public protocol UserNotificationActionHandler: class {
+public protocol UserNotificationActionHandler: AnyObject {
     
     static func handleAction(for notification: NSUserNotification, context: UserNotificationContext)
     

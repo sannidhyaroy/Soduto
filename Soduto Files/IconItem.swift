@@ -9,7 +9,7 @@
 import Cocoa
 import CleanroomLogger
 
-public protocol IconItemDelegate: class {
+public protocol IconItemDelegate: AnyObject {
     func iconItem(_ iconItem: IconItem, didChangeName: String)
 }
 

@@ -363,9 +363,7 @@ public class MacToRemoteInputService: Service {
             Log.warning?.message("Accessibility permissions not granted. Prompting user.")
             
             // Show an alert explaining why we need accessibility permissions
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                
+            DispatchQueue.main.async {
                 let alert = NSAlert()
                 alert.messageText = "Accessibility Permissions Required"
                 alert.informativeText = "To send keyboard and mouse input to remote devices, Soduto needs accessibility permissions. Please grant access in System Settings > Privacy & Security > Accessibility."
@@ -374,15 +372,10 @@ public class MacToRemoteInputService: Service {
                 
                 let response = alert.runModal()
                 if response == .alertFirstButtonReturn {
-                    // Open the accessibility preferences
-                    let prefPanePath = "/System/Library/PreferencePanes/Security.prefPane"
-                    
                     if #available(macOS 13.0, *) {
-                        // For macOS Ventura and later
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
                     } else {
-                        // For older macOS versions
-                        NSWorkspace.shared.open(URL(fileURLWithPath: prefPanePath))
+                        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Library/PreferencePanes/Security.prefPane"))
                     }
                 }
                 
@@ -1192,8 +1185,10 @@ public class MacToRemoteInputService: Service {
             }
             return nil
             
-        case .tabletProximity, .tabletPointer:
+        case .tabletPointer, .tabletProximity:
             // Handle tablet/touchpad events
+            // Block these tablet/touch events which could be gesture-related
+            Log.debug?.message("Blocked tablet event: \(eventType.rawValue)")
             return nil
             
         case .keyDown, .keyUp:
@@ -1231,12 +1226,6 @@ public class MacToRemoteInputService: Service {
             service.optionKeyPressed = optionPressed
             
             // Block all modifier keys during capture
-            return nil
-            
-        // Additional handling for tablet events that might be related to gestures
-        case .tabletPointer, .tabletProximity:
-            // Block these tablet/touch events which could be gesture-related
-            Log.debug?.message("Blocked tablet event: \(eventType.rawValue)")
             return nil
             
         default:

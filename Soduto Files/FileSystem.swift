@@ -66,7 +66,7 @@ class FileOperation: BlockOperation {
     }
 }
 
-protocol FileSystemDelegate: class {
+protocol FileSystemDelegate: AnyObject {
     
     func fileSystem(_ fileSystem: FileSystem, willAddFileAt url: URL, from fileOperation: FileOperation)
     func fileSystem(_ fileSystem: FileSystem, didAddFileAt url: URL, from fileOperation: FileOperation)
@@ -74,7 +74,7 @@ protocol FileSystemDelegate: class {
     
 }
 
-protocol FileSystem: class {
+protocol FileSystem: AnyObject {
     
     var delegate: FileSystemDelegate? { get set }
     

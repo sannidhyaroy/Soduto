@@ -88,12 +88,24 @@ public class AboutViewController: NSViewController {
     
     @IBAction func showLicenceAgreement(_ sender: Any?) {
         guard let path = licensePath else { return }
-        NSWorkspace.shared.openFile(path)
+        let url: URL
+        if #available(macOS 13.0, *) {
+            url = URL(filePath: path)
+        } else {
+            url = URL(fileURLWithPath: path)
+        }
+        NSWorkspace.shared.open(url)
     }
     
     @IBAction func showAcknowledgments(_ sender: Any?) {
         guard let path = acknowledgmentsPath else { return }
-        NSWorkspace.shared.openFile(path)
+        let url: URL
+        if #available(macOS 13.0, *) {
+            url = URL(filePath: path)
+        } else {
+            url = URL(fileURLWithPath: path)
+        }
+        NSWorkspace.shared.open(url)
     }
 }
 

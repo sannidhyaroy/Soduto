@@ -10,7 +10,7 @@ import Foundation
 import CocoaAsyncSocket
 import CleanroomLogger
 
-public protocol DownloadTaskDelegate: class {
+public protocol DownloadTaskDelegate: AnyObject {
     func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool)
 }
 

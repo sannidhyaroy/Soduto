@@ -79,7 +79,7 @@ static MYLoggingTo getLoggingMode( int fd )
 }
 
 
-static void InitLogging()
+static void InitLogging(void)
 {
     if( _gShouldLog != -1 )
         return;
