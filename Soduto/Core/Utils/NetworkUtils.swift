@@ -62,10 +62,7 @@ public struct NetworkUtils {
                 let ipAddressString = String(cString: inet_ntoa(sin_addr))
                 var hwAddressString: String? = nil
                 if sdl.pointee.sdl_alen > 0 {
-                    var sdlCopy = sdl.pointee
-                    let sdlCopyStart = UnsafeRawPointer(UnsafeMutablePointer(&sdlCopy))
-                    let sdlCopyDataStart = UnsafeRawPointer(UnsafeMutablePointer(&sdlCopy.sdl_data))
-                    let dataOffset = sdlCopyStart.distance(to: sdlCopyDataStart)
+                    let dataOffset = MemoryLayout<sockaddr_dl>.offset(of: \.sdl_data)!
                     let sdlDataPtr = UnsafeRawPointer(sdl).advanced(by: dataOffset).assumingMemoryBound(to: UInt8.self)
                     hwAddressString = String(format: "%x:%x:%x:%x:%x:%x",
                         sdlDataPtr.pointee,

@@ -163,9 +163,11 @@ public class DownloadTask: NSObject, GCDAsyncSocketDelegate {
                 bytesToWrite = data.count - batchBytesWritten
             }
             guard bytesToWrite > 0 else { break }
-            
-            let written = data.withUnsafeBytes { ptr in
-                return stream.write(ptr.advanced(by: batchBytesWritten), maxLength: bytesToWrite)
+
+            let written = data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) -> Int in
+                guard let baseAddress = buffer.baseAddress else { return 0 }
+                let ptr = baseAddress.advanced(by: batchBytesWritten)
+                return stream.write(ptr.assumingMemoryBound(to: UInt8.self), maxLength: bytesToWrite)
             }
             guard written > 0 else { continue }
             

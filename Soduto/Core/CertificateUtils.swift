@@ -154,8 +154,13 @@ public class CertificateUtils {
     public class func digest(for certificate: SecCertificate) -> [UInt8] {
         let data = SecCertificateCopyData(certificate) as Data
         var digest = [UInt8](repeating: 0, count:Int(CC_SHA1_DIGEST_LENGTH))
-        data.withUnsafeBytes {
-            _ = CC_SHA1($0, CC_LONG(data.count), &digest)
+        data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            guard let baseAddress = buffer.baseAddress else { return }
+            _ = CC_SHA1(
+                baseAddress.assumingMemoryBound(to: UInt8.self),
+                CC_LONG(data.count),
+                &digest
+            )
         }
         return digest
     }

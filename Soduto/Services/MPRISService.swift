@@ -39,7 +39,7 @@ import CommonCrypto
 /// - SetPosition (int): set position in ms
 /// - albumArtUrl (string): request album art for a URL
 ///
-public class MPRISService: Service, DownloadTaskDelegate {
+public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     
     let un = UNUserNotificationCenter.current()
     
@@ -614,16 +614,17 @@ public class MPRISService: Service, DownloadTaskDelegate {
     }
     
     private func getHashForAlbumArt(player: String, albumArtUrl: String) -> String? {
-        // Use MD5 hash like GSConnect for better cache compatibility
-        let inputString = albumArtUrl // GSConnect uses just the URL for hashing
-        guard let inputData = inputString.data(using: .utf8) else { return nil }
+        // KDE Connect / GSConnect compatibility:
+        // Album art cache keys are MD5 hashes of the album art URL.
+        // This is NOT used for security, only as a stable identifier.
         
-        var hash = [UInt8](repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
-        inputData.withUnsafeBytes { bytes in
-            CC_MD5(bytes.bindMemory(to: UInt8.self).baseAddress, CC_LONG(inputData.count), &hash)
+        guard let data = albumArtUrl.data(using: .utf8) else { return nil }
+        var digest = [UInt8](repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
+        data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            guard let baseAddress = buffer.baseAddress else { return }
+            CC_MD5(baseAddress.assumingMemoryBound(to: UInt8.self), CC_LONG(buffer.count), &digest)
         }
-        
-        return hash.map { String(format: "%02x", $0) }.joined()
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
     
     private func getCacheDirectory() -> URL {
@@ -659,7 +660,7 @@ public class MPRISService: Service, DownloadTaskDelegate {
             }
             
             // Try with a different filename
-            let randomSuffix = arc4random()
+            let randomSuffix = UUID().uuidString
             partFileURL = URL(fileURLWithPath: temporaryDirectory).appendingPathComponent("\(randomUuidForFileName).\(randomSuffix).part")
         }
         
@@ -677,7 +678,7 @@ public class MPRISService: Service, DownloadTaskDelegate {
                 return finalFileURL
             }
             
-            let random = arc4random()
+            let random = UUID().uuidString
             finalFileURL = partFileURL.deletingLastPathComponent().appendingPathComponent("\(fileName).\(random)")
         }
         
