@@ -202,14 +202,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     }
 }
 
+// MARK: - UNUserNotificationCenterDelegate
+
 extension AppDelegate: UNUserNotificationCenterDelegate {
     
+    /// Handles user actions on notifications by delegating to the UserNotificationManager.
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         // Use dynamic dispatch to handle the notification action
         userNotificationManager.handleAction(for: response)
         completionHandler()
     }
     
+    /// Determines how to present notifications when the app is in the foreground.
+    /// Notifications marked with `dontPresent` will be silently delivered.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         // Check if the notification should not be presented (silent/answer notifications)
         let userInfo = notification.request.content.userInfo

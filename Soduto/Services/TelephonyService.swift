@@ -139,6 +139,11 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     
     // MARK: UserNotificationActionHandler
     
+    /// Handles user responses to telephony notification actions.
+    ///
+    /// Supports the following actions:
+    /// - **Ringing**: Mutes the incoming call on the remote device
+    /// - **SMS**: Sends the user's reply text to the phone number
     public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
         guard let userInfo = response.notification.request.content.userInfo as [AnyHashable: Any]? else { return }
         guard let deviceId = userInfo[NotificationProperty.deviceId.rawValue] as? String else { return }

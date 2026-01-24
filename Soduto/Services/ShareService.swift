@@ -176,6 +176,9 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     
     // MARK: UserNotificationsActionHandler
     
+    /// Handles user responses to share/download notification actions.
+    ///
+    /// Opens the downloaded file when the user clicks the notification action.
     public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
         guard let urlString = response.notification.request.content.userInfo[NotificationProperty.downloadedFileUrl.rawValue] as? String else { return }
         guard let url = URL(string: urlString) else { return }

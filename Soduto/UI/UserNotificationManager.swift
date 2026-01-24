@@ -9,6 +9,7 @@
 import Foundation
 import UserNotifications
 
+/// Context object passed to notification action handlers, providing access to app services.
 public struct UserNotificationContext {
     
     public let config: Configuration
@@ -22,16 +23,30 @@ public struct UserNotificationContext {
     }
 }
 
+/// Protocol for services that handle user notification actions.
+/// Conforming types must implement a static method that handles the action response.
 public protocol UserNotificationActionHandler: AnyObject {
     
+    /// Handles the user's response to a notification action.
+    /// - Parameters:
+    ///   - notification: The notification response from the user.
+    ///   - context: The notification context providing access to app services.
     static func handleAction(for notification: UNNotificationResponse, context: UserNotificationContext)
     
 }
 
+/// Manages user notifications for Soduto, including authorization, category registration, and action dispatch.
+///
+/// This class handles:
+/// - Requesting notification authorization at app startup
+/// - Registering base notification categories (pairing, telephony, share)
+/// - Creating and caching dynamic notification categories for Android notifications
+/// - Dispatching notification actions to the appropriate handler classes
 public class UserNotificationManager: NSObject {
     
     // MARK: Types
     
+    /// Keys for storing notification-related data in userInfo dictionaries.
     public enum Property: String {
         case actionHandlerClass = "com.soduto.usernotificationmanager.actionhandlerclass"
         case dontPresent = "com.soduto.usernotificationmanager.dontPresent"
@@ -282,6 +297,10 @@ extension UNUserNotificationCenter {
     
     typealias NotificationId = String
     
+    /// Checks if a notification with the given identifier has been delivered.
+    /// - Parameters:
+    ///   - id: The notification identifier to check.
+    ///   - completion: Completion handler called with `true` if the notification exists.
     func containsDeliveredNotification(withId id: NotificationId, completion: @escaping (Bool) -> Void) {
         getDeliveredNotifications { notifications in
             let exists = notifications.contains { $0.request.identifier == id }
@@ -289,6 +308,8 @@ extension UNUserNotificationCenter {
         }
     }
     
+    /// Removes a notification (both pending and delivered) with the given identifier.
+    /// - Parameter id: The notification identifier to remove.
     func removeNotification(withId id: NotificationId) {
         removePendingNotificationRequests(withIdentifiers: [id])
         removeDeliveredNotifications(withIdentifiers: [id])

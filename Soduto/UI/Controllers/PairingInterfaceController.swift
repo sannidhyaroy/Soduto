@@ -9,10 +9,16 @@
 import Foundation
 import UserNotifications
 
+/// Handles the pairing notification UI and user responses.
 public class PairingInterfaceController: UserNotificationActionHandler {
     
     private static let deviceIdProperty = "com.soduto.pairinginterfacecontroller.deviceId"
     
+    /// Handles user responses to pairing notifications.
+    ///
+    /// Supports the following actions:
+    /// - **pair**: Accepts the pairing request from the device
+    /// - **decline**: Declines the pairing request from the device
     public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
         
         guard let deviceId = response.notification.request.content.userInfo[deviceIdProperty] as? Device.Id else {
@@ -29,6 +35,8 @@ public class PairingInterfaceController: UserNotificationActionHandler {
         }
     }
     
+    /// Shows a notification asking the user to pair with the specified device.
+    /// - Parameter device: The device requesting to be paired.
     public static func showPairingNotification(for device: Device) {
         let un = UNUserNotificationCenter.current()
         let notificationId = "com.soduto.pairinginterfacecontroller.device.\(device.id)"

@@ -203,6 +203,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     // MARK: UserNotificationActionHandler
     
+    /// Handles user responses to notification actions.
+    ///
+    /// Supports the following actions:
+    /// - **Dismiss**: Sends a cancel packet to the remote device if the notification is cancelable
+    /// - **Reply**: Sends the user's text reply to the remote device
+    /// - **Action1/2/3**: Sends the semantic action string stored in userInfo to trigger the remote action
     public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
         let userInfo = response.notification.request.content.userInfo
         guard let deviceId = userInfo[UserInfoProperty.deviceId.rawValue] as? String else { return }
