@@ -95,6 +95,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// Delivered notification ids grouped by device
     private var notificationIds: [Device.Id: Set<NotificationId>] = [:]
     
+    /// Tracks the last known content hash for each notification to detect true updates vs reconnection duplicates
+    /// Key: notificationId, Value: hash of body/ticker content
+    private var notificationContentHashes: [NotificationId: Int] = [:]
+    
     
     // MARK: Service methods
     
@@ -134,10 +138,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// TODO: Verify if existing notifications are send continuously, then comment out the codeblock inside this function.
     ///
     /// Duplicate alerts are prevented by:
-    /// - `isAnswer` flag: Android sets `requestAnswer: true` on response packets
     /// - `isAlreadyDisplayed` check: Notifications already in `notificationIds` are skipped entirely
-    ///   when `isAnswer` is true (reconnection scenario), preventing unnecessary refreshes when
-    ///   the device momentarily reconnects (e.g., WiFi change, charging starts)
+    ///   if their content hash is unchanged (reconnection scenario), preventing unnecessary refreshes when the
+    ///   device momentarily reconnects (e.g., WiFi change, charging starts)
     ///
     /// On app startup, `notificationIds` is empty, so we first repopulate it from the
     /// Notification Center's delivered notifications before requesting new ones.
@@ -159,11 +162,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     private func repopulateNotificationIds(for device: Device, completion: @escaping () -> Void) {
         // If we already have IDs for this device, skip repopulation
         if notificationIds[device.id] != nil && !notificationIds[device.id]!.isEmpty {
+            Log.debug?.message("Skipping repopulation for \(device.name) - already have \(notificationIds[device.id]!.count) IDs")
             completion()
             return
         }
         
         guard let deviceIdEncoded = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
+            Log.error?.message("Failed to encode device ID for \(device.name)")
             completion()
             return
         }
@@ -177,16 +182,21 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 return
             }
             
+            var matchCount = 0
             for notification in notifications {
                 let identifier = notification.request.identifier
                 // Check if this notification belongs to this service and device
                 if identifier.hasPrefix(prefix) {
                     self.addNotificationId(identifier, from: device)
+                    // Also restore the content hash so we can detect reconnection duplicates
+                    let body = notification.request.content.body
+                    self.notificationContentHashes[identifier] = body.hashValue
+                    matchCount += 1
                 }
             }
             
-            if let count = self.notificationIds[device.id]?.count, count > 0 {
-                Log.debug?.message("Repopulated \(count) notification IDs for device \(device.name) from Notification Center")
+            if matchCount > 0 {
+                Log.debug?.message("Repopulated \(matchCount) notification IDs for device \(device.name)")
             }
             
             completion()
@@ -199,6 +209,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         let devices = AppDelegate.shared().validDevices
         
         self.notificationIds.removeAll()
+        self.notificationContentHashes.removeAll()
         un.removeAllDeliveredNotifications()
         un.removeAllPendingNotificationRequests()
         
@@ -507,31 +518,43 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 return
             }
             
-            // Log successful notification processing
-            Log.debug?.message("Processing notification from \(appName): id=\(packetNotificationId), ticker=\(ticker.prefix(50))...")
-            
+            let title = try dataPacket.getTitle()
+            let body = try dataPacket.getText()            
             let replyId = try dataPacket.getReplyRequestId()
             let actions = try dataPacket.getActions()
             let isAnswer = try dataPacket.getAnswerFlag()
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
             let isAlreadyDisplayed = self.notificationIds[device.id]?.contains(notificationId) ?? false
-            /// If this is an answer packet (from setup/reconnection) and notification is already displayed,
-            /// skip the update entirely. This prevents unnecessary refreshes when device reconnects
-            /// (e.g., WiFi change, charging starts). Normal updates (non-answer) still go through.
-            if isAnswer && isAlreadyDisplayed {
-                Log.debug?.message("Skipping notification update for \(notificationId): already displayed and is answer packet (reconnection scenario)")
+            
+            // Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content)
+            let contentForHash = body ?? ticker
+            let currentContentHash = contentForHash.hashValue
+            let previousContentHash = self.notificationContentHashes[notificationId]
+            let isContentChanged = previousContentHash == nil || previousContentHash != currentContentHash
+            
+            // Update the stored content hash
+            self.notificationContentHashes[notificationId] = currentContentHash
+            
+            /// isReconnectionDuplicate: Same notification with same content arriving again (e.g., after network change)
+            /// This should be completely ignored - don't update Notification Center at all
+            let isReconnectionDuplicate = isAlreadyDisplayed && !isContentChanged
+            
+            // Skip reconnection duplicates entirely - no need to update Notification Center
+            if isReconnectionDuplicate {
+                Log.debug?.message("Notification skipped (reconnection duplicate): \(appName) - \(packetNotificationId)")
                 return
             }
-            /// dontPresent: Don't show banner/alert - notification updates silently in Notification Center
-            /// This applies to: answer packets (responses to our requests) and already-displayed notifications (updates)
-            let dontPresent = isAnswer || isAlreadyDisplayed
+            /// dontPresent: Don't show notification
+            /// This applies to: answer packets (responses to our requests)
+            let dontPresent = isAnswer
+            /// isStackUpdate: Notification exists but content changed (e.g., new WhatsApp message in same chat)
+            /// This should show banner + sound to alert user of new message
+            let isStackUpdate = isAlreadyDisplayed && isContentChanged
             /// shouldMute: Don't play sound - notification may still show banner
-            /// This applies to: silent notifications from Android, plus all dontPresent cases
-            let shouldMute = isSilent || dontPresent
+            /// Applies to: silent notifications from Android
+            let shouldMute = isSilent
             let hasReply = replyId != nil
-            
-            Log.debug?.message("Notification flags - isAnswer: \(isAnswer), isSilent: \(isSilent), isCancelable: \(isCancelable), hasReply: \(hasReply), isUpdate: \(isAlreadyDisplayed), dontPresent: \(dontPresent), shouldMute: \(shouldMute), actions: \(actions ?? [])")
 
             var notificationIconURL: URL? = nil
             if (self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
@@ -584,9 +607,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             notification.userInfo = userInfo
-            notification.title = device.name    // Set Notification Title
-            notification.subtitle = "\(appName)"  // Set Notification Subtitle
-            notification.body = ticker  // Set Notification Body
+            notification.title = "\(appName) | \(device.name)"
+            notification.subtitle = title ?? ""  // Sender name (e.g., contact) if available
+            notification.body = body ?? ticker   // Full message text, or ticker as fallback
             
             /// Get or create a category with actual action titles from the remote device
             /// Categories are cached by shape + titles for reuse across notifications
@@ -605,7 +628,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             /// Set interruption level based on notification type
             /// - passive: for silent/muted notifications (won't interrupt user)
             /// - active: for normal notifications (default behavior)
-            if dontPresent {
+            if shouldMute {
                 notification.setUrgency(.passive)
             } else {
                 notification.setUrgency(.active)
@@ -650,6 +673,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         UNUserNotificationCenter.current().removeNotification(withId: id)
         
         self.removeNotificationId(id, from: device)
+        self.notificationContentHashes.removeValue(forKey: id)
     }
     
     private func addNotificationId(_ id: NotificationId, from device: Device) {
@@ -728,7 +752,9 @@ fileprivate extension DataPacket {
         // notification info properties (from notification originating device)
         case id = "id"                       /// (string): A unique notification id.
         case appName = "appName"             /// (string): The app that generated the notification
-        case ticker = "ticker"               /// (string): The title or headline of the notification.
+        case title = "title"                 /// (string): The notification title (e.g., sender name in messaging apps)
+        case text = "text"                   /// (string): The full notification body text (may contain newlines for message history)
+        case ticker = "ticker"               /// (string): The notification summary
         case actions = "actions"             /// (string array): The available actions of the notification.
         case isClearable = "isClearable"     /// (boolean): True if we can request to dismiss the notification.
         case isCancel = "isCancel"           /// (boolean): True if the notification was dismissed in the peer device.
@@ -810,6 +836,7 @@ fileprivate extension DataPacket {
         return value
     }
     
+    /// Gets the notification ticker (a brief summary, e.g., "Sender: message")
     func getTicker() throws -> String? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.ticker.rawValue) else { return nil }
@@ -817,6 +844,25 @@ fileprivate extension DataPacket {
         return value
     }
     
+    /// Gets the notification title (e.g., sender name in messaging apps or headline in non-messaging apps)
+    func getTitle() throws -> String? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.title.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.title.rawValue] as? String else { return nil }
+        return value
+    }
+    
+    /// Gets the full notification body text (may contain newlines for message history)
+    func getText() throws -> String? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.text.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.text.rawValue] as? String else { return nil }
+        return value
+    }
+    
+    /// Gets the available actions of the notification.
+     /// - Returns: An array of action strings, or nil if no actions are present.
+     /// - Throws: `NotificationError.invalidActions` if the actions property is present but not in the expected format.
     func getActions() throws -> [String]? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.actions.rawValue) else { return nil }
