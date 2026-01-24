@@ -147,10 +147,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     public func setup(for device: Device) {
         guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
         
-        /// Repopulate notificationIds from delivered notifications before requesting new ones.
+        /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
+        /// then repopulate from delivered notifications to restore state after app restart.
         /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
-        repopulateNotificationIds(for: device) {
-            device.send(DataPacket.notificationRequestPacket())
+        reconcileNotificationState { [weak self] in
+            self?.repopulateNotificationIds(for: device) {
+                device.send(DataPacket.notificationRequestPacket())
+            }
         }
     }
     
@@ -196,8 +199,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         switch actionId {
         case .refresh:
-            device.send(DataPacket.notificationRequestPacket())
-            break
+            // Reconcile state first to clean up any notifications dismissed via macOS UI
+            reconcileNotificationState { [weak self] in
+                guard self != nil else { return }
+                device.send(DataPacket.notificationRequestPacket())
+            }
         }
     }
     
@@ -372,6 +378,48 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             
             if matchCount > 0 {
                 Log.debug?.message("Repopulated \(matchCount) notification IDs for device \(device.name)")
+            }
+            
+            completion()
+        }
+    }
+    
+    /// Reconciles the in-memory `notificationIds` and `notificationContentHashes` with what's actually
+    /// in the Notification Center. This handles the case where users dismissed notifications via
+    /// macOS's native UI (swipe, X button, or clearing from Notification Center) without using our
+    /// "Dismiss" action button.
+    ///
+    /// Call this at key moments like refresh or before requesting new notifications.
+    ///
+    /// - Parameter completion: Called after reconciliation is complete.
+    private func reconcileNotificationState(completion: @escaping () -> Void) {
+        let prefix = "\(self.id)."
+        
+        un.getDeliveredNotifications { [weak self] deliveredNotifications in
+            guard let self = self else {
+                completion()
+                return
+            }
+            
+            // Build a set of all notification IDs currently in Notification Center
+            let deliveredIds = Set(deliveredNotifications.map { $0.request.identifier })
+            
+            var removedCount = 0
+            
+            // For each device, remove any tracked IDs that are no longer delivered
+            for (deviceId, trackedIds) in self.notificationIds {
+                for trackedId in trackedIds {
+                    // Only check IDs that belong to this service
+                    if trackedId.hasPrefix(prefix) && !deliveredIds.contains(trackedId) {
+                        self.notificationIds[deviceId]?.remove(trackedId)
+                        self.notificationContentHashes.removeValue(forKey: trackedId)
+                        removedCount += 1
+                    }
+                }
+            }
+            
+            if removedCount > 0 {
+                Log.debug?.message("Reconciled notification state: removed \(removedCount) stale entries")
             }
             
             completion()
