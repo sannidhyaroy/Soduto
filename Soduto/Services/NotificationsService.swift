@@ -138,9 +138,59 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// - `isAlreadyDisplayed` check: Notifications already in `notificationIds` are skipped entirely
     ///   when `isAnswer` is true (reconnection scenario), preventing unnecessary refreshes when
     ///   the device momentarily reconnects (e.g., WiFi change, charging starts)
+    ///
+    /// On app startup, `notificationIds` is empty, so we first repopulate it from the
+    /// Notification Center's delivered notifications before requesting new ones.
     public func setup(for device: Device) {
         guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
-        device.send(DataPacket.notificationRequestPacket())
+        
+        /// Repopulate notificationIds from delivered notifications before requesting new ones.
+        /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
+        repopulateNotificationIds(for: device) {
+            device.send(DataPacket.notificationRequestPacket())
+        }
+    }
+    
+    /// Repopulates the `notificationIds` dictionary from the Notification Center's delivered notifications.
+    /// This is necessary because `notificationIds` is in-memory and lost on app restart.
+    /// - Parameters:
+    ///   - device: The device to repopulate notification IDs for.
+    ///   - completion: Called after repopulation is complete.
+    private func repopulateNotificationIds(for device: Device, completion: @escaping () -> Void) {
+        // If we already have IDs for this device, skip repopulation
+        if notificationIds[device.id] != nil && !notificationIds[device.id]!.isEmpty {
+            completion()
+            return
+        }
+        
+        guard let deviceIdEncoded = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
+            completion()
+            return
+        }
+        
+        // Build the prefix we use for this device's notifications
+        let prefix = "\(self.id).\(deviceIdEncoded)."
+        
+        un.getDeliveredNotifications { [weak self] notifications in
+            guard let self = self else {
+                completion()
+                return
+            }
+            
+            for notification in notifications {
+                let identifier = notification.request.identifier
+                // Check if this notification belongs to this service and device
+                if identifier.hasPrefix(prefix) {
+                    self.addNotificationId(identifier, from: device)
+                }
+            }
+            
+            if let count = self.notificationIds[device.id]?.count, count > 0 {
+                Log.debug?.message("Repopulated \(count) notification IDs for device \(device.name) from Notification Center")
+            }
+            
+            completion()
+        }
     }
     
     /// Requests all current notifications from all connected devices.
