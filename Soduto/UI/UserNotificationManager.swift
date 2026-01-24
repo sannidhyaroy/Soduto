@@ -83,6 +83,14 @@ public class UserNotificationManager: NSObject {
     
     private let context: UserNotificationContext
     
+    /// Cache for dynamically created categories, keyed by shape + action titles
+    /// This allows reuse of categories when the same action pattern appears again
+    /// Cache is empty on fresh app start (categories only persist for app lifetime)
+    private var categoryCache: [String: String] = [:]  // cacheKey -> categoryIdentifier
+    
+    /// Set of all registered category identifiers (base + dynamic)
+    private var registeredCategories = Set<UNNotificationCategory>()
+    
     
     // MARK: Init / Deinit
     
@@ -108,11 +116,9 @@ public class UserNotificationManager: NSObject {
     
     // MARK: Category Registration
     
-    /// Registers all shape-based notification categories. Called once at app startup.
-    /// Categories are based on "shape" (hasReply + actionCount), not semantic meaning.
+    /// Registers base notification categories. Called once at app startup.
+    /// Dynamic categories for incoming notifications are created on-demand and cached.
     private func registerNotificationCategories() {
-        var categories = Set<UNNotificationCategory>()
-        
         // Add pairing category
         let pairAction = UNNotificationAction(identifier: "pair", title: "Pair")
         let declineAction = UNNotificationAction(identifier: "decline", title: "Decline")
@@ -122,7 +128,7 @@ public class UserNotificationManager: NSObject {
             intentIdentifiers: [],
             options: []
         )
-        categories.insert(pairingCategory)
+        registeredCategories.insert(pairingCategory)
         
         // Add telephony categories
         let muteAction = UNNotificationAction(identifier: "mutecall", title: "Mute")
@@ -132,7 +138,7 @@ public class UserNotificationManager: NSObject {
             intentIdentifiers: [],
             options: []
         )
-        categories.insert(ringingCategory)
+        registeredCategories.insert(ringingCategory)
         
         let smsReplyAction = UNTextInputNotificationAction(
             identifier: "reply",
@@ -146,7 +152,7 @@ public class UserNotificationManager: NSObject {
             intentIdentifiers: [],
             options: []
         )
-        categories.insert(smsCategory)
+        registeredCategories.insert(smsCategory)
         
         // Add share download category
         let openFileAction = UNNotificationAction(identifier: "openfile", title: "Open")
@@ -156,77 +162,91 @@ public class UserNotificationManager: NSObject {
             intentIdentifiers: [],
             options: []
         )
-        categories.insert(shareCategory)
+        registeredCategories.insert(shareCategory)
         
-        // Generate all shape-based categories for incoming notifications
-        // These use positional action identifiers with generic titles
-        // (titles don't matter for categories - they're overridden per notification isn't possible,
-        // but the user sees them - so we use generic labels)
+        UNUserNotificationCenter.current().setNotificationCategories(registeredCategories)
+    }
+    
+    // MARK: Dynamic Category Management
+    
+    /// Gets or creates a notification category for the given shape and action titles.
+    /// Categories are cached by their full signature (shape + titles) for reuse.
+    /// - Parameters:
+    ///   - hasReply: Whether the notification should have a reply action
+    ///   - actionTitles: The titles of the custom action buttons (max 3)
+    /// - Returns: The category identifier to use for the notification
+    public func getOrCreateCategory(hasReply: Bool, actionTitles: [String]) -> String {
+        let clampedActions = Array(actionTitles.prefix(3))
         
-        let replyAction = UNTextInputNotificationAction(
-            identifier: ActionIdentifier.reply.rawValue,
-            title: "Reply",
-            textInputButtonTitle: "Send",
-            textInputPlaceholder: "Your message here..."
+        // Build cache key from shape + titles
+        let shape = CategoryIdentifier.category(hasReply: hasReply, actionCount: clampedActions.count).rawValue
+        let titlesKey = clampedActions.joined(separator: "|")
+        let cacheKey = "\(shape):\(titlesKey)"
+        
+        // Return cached category identifier if exists
+        if let cachedCategoryId = categoryCache[cacheKey] {
+            return cachedCategoryId
+        }
+        
+        // Create a unique category identifier using hash for shorter ID
+        let categoryId = "Dynamic.\(cacheKey.hashValue)"
+        
+        // Build actions array
+        var actions: [UNNotificationAction] = []
+        
+        // Add reply action if needed
+        if hasReply {
+            let replyAction = UNTextInputNotificationAction(
+                identifier: ActionIdentifier.reply.rawValue,
+                title: "Reply",
+                textInputButtonTitle: "Send",
+                textInputPlaceholder: "Your message here..."
+            )
+            actions.append(replyAction)
+        }
+        
+        // Add custom actions with actual titles from Android
+        if clampedActions.count >= 1 {
+            actions.append(UNNotificationAction(
+                identifier: ActionIdentifier.action1.rawValue,
+                title: clampedActions[0]
+            ))
+        }
+        if clampedActions.count >= 2 {
+            actions.append(UNNotificationAction(
+                identifier: ActionIdentifier.action2.rawValue,
+                title: clampedActions[1]
+            ))
+        }
+        if clampedActions.count >= 3 {
+            actions.append(UNNotificationAction(
+                identifier: ActionIdentifier.action3.rawValue,
+                title: clampedActions[2]
+            ))
+        }
+        
+        // Always add dismiss action
+        actions.append(UNNotificationAction(
+            identifier: ActionIdentifier.dismiss.rawValue,
+            title: "Dismiss"
+        ))
+        
+        // Create the category
+        let category = UNNotificationCategory(
+            identifier: categoryId,
+            actions: actions,
+            intentIdentifiers: [],
+            options: []
         )
-        let action1 = UNNotificationAction(identifier: ActionIdentifier.action1.rawValue, title: "Action 1")
-        let action2 = UNNotificationAction(identifier: ActionIdentifier.action2.rawValue, title: "Action 2")
-        let action3 = UNNotificationAction(identifier: ActionIdentifier.action3.rawValue, title: "Action 3")
-        let dismissAction = UNNotificationAction(identifier: ActionIdentifier.dismiss.rawValue, title: "Dismiss")
         
-        // NoReply categories
-        categories.insert(UNNotificationCategory(
-            identifier: CategoryIdentifier.noReply_0Actions.rawValue,
-            actions: [dismissAction],
-            intentIdentifiers: [],
-            options: []
-        ))
-        categories.insert(UNNotificationCategory(
-            identifier: CategoryIdentifier.noReply_1Action.rawValue,
-            actions: [action1, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        ))
-        categories.insert(UNNotificationCategory(
-            identifier: CategoryIdentifier.noReply_2Actions.rawValue,
-            actions: [action1, action2, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        ))
-        categories.insert(UNNotificationCategory(
-            identifier: CategoryIdentifier.noReply_3Actions.rawValue,
-            actions: [action1, action2, action3, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        ))
+        // Cache the category identifier
+        categoryCache[cacheKey] = categoryId
         
-        // Reply categories
-        categories.insert(UNNotificationCategory(
-            identifier: CategoryIdentifier.reply_0Actions.rawValue,
-            actions: [replyAction, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        ))
-        categories.insert(UNNotificationCategory(
-            identifier: CategoryIdentifier.reply_1Action.rawValue,
-            actions: [replyAction, action1, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        ))
-        categories.insert(UNNotificationCategory(
-            identifier: CategoryIdentifier.reply_2Actions.rawValue,
-            actions: [replyAction, action1, action2, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        ))
-        categories.insert(UNNotificationCategory(
-            identifier: CategoryIdentifier.reply_3Actions.rawValue,
-            actions: [replyAction, action1, action2, action3, dismissAction],
-            intentIdentifiers: [],
-            options: []
-        ))
+        // Add to registered categories and update the notification center
+        registeredCategories.insert(category)
+        UNUserNotificationCenter.current().setNotificationCategories(registeredCategories)
         
-        UNUserNotificationCenter.current().setNotificationCategories(categories)
+        return categoryId
     }
     
     // MARK: Action Handlers

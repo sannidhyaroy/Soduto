@@ -469,9 +469,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             notification.subtitle = "\(device.name)"
             notification.body = ticker  // Set Notification Body
             
-            // Select category based on shape (hasReply + actionCount)
-            let category = UserNotificationManager.CategoryIdentifier.category(hasReply: hasReply, actionCount: actionCount)
-            notification.categoryIdentifier = category.rawValue
+            // Get or create a category with actual action titles from the remote device
+            // Categories are cached by shape + titles for reuse across notifications
+            let actionTitles = Array(filteredActions.prefix(3))
+            let categoryId = AppDelegate.shared().userNotificationManager.getOrCreateCategory(
+                hasReply: hasReply,
+                actionTitles: actionTitles
+            )
+            notification.categoryIdentifier = categoryId
             
             // Don't set notification sound if it's an answer to request packet or is a silent notification
             if !dontPresent {
