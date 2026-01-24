@@ -493,8 +493,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             notification.userInfo = userInfo
-            notification.title = "\(appName)"  // Set Notification Title
-            notification.subtitle = "\(device.name)"
+            notification.title = device.name
+            notification.subtitle = "\(appName)"  // Set Notification Subtitle
             notification.body = ticker  // Set Notification Body
             
             // Get or create a category with actual action titles from the remote device

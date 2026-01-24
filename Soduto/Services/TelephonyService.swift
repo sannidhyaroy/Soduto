@@ -225,8 +225,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 NotificationProperty.event.rawValue: DataPacket.TelephonyEvent.ringing.rawValue,
                 UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(TelephonyService.self)
             ]
-            notification.title = "Incoming call from \(contactName)"
-            notification.subtitle = device.name
+            notification.title = device.name
+            notification.subtitle = "Incoming call from \(contactName)"
             
             if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
                 let notificationIconURL = URL(fileURLWithPath: iconPath)
@@ -265,8 +265,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             let contactName = try dataPacket.getContactName() ?? phoneNumber
             
             let notification = UNMutableNotificationContent()
-            notification.title = "Missed a call from \(contactName)"
-            notification.subtitle = device.name
+            notification.title = device.name
+            notification.subtitle = "Missed a call from \(contactName)"
             notification.sound = UNNotificationSound.default
             
             if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
@@ -327,8 +327,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     NotificationProperty.phoneNumber.rawValue: phoneNumber,
                     UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(TelephonyService.self)
                 ]
-                notification.title = "SMS from  \(contactName)"
-                notification.subtitle = "\(device.name)"
+                notification.title = device.name
+                notification.subtitle = "SMS from  \(contactName)"
                 notification.body = messageBody
                 notification.sound = UNNotificationSound.default
                 
