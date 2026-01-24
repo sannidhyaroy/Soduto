@@ -466,7 +466,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                         userInfo[UserNotificationManager.Property.dontPresent.rawValue] = NSNumber(value: dontPresent)
                         notification.userInfo = userInfo
                         
-                        notification.title = "\(appName) | \(device.name)"  // Set Notification Title
+                        notification.title = "\(appName)"  // Set Notification Title
+                        notification.subtitle = "\(device.name)"
                         notification.body = ticker  // Set Notification Body
                         notification.categoryIdentifier = "IncomingNotification"    // Set Notification Category Identifier
                         

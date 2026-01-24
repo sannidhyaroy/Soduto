@@ -372,7 +372,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                         userInfo[NotificationProperty.event.rawValue] = DataPacket.TelephonyEvent.sms.rawValue as AnyObject
                         userInfo[NotificationProperty.phoneNumber.rawValue] = phoneNumber as AnyObject
                         notification.userInfo = userInfo
-                        notification.title = "SMS from  \(contactName) | \(device.name)"
+                        notification.title = "SMS from  \(contactName)"
+                        notification.subtitle = "\(device.name)"
                         notification.body = messageBody
                         notification.sound = UNNotificationSound.default
                         let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Messages"))
