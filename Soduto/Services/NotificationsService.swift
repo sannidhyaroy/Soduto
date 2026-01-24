@@ -263,9 +263,19 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     //MARK: Custom Notification Push method
     
-    public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
+    /// Displays a custom notification to the user.
+    /// - Parameters:
+    ///   - title: The title of the notification.
+    ///   - subtitle: The subtitle of the notification (optional).
+    ///   - body: The body text of the notification.
+    ///   - sound: Whether to play a sound with the notification.
+    ///   - id: The unique identifier for the notification.
+    public func ShowCustomNotification(title: String, subtitle: String? = nil, body: String, sound: Bool, id: String) {
         let notification = UNMutableNotificationContent()
         notification.title = title
+        if let subtitle = subtitle {
+            notification.subtitle = subtitle
+        }
         notification.body = body
         if sound {
             notification.sound = UNNotificationSound.default

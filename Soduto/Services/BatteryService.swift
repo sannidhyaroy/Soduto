@@ -156,10 +156,11 @@ public class BatteryService: Service {
     }
     
     private func showNotification(for device: Device, withStatus status: BatteryStatus) {
-        let title = NSLocalizedString("Low Battery", comment: "notification title")  + " | \(device.name)"
+        let title = device.name
+        let subtitle = NSLocalizedString("Low Battery", comment: "notification title")
         let info = NSString(format: NSLocalizedString("%d%% of battery remaining", comment: "notification info") as NSString, status.currentCharge)
 
-        NotificationsService().ShowCustomNotification(title: title, body: info as String, sound: true, id: self.notificationId(for: device))
+        NotificationsService().ShowCustomNotification(title: title, subtitle: subtitle, body: info as String, sound: true, id: self.notificationId(for: device))
     }
     
     private func hideNotification(for device: Device) {
