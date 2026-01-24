@@ -154,55 +154,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
     
-    /// Repopulates the `notificationIds` dictionary from the Notification Center's delivered notifications.
-    /// This is necessary because `notificationIds` is in-memory and lost on app restart.
-    /// - Parameters:
-    ///   - device: The device to repopulate notification IDs for.
-    ///   - completion: Called after repopulation is complete.
-    private func repopulateNotificationIds(for device: Device, completion: @escaping () -> Void) {
-        // If we already have IDs for this device, skip repopulation
-        if notificationIds[device.id] != nil && !notificationIds[device.id]!.isEmpty {
-            Log.debug?.message("Skipping repopulation for \(device.name) - already have \(notificationIds[device.id]!.count) IDs")
-            completion()
-            return
-        }
-        
-        guard let deviceIdEncoded = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
-            Log.error?.message("Failed to encode device ID for \(device.name)")
-            completion()
-            return
-        }
-        
-        // Build the prefix we use for this device's notifications
-        let prefix = "\(self.id).\(deviceIdEncoded)."
-        
-        un.getDeliveredNotifications { [weak self] notifications in
-            guard let self = self else {
-                completion()
-                return
-            }
-            
-            var matchCount = 0
-            for notification in notifications {
-                let identifier = notification.request.identifier
-                // Check if this notification belongs to this service and device
-                if identifier.hasPrefix(prefix) {
-                    self.addNotificationId(identifier, from: device)
-                    // Also restore the content hash so we can detect reconnection duplicates
-                    let body = notification.request.content.body
-                    self.notificationContentHashes[identifier] = body.hashValue
-                    matchCount += 1
-                }
-            }
-            
-            if matchCount > 0 {
-                Log.debug?.message("Repopulated \(matchCount) notification IDs for device \(device.name)")
-            }
-            
-            completion()
-        }
-    }
-    
     /// Requests all current notifications from all connected devices.
     /// This clears local notification state and re-fetches everything.
     public func refreshNotifications() {
@@ -378,6 +329,55 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         return "\(self.id).\(deviceId).\(packetId)"
     }
     
+    /// Repopulates the `notificationIds` dictionary from the Notification Center's delivered notifications.
+    /// This is necessary because `notificationIds` is in-memory and lost on app restart.
+    /// - Parameters:
+    ///   - device: The device to repopulate notification IDs for.
+    ///   - completion: Called after repopulation is complete.
+    private func repopulateNotificationIds(for device: Device, completion: @escaping () -> Void) {
+        // If we already have IDs for this device, skip repopulation
+        if notificationIds[device.id] != nil && !notificationIds[device.id]!.isEmpty {
+            Log.debug?.message("Skipping repopulation for \(device.name) - already have \(notificationIds[device.id]!.count) IDs")
+            completion()
+            return
+        }
+        
+        guard let deviceIdEncoded = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
+            Log.error?.message("Failed to encode device ID for \(device.name)")
+            completion()
+            return
+        }
+        
+        // Build the prefix we use for this device's notifications
+        let prefix = "\(self.id).\(deviceIdEncoded)."
+        
+        un.getDeliveredNotifications { [weak self] notifications in
+            guard let self = self else {
+                completion()
+                return
+            }
+            
+            var matchCount = 0
+            for notification in notifications {
+                let identifier = notification.request.identifier
+                // Check if this notification belongs to this service and device
+                if identifier.hasPrefix(prefix) {
+                    self.addNotificationId(identifier, from: device)
+                    // Also restore the content hash so we can detect reconnection duplicates
+                    let body = notification.request.content.body
+                    self.notificationContentHashes[identifier] = body.hashValue
+                    matchCount += 1
+                }
+            }
+            
+            if matchCount > 0 {
+                Log.debug?.message("Repopulated \(matchCount) notification IDs for device \(device.name)")
+            }
+            
+            completion()
+        }
+    }
+    
     private func startIconDownloadTaskAndShowNotification(downloadTask task: DownloadTask, notificationId: String, dataPacket: DataPacket, device: Device) {
         var downloadFileHash: String? = nil
         do {
@@ -493,6 +493,97 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         throw DataPacket.NotificationError.copyFileFailed
     }
 
+    private func buildNotificationContent(
+        for dataPacket: DataPacket,
+        from device: Device,
+        with notificationId: String,
+        isStackUpdate: Bool,
+        isSilent: Bool,
+        dontPresent: Bool,
+        title: String?,
+        body: String?,
+        ticker: String,
+        appName: String,
+        replyId: String?,
+        isCancelable: Bool,
+        actions: [String]?
+    ) -> UNMutableNotificationContent {
+        let notification = UNMutableNotificationContent()
+        
+        /// Filter actions - exclude copy OTP actions, "Reply" actions (handled separately via requestReplyId), and limit to max 3
+        var filteredActions: [String] = []
+        if let actions = actions {
+            for action in actions {
+                // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
+                if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
+                    self.copyOTP(from: action) // Copy OTP to clipboard
+                }
+                // Skip "Reply" actions since we handle reply separately via requestReplyId
+                else if action.lowercased() == "reply" {
+                    continue
+                }
+                else {
+                    filteredActions.append(action)
+                }
+            }
+        }
+        // Limit to max 3 custom actions (Android can show max 3)
+        let actionCount = min(filteredActions.count, 3)
+        
+        let shouldMute = isSilent
+        
+        // Build userInfo with base properties
+        var userInfo: [String: Any] = [
+            UserInfoProperty.deviceId.rawValue: device.id,
+            UserInfoProperty.notificationId.rawValue: notificationId,
+            UserInfoProperty.requestReplyId.rawValue: replyId as Any,
+            UserInfoProperty.isCancelable.rawValue: NSNumber(value: isCancelable),
+            UserNotificationManager.Property.dontPresent.rawValue: NSNumber(value: dontPresent),
+            UserNotificationManager.Property.shouldMute.rawValue: NSNumber(value: shouldMute),
+            UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(NotificationsService.self)
+        ]
+        
+        // Store semantic action mappings in userInfo using positional keys
+        if actionCount >= 1 {
+            userInfo[UserNotificationManager.Property.action1.rawValue] = filteredActions[0]
+        }
+        if actionCount >= 2 {
+            userInfo[UserNotificationManager.Property.action2.rawValue] = filteredActions[1]
+        }
+        if actionCount >= 3 {
+            userInfo[UserNotificationManager.Property.action3.rawValue] = filteredActions[2]
+        }
+        
+        notification.userInfo = userInfo
+        notification.title = "\(appName) | \(device.name)"
+        notification.subtitle = title ?? ""
+        notification.body = body ?? ticker
+        
+        let hasReply = replyId != nil
+        let actionTitles = Array(filteredActions.prefix(3))
+        let categoryId = AppDelegate.shared().userNotificationManager.getOrCreateCategory(
+            hasReply: hasReply,
+            actionTitles: actionTitles
+        )
+        notification.categoryIdentifier = categoryId
+        
+        /// Only play sound if notification is not muted
+        /// shouldMute is true for: silent notifications, answer packets, and updates to existing notifications
+        if !shouldMute {
+            notification.sound = UNNotificationSound.default
+        }
+        /// Set interruption level based on notification type
+        /// - passive: for silent/muted notifications (won't interrupt user)
+        /// - active: for normal notifications (default behavior)
+        if shouldMute {
+            notification.setUrgency(.passive)
+        } else {
+            notification.setUrgency(.active)
+        }
+        
+        return notification
+    }
+
     private func showNotification(for dataPacket: DataPacket, from device: Device) {
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
 
@@ -551,88 +642,27 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             /// isStackUpdate: Notification exists but content changed (e.g., new WhatsApp message in same chat)
             /// This should show banner + sound to alert user of new message
             let isStackUpdate = isAlreadyDisplayed && isContentChanged
-            /// shouldMute: Don't play sound - notification may still show banner
-            /// Applies to: silent notifications from Android
-            let shouldMute = isSilent
-            let hasReply = replyId != nil
 
             var notificationIconURL: URL? = nil
             if (self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
                 notificationIconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetNotificationId)
             }
 
-            let notification = UNMutableNotificationContent()
-            
-            /// Filter actions - exclude copy OTP actions, "Reply" actions (handled separately via requestReplyId), and limit to max 3
-            var filteredActions: [String] = []
-            if let actions = actions {
-                for action in actions {
-                    // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
-                    if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
-                        self.copyOTP(from: action) // Copy OTP to clipboard
-                    }
-                    // Skip "Reply" actions since we handle reply separately via requestReplyId
-                    else if action.lowercased() == "reply" {
-                        continue
-                    }
-                    else {
-                        filteredActions.append(action)
-                    }
-                }
-            }
-            // Limit to max 3 custom actions (Android can show max 3)
-            let actionCount = min(filteredActions.count, 3)
-            
-            // Build userInfo with base properties
-            var userInfo: [String: Any] = [
-                UserInfoProperty.deviceId.rawValue: device.id,
-                UserInfoProperty.notificationId.rawValue: packetNotificationId,
-                UserInfoProperty.requestReplyId.rawValue: replyId as Any,
-                UserInfoProperty.isCancelable.rawValue: NSNumber(value: isCancelable),
-                UserNotificationManager.Property.dontPresent.rawValue: NSNumber(value: dontPresent),
-                UserNotificationManager.Property.shouldMute.rawValue: NSNumber(value: shouldMute),
-                UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(NotificationsService.self)
-            ]
-            
-            // Store semantic action mappings in userInfo using positional keys
-            // When handling, we look up the semantic meaning using the positional identifier
-            if actionCount >= 1 {
-                userInfo[UserNotificationManager.Property.action1.rawValue] = filteredActions[0]
-            }
-            if actionCount >= 2 {
-                userInfo[UserNotificationManager.Property.action2.rawValue] = filteredActions[1]
-            }
-            if actionCount >= 3 {
-                userInfo[UserNotificationManager.Property.action3.rawValue] = filteredActions[2]
-            }
-            
-            notification.userInfo = userInfo
-            notification.title = "\(appName) | \(device.name)"
-            notification.subtitle = title ?? ""  // Sender name (e.g., contact) if available
-            notification.body = body ?? ticker   // Full message text, or ticker as fallback
-            
-            /// Get or create a category with actual action titles from the remote device
-            /// Categories are cached by shape + titles for reuse across notifications
-            let actionTitles = Array(filteredActions.prefix(3))
-            let categoryId = AppDelegate.shared().userNotificationManager.getOrCreateCategory(
-                hasReply: hasReply,
-                actionTitles: actionTitles
+            let notification = buildNotificationContent(
+                for: dataPacket,
+                from: device,
+                with: notificationId,
+                isStackUpdate: isStackUpdate,
+                isSilent: isSilent,
+                dontPresent: dontPresent,
+                title: title,
+                body: body,
+                ticker: ticker,
+                appName: appName,
+                replyId: replyId,
+                isCancelable: isCancelable,
+                actions: actions
             )
-            notification.categoryIdentifier = categoryId
-            
-            /// Only play sound if notification is not muted
-            /// shouldMute is true for: silent notifications, answer packets, and updates to existing notifications
-            if !shouldMute {
-                notification.sound = UNNotificationSound.default
-            }
-            /// Set interruption level based on notification type
-            /// - passive: for silent/muted notifications (won't interrupt user)
-            /// - active: for normal notifications (default behavior)
-            if shouldMute {
-                notification.setUrgency(.passive)
-            } else {
-                notification.setUrgency(.active)
-            }
             
             // Set Notification App Icon
             if let iconURL = notificationIconURL {
