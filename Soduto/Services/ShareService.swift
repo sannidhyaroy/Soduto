@@ -536,9 +536,6 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         }
         if succeeded && finalUrl != nil {
             notification.categoryIdentifier = "DownloadFinished"
-            let openfile = UNNotificationAction(identifier: "openfile", title: "Open")
-            let category = UNNotificationCategory(identifier: "DownloadFinished", actions: [openfile], intentIdentifiers: [], options: [])
-            un.setNotificationCategories([category])
         }
         
         let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)

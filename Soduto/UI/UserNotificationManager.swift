@@ -35,8 +35,49 @@ public class UserNotificationManager: NSObject {
     public enum Property: String {
         case actionHandlerClass = "com.soduto.usernotificationmanager.actionhandlerclass"
         case dontPresent = "com.soduto.usernotificationmanager.dontPresent"
+        // Positional action mappings - store the semantic action string from the remote device
+        case action1 = "com.soduto.usernotificationmanager.action1"
+        case action2 = "com.soduto.usernotificationmanager.action2"
+        case action3 = "com.soduto.usernotificationmanager.action3"
     }
     
+    /// Fixed positional action identifiers used across all notification categories
+    public enum ActionIdentifier: String {
+        case reply = "Reply"
+        case action1 = "action_1"
+        case action2 = "action_2"
+        case action3 = "action_3"
+        case dismiss = "Dismiss"
+    }
+    
+    /// Shape-based category identifiers - finite and reusable
+    /// Format: [Reply/NoReply]_[N]Actions where N is the number of custom actions (0-3)
+    public enum CategoryIdentifier: String, CaseIterable {
+        case noReply_0Actions = "NoReply_0Actions"
+        case noReply_1Action = "NoReply_1Action"
+        case noReply_2Actions = "NoReply_2Actions"
+        case noReply_3Actions = "NoReply_3Actions"
+        case reply_0Actions = "Reply_0Actions"
+        case reply_1Action = "Reply_1Action"
+        case reply_2Actions = "Reply_2Actions"
+        case reply_3Actions = "Reply_3Actions"
+        
+        /// Get the appropriate category identifier based on notification shape
+        public static func category(hasReply: Bool, actionCount: Int) -> CategoryIdentifier {
+            let clampedCount = min(max(actionCount, 0), 3)
+            switch (hasReply, clampedCount) {
+            case (false, 0): return .noReply_0Actions
+            case (false, 1): return .noReply_1Action
+            case (false, 2): return .noReply_2Actions
+            case (false, 3): return .noReply_3Actions
+            case (true, 0): return .reply_0Actions
+            case (true, 1): return .reply_1Action
+            case (true, 2): return .reply_2Actions
+            case (true, 3): return .reply_3Actions
+            default: return hasReply ? .reply_0Actions : .noReply_0Actions
+            }
+        }
+    }
     
     // MARK: Private properties
     
@@ -60,6 +101,132 @@ public class UserNotificationManager: NSObject {
                 print(error.localizedDescription)
             }
         }
+        
+        // Register all shape-based notification categories once at startup
+        registerNotificationCategories()
+    }
+    
+    // MARK: Category Registration
+    
+    /// Registers all shape-based notification categories. Called once at app startup.
+    /// Categories are based on "shape" (hasReply + actionCount), not semantic meaning.
+    private func registerNotificationCategories() {
+        var categories = Set<UNNotificationCategory>()
+        
+        // Add pairing category
+        let pairAction = UNNotificationAction(identifier: "pair", title: "Pair")
+        let declineAction = UNNotificationAction(identifier: "decline", title: "Decline")
+        let pairingCategory = UNNotificationCategory(
+            identifier: "PairDevice",
+            actions: [pairAction, declineAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        categories.insert(pairingCategory)
+        
+        // Add telephony categories
+        let muteAction = UNNotificationAction(identifier: "mutecall", title: "Mute")
+        let ringingCategory = UNNotificationCategory(
+            identifier: "IncomingCall",
+            actions: [muteAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        categories.insert(ringingCategory)
+        
+        let smsReplyAction = UNTextInputNotificationAction(
+            identifier: "reply",
+            title: "Reply",
+            textInputButtonTitle: "Send",
+            textInputPlaceholder: "Your message here..."
+        )
+        let smsCategory = UNNotificationCategory(
+            identifier: "SMSReceived",
+            actions: [smsReplyAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        categories.insert(smsCategory)
+        
+        // Add share download category
+        let openFileAction = UNNotificationAction(identifier: "openfile", title: "Open")
+        let shareCategory = UNNotificationCategory(
+            identifier: "DownloadFinished",
+            actions: [openFileAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        categories.insert(shareCategory)
+        
+        // Generate all shape-based categories for incoming notifications
+        // These use positional action identifiers with generic titles
+        // (titles don't matter for categories - they're overridden per notification isn't possible,
+        // but the user sees them - so we use generic labels)
+        
+        let replyAction = UNTextInputNotificationAction(
+            identifier: ActionIdentifier.reply.rawValue,
+            title: "Reply",
+            textInputButtonTitle: "Send",
+            textInputPlaceholder: "Your message here..."
+        )
+        let action1 = UNNotificationAction(identifier: ActionIdentifier.action1.rawValue, title: "Action 1")
+        let action2 = UNNotificationAction(identifier: ActionIdentifier.action2.rawValue, title: "Action 2")
+        let action3 = UNNotificationAction(identifier: ActionIdentifier.action3.rawValue, title: "Action 3")
+        let dismissAction = UNNotificationAction(identifier: ActionIdentifier.dismiss.rawValue, title: "Dismiss")
+        
+        // NoReply categories
+        categories.insert(UNNotificationCategory(
+            identifier: CategoryIdentifier.noReply_0Actions.rawValue,
+            actions: [dismissAction],
+            intentIdentifiers: [],
+            options: []
+        ))
+        categories.insert(UNNotificationCategory(
+            identifier: CategoryIdentifier.noReply_1Action.rawValue,
+            actions: [action1, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        ))
+        categories.insert(UNNotificationCategory(
+            identifier: CategoryIdentifier.noReply_2Actions.rawValue,
+            actions: [action1, action2, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        ))
+        categories.insert(UNNotificationCategory(
+            identifier: CategoryIdentifier.noReply_3Actions.rawValue,
+            actions: [action1, action2, action3, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        ))
+        
+        // Reply categories
+        categories.insert(UNNotificationCategory(
+            identifier: CategoryIdentifier.reply_0Actions.rawValue,
+            actions: [replyAction, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        ))
+        categories.insert(UNNotificationCategory(
+            identifier: CategoryIdentifier.reply_1Action.rawValue,
+            actions: [replyAction, action1, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        ))
+        categories.insert(UNNotificationCategory(
+            identifier: CategoryIdentifier.reply_2Actions.rawValue,
+            actions: [replyAction, action1, action2, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        ))
+        categories.insert(UNNotificationCategory(
+            identifier: CategoryIdentifier.reply_3Actions.rawValue,
+            actions: [replyAction, action1, action2, action3, dismissAction],
+            intentIdentifiers: [],
+            options: []
+        ))
+        
+        UNUserNotificationCenter.current().setNotificationCategories(categories)
     }
     
     // MARK: Action Handlers

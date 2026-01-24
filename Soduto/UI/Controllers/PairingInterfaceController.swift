@@ -43,11 +43,6 @@ public class PairingInterfaceController: UserNotificationActionHandler {
         notification.sound = UNNotificationSound.default
         notification.categoryIdentifier = "PairDevice"
         
-        let pair = UNNotificationAction(identifier: "pair", title: "Pair")
-        let decline = UNNotificationAction(identifier: "decline", title: "Decline")
-        let category = UNNotificationCategory(identifier: "PairDevice", actions: [pair, decline], intentIdentifiers: [], options: [])
-        un.setNotificationCategories([category])
-        
         let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
         un.add(request) { error in
             if let error = error {

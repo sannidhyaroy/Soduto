@@ -203,27 +203,51 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     // MARK: UserNotificationActionHandler
     
     public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
-        guard let deviceId = response.notification.request.content.userInfo[UserInfoProperty.deviceId.rawValue] as? String else { return }
-        guard let notificationId = response.notification.request.content.userInfo[UserInfoProperty.notificationId.rawValue] as? NotificationId else { return }
-        guard let isCancelable = response.notification.request.content.userInfo[UserInfoProperty.isCancelable.rawValue] as? NSNumber else { return }
+        let userInfo = response.notification.request.content.userInfo
+        guard let deviceId = userInfo[UserInfoProperty.deviceId.rawValue] as? String else { return }
+        guard let notificationId = userInfo[UserInfoProperty.notificationId.rawValue] as? NotificationId else { return }
+        guard let isCancelable = userInfo[UserInfoProperty.isCancelable.rawValue] as? NSNumber else { return }
         guard let device = context.deviceManager.device(withId: deviceId) else { return }
         guard device.pairingStatus == .Paired else { return }
         
-        if isCancelable.boolValue && response.actionIdentifier == "DismissNotification" {
-            device.send(DataPacket.notificationCancelPacket(forId: notificationId))
-        } else if response.actionIdentifier != "DismissNotification" && response.actionIdentifier != "ReplyNotification"{
-            device.send(DataPacket.notificationActionPacket(forAction: response.actionIdentifier, forKey: notificationId))
-        }
-        if let textInputResponse = response as? UNTextInputNotificationResponse {
-            let message = textInputResponse.userText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let requestReplyId = response.notification.request.content.userInfo[UserInfoProperty.requestReplyId.rawValue] as? String else { return }
-            guard !message.isEmpty else {
-                Log.debug?.message("Empty reply message ignored for notification \(notificationId)")
-                return
+        let actionId = response.actionIdentifier
+        
+        // Handle dismiss action
+        if actionId == UserNotificationManager.ActionIdentifier.dismiss.rawValue {
+            if isCancelable.boolValue {
+                device.send(DataPacket.notificationCancelPacket(forId: notificationId))
             }
-            device.send(DataPacket.notificationReplyPacket(forId: requestReplyId, message: message))
+        }
+        // Handle reply action
+        else if actionId == UserNotificationManager.ActionIdentifier.reply.rawValue {
+            if let textInputResponse = response as? UNTextInputNotificationResponse {
+                let message = textInputResponse.userText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let requestReplyId = userInfo[UserInfoProperty.requestReplyId.rawValue] as? String else { return }
+                guard !message.isEmpty else {
+                    Log.debug?.message("Empty reply message ignored for notification \(notificationId)")
+                    return
+                }
+                device.send(DataPacket.notificationReplyPacket(forId: requestReplyId, message: message))
+            }
+        }
+        // Handle positional action buttons - look up semantic meaning from userInfo
+        else if actionId == UserNotificationManager.ActionIdentifier.action1.rawValue {
+            if let semanticAction = userInfo[UserNotificationManager.Property.action1.rawValue] as? String {
+                device.send(DataPacket.notificationActionPacket(forAction: semanticAction, forKey: notificationId))
+            }
+        }
+        else if actionId == UserNotificationManager.ActionIdentifier.action2.rawValue {
+            if let semanticAction = userInfo[UserNotificationManager.Property.action2.rawValue] as? String {
+                device.send(DataPacket.notificationActionPacket(forAction: semanticAction, forKey: notificationId))
+            }
+        }
+        else if actionId == UserNotificationManager.ActionIdentifier.action3.rawValue {
+            if let semanticAction = userInfo[UserNotificationManager.Property.action3.rawValue] as? String {
+                device.send(DataPacket.notificationActionPacket(forAction: semanticAction, forKey: notificationId))
+            }
         }
         
+        // Remove the notification ID from tracking
         for service in context.serviceManager.services {
             guard let notificationsService = service as? NotificationsService else { continue }
             notificationsService.removeNotificationId(notificationId, from: device)
@@ -389,6 +413,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
             let dontPresent = isAnswer || isSilent
+            let hasReply = replyId != nil
 
             var notificationIconURL: URL? = nil
             if (self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
@@ -397,8 +422,28 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
 
             let notification = UNMutableNotificationContent()
             
-            // Set Notification UserInfo
-            notification.userInfo = [
+            // Filter actions - exclude copy OTP actions, "Reply" actions (handled separately via requestReplyId), and limit to max 3
+            var filteredActions: [String] = []
+            if let actions = actions {
+                for action in actions {
+                    // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
+                    if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
+                        self.copyOTP(from: action) // Copy OTP to clipboard
+                    }
+                    // Skip "Reply" actions since we handle reply separately via requestReplyId
+                    else if action.lowercased() == "reply" {
+                        continue
+                    }
+                    else {
+                        filteredActions.append(action)
+                    }
+                }
+            }
+            // Limit to max 3 custom actions (Android can show max 3)
+            let actionCount = min(filteredActions.count, 3)
+            
+            // Build userInfo with base properties
+            var userInfo: [String: Any] = [
                 UserInfoProperty.deviceId.rawValue: device.id,
                 UserInfoProperty.notificationId.rawValue: packetNotificationId,
                 UserInfoProperty.requestReplyId.rawValue: replyId as Any,
@@ -407,10 +452,26 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(NotificationsService.self)
             ]
             
+            // Store semantic action mappings in userInfo using positional keys
+            // When handling, we look up the semantic meaning using the positional identifier
+            if actionCount >= 1 {
+                userInfo[UserNotificationManager.Property.action1.rawValue] = filteredActions[0]
+            }
+            if actionCount >= 2 {
+                userInfo[UserNotificationManager.Property.action2.rawValue] = filteredActions[1]
+            }
+            if actionCount >= 3 {
+                userInfo[UserNotificationManager.Property.action3.rawValue] = filteredActions[2]
+            }
+            
+            notification.userInfo = userInfo
             notification.title = "\(appName)"  // Set Notification Title
             notification.subtitle = "\(device.name)"
             notification.body = ticker  // Set Notification Body
-            notification.categoryIdentifier = "IncomingNotification"    // Set Notification Category Identifier
+            
+            // Select category based on shape (hasReply + actionCount)
+            let category = UserNotificationManager.CategoryIdentifier.category(hasReply: hasReply, actionCount: actionCount)
+            notification.categoryIdentifier = category.rawValue
             
             // Don't set notification sound if it's an answer to request packet or is a silent notification
             if !dontPresent {
@@ -427,37 +488,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 }
             }
             
-            var notificationActions = [UNNotificationAction]()
-            
-            // Add Reply Action Button if Reply Actions are available
-            if replyId != nil {
-                notificationActions.append(UNTextInputNotificationAction(identifier: "ReplyNotification", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your message here..."))
-            }
-            
-            // Add Action Buttons, if available
-            if let actions = actions {
-                for action in actions {
-                    // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
-                    if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
-                        self.copyOTP(from: action) // Copy OTP to clipboard
-                    } else {
-                        notificationActions.append(UNNotificationAction(identifier: action, title: action))
-                    }
-                }
-            }
-            // Append a dismiss action that can trigger a dismiss request to the other device
-            notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))
-            
-            // Create Notification Category
-            let category = UNNotificationCategory(identifier: "IncomingNotification", actions: notificationActions, intentIdentifiers: [], options: [])
-            
             // Create notification request
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             
-            // Set Notification Categories
-            un.setNotificationCategories([category])
-            
-            // Push Notification
+            // Push Notification (categories are already registered at app startup)
             un.add(request) { error in
                 if let error = error {
                     print(error.localizedDescription)

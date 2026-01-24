@@ -235,9 +235,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             
             notification.sound = UNNotificationSound.default
             notification.categoryIdentifier = "IncomingCall"
-            let mutecall = UNNotificationAction(identifier: "mutecall", title: "Mute call")
-            let category = UNNotificationCategory(identifier: "IncomingCall", actions: [mutecall], intentIdentifiers: [], options: [])
-            un.setNotificationCategories([category])
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             un.add(request) { error in
@@ -342,9 +339,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 
                 if hasPhoneNumber {
                     notification.categoryIdentifier = "SMSReceived"
-                    let reply = UNTextInputNotificationAction(identifier: "reply", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your reply message...")
-                    let category = UNNotificationCategory(identifier: "SMSReceived", actions: [reply], intentIdentifiers: [], options: [])
-                    self.un.setNotificationCategories([category])
                 }
                 
                 let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
