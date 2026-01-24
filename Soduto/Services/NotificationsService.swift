@@ -422,7 +422,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
 
             let notification = UNMutableNotificationContent()
             
-            // Filter actions - exclude copy OTP actions, "Reply" actions (handled separately via requestReplyId), and limit to max 3
+            /// Filter actions - exclude copy OTP actions, handle "Reply" actions, and limit to max 3
             var filteredActions: [String] = []
             if let actions = actions {
                 for action in actions {
@@ -430,9 +430,18 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
                         self.copyOTP(from: action) // Copy OTP to clipboard
                     }
-                    // Skip "Reply" actions since we handle reply separately via requestReplyId
+                    /// Handle "Reply" actions:
+                    /// - If we have inline reply (hasReply), skip it to avoid duplicate reply options
+                    /// - If we don't have inline reply, rename it to "Reply in {AppName}" so the user knows
+                    ///   clicking it will open the app on their phone
                     else if action.lowercased() == "reply" {
-                        continue
+                        if hasReply {
+                            /// Skip - we already have inline reply capability
+                            continue
+                        } else {
+                            /// Rename to indicate it opens the app
+                            filteredActions.append("Reply in \(appName)")
+                        }
                     }
                     else {
                         filteredActions.append(action)
