@@ -102,7 +102,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         guard dataPacket.isNotificationPacket else { return false }
         
-        Log.debug?.message("handleDataPacket(<\(dataPacket)> fromDevice:<\(device)> onConnection:<\(connection)>)")
+        // Log the raw packet for debugging
+        Log.debug?.message("NotificationsService received packet: \(dataPacket.body)")
         
         if (try? dataPacket.getRequestFlag()) ?? false {
             // Doing nothing as we dont (at least currently) provide our own notifications to other devices
@@ -402,11 +403,30 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
 
         do {
-            guard let packetNotificationId = try dataPacket.getId() else { return }
-            guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
-            guard let appName = try dataPacket.getAppName() else { return }
-            guard appName != "KDE Connect" else { return } // Ignore notifications shown by KDE Connect
-            guard let ticker = try dataPacket.getTicker() else { return }
+            guard let packetNotificationId = try dataPacket.getId() else {
+                Log.debug?.message("Notification rejected: missing ID")
+                return
+            }
+            guard let notificationId = self.notificationId(for: dataPacket, from: device) else {
+                Log.debug?.message("Notification rejected: couldn't generate notificationId for packet \(packetNotificationId)")
+                return
+            }
+            guard let appName = try dataPacket.getAppName() else {
+                Log.debug?.message("Notification rejected: missing appName for \(packetNotificationId)")
+                return
+            }
+            guard appName != "KDE Connect" else {
+                Log.debug?.message("Notification rejected: from KDE Connect itself")
+                return
+            }
+            guard let ticker = try dataPacket.getTicker() else {
+                Log.debug?.message("Notification rejected: missing ticker for \(appName) - \(packetNotificationId)")
+                return
+            }
+            
+            // Log successful notification processing
+            Log.debug?.message("Processing notification from \(appName): id=\(packetNotificationId), ticker=\(ticker.prefix(50))...")
+            
             let replyId = try dataPacket.getReplyRequestId()
             let actions = try dataPacket.getActions()
             let isAnswer = try dataPacket.getAnswerFlag()
@@ -414,6 +434,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isCancelable = try dataPacket.getClearableFlag()
             let dontPresent = isAnswer || isSilent
             let hasReply = replyId != nil
+            
+            Log.debug?.message("Notification flags - isAnswer: \(isAnswer), isSilent: \(isSilent), isCancelable: \(isCancelable), hasReply: \(hasReply), actions: \(actions ?? [])")
 
             var notificationIconURL: URL? = nil
             if (self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
