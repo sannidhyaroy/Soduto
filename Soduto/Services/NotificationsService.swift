@@ -130,20 +130,28 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         return true
     }
     
+    /// Called when a device connects. Requests all current notifications from the device.
+    /// 
+    /// Duplicate alerts are prevented by:
+    /// - `isAnswer` flag: Android sets `requestAnswer: true` on response packets
+    /// - `isAlreadyDisplayed` check: Notifications already in `notificationIds` are shown silently
     public func setup(for device: Device) {
-        /// Ask device for current notifications
-        /// Fix Me: Keeps sending the same notification alerts continously, hence we'll keep this disabled. Updating existing notifications should happen in background and not show any alerts.
-        //        guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
-        //        device.send(DataPacket.notificationRequestPacket())
+        guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
+        device.send(DataPacket.notificationRequestPacket())
     }
     
-    public func refresh() {
+    /// Requests all current notifications from all connected devices.
+    /// This clears local notification state and re-fetches everything.
+    public func refreshNotifications() {
         let devices = AppDelegate.shared().validDevices
+        
+        self.notificationIds.removeAll()
+        un.removeAllDeliveredNotifications()
+        un.removeAllPendingNotificationRequests()
+        
+        // Request notifications from each device
         for device in devices {
-            guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { return }
-            self.notificationIds.removeAll()
-            un.removeAllDeliveredNotifications()
-            un.removeAllPendingNotificationRequests()
+            guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { continue }
             device.send(DataPacket.notificationRequestPacket())
         }
     }
@@ -156,6 +164,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
     
+    /// Defines service actions for notifications service (like: `Request Notifications`)
     public func actions(for device: Device) -> [ServiceAction] {
         guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { return [] }
         guard device.pairingStatus == .Paired else { return [] }
@@ -165,6 +174,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         ]
     }
     
+    /// Performs service actions for a specific device (like: `Request Notifications`)
     public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
         guard let actionId = ActionId(rawValue: id) else { return }
         guard device.pairingStatus == .Paired else { return }
@@ -448,10 +458,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isAnswer = try dataPacket.getAnswerFlag()
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
-            let dontPresent = isAnswer || isSilent
+            let isAlreadyDisplayed = self.notificationIds[device.id]?.contains(notificationId) ?? false
+            let dontPresent = isAnswer || isSilent || isAlreadyDisplayed
             let hasReply = replyId != nil
             
-            Log.debug?.message("Notification flags - isAnswer: \(isAnswer), isSilent: \(isSilent), isCancelable: \(isCancelable), hasReply: \(hasReply), actions: \(actions ?? [])")
+            Log.debug?.message("Notification flags - isAnswer: \(isAnswer), isSilent: \(isSilent), isCancelable: \(isCancelable), hasReply: \(hasReply), isUpdate: \(isAlreadyDisplayed), actions: \(actions ?? [])")
 
             var notificationIconURL: URL? = nil
             if (self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {

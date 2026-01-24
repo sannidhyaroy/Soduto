@@ -61,7 +61,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     }
     
     @IBAction func refreshNotifications(_ sender: Any?) {
-        self.config?.notification.refresh()
+        self.config?.notification.refreshNotifications()
     }
     
     @IBAction func openPreferences(_ sender: Any?) {
