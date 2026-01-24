@@ -214,13 +214,22 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     }
     
     /// Determines how to present notifications when the app is in the foreground.
-    /// Notifications marked with `dontPresent` will be silently delivered.
+    /// - `dontPresent`: Notification is delivered silently (no banner, no sound) - for updates and answer packets
+    /// - `shouldMute`: Notification shows banner but without sound - for silent notifications from Android
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        // Check if the notification should not be presented (silent/answer notifications)
         let userInfo = notification.request.content.userInfo
+        
+        // Check if the notification should not be presented at all (answer packets, updates)
         if let dontPresent = userInfo[UserNotificationManager.Property.dontPresent.rawValue] as? NSNumber, dontPresent.boolValue {
-            return completionHandler([])
+            return completionHandler([.list])
         }
-        return completionHandler([.list, .sound])
+        
+        // Check if the notification should be shown without sound (silent notifications)
+        if let shouldMute = userInfo[UserNotificationManager.Property.shouldMute.rawValue] as? NSNumber, shouldMute.boolValue {
+            return completionHandler([.list, .banner])
+        }
+        
+        // Default: show notification as banner with sound
+        return completionHandler([.list, .banner, .sound])
     }
 }

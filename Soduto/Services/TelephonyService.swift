@@ -240,6 +240,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             
             notification.sound = UNNotificationSound.default
             notification.categoryIdentifier = "IncomingCall"
+            notification.setUrgency(.timeSensitive)
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             un.add(request) { error in
@@ -331,6 +332,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 notification.subtitle = "SMS from  \(contactName)"
                 notification.body = messageBody
                 notification.sound = UNNotificationSound.default
+                notification.setUrgency(.active)
                 
                 if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Messages")) {
                     let notificationIconURL = URL(fileURLWithPath: iconPath)

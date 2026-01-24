@@ -50,6 +50,7 @@ public class PairingInterfaceController: UserNotificationActionHandler {
         notification.body = "Do you want to pair this device?"
         notification.sound = UNNotificationSound.default
         notification.categoryIdentifier = "PairDevice"
+        notification.setUrgency(.timeSensitive)
         
         let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
         un.add(request) { error in

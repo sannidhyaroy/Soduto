@@ -131,10 +131,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     /// Called when a device connects. Requests all current notifications from the device.
-    /// 
+    /// TODO: Verify if existing notifications are send continuously, then comment out the codeblock inside this function.
+    ///
     /// Duplicate alerts are prevented by:
     /// - `isAnswer` flag: Android sets `requestAnswer: true` on response packets
-    /// - `isAlreadyDisplayed` check: Notifications already in `notificationIds` are shown silently
+    /// - `isAlreadyDisplayed` check: Notifications already in `notificationIds` are skipped entirely
+    ///   when `isAnswer` is true (reconnection scenario), preventing unnecessary refreshes when
+    ///   the device momentarily reconnects (e.g., WiFi change, charging starts)
     public func setup(for device: Device) {
         guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
         device.send(DataPacket.notificationRequestPacket())
@@ -280,7 +283,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     ///   - body: The body text of the notification.
     ///   - sound: Whether to play a sound with the notification.
     ///   - id: The unique identifier for the notification.
-    public func ShowCustomNotification(title: String, subtitle: String? = nil, body: String, sound: Bool, id: String) {
+    ///   - urgency: The urgency level for the notification (default: .active).
+    public func ShowCustomNotification(title: String, subtitle: String? = nil, body: String, sound: Bool, id: String, urgency: UNMutableNotificationContent.NotificationUrgency? = .active) {
         let notification = UNMutableNotificationContent()
         notification.title = title
         if let subtitle = subtitle {
@@ -289,6 +293,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         notification.body = body
         if sound {
             notification.sound = UNNotificationSound.default
+        }
+        if let urgency = urgency {
+            notification.setUrgency(urgency)
         }
         let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
         un.add(request) { error in
@@ -459,10 +466,22 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
             let isAlreadyDisplayed = self.notificationIds[device.id]?.contains(notificationId) ?? false
-            let dontPresent = isAnswer || isSilent || isAlreadyDisplayed
+            /// If this is an answer packet (from setup/reconnection) and notification is already displayed,
+            /// skip the update entirely. This prevents unnecessary refreshes when device reconnects
+            /// (e.g., WiFi change, charging starts). Normal updates (non-answer) still go through.
+            if isAnswer && isAlreadyDisplayed {
+                Log.debug?.message("Skipping notification update for \(notificationId): already displayed and is answer packet (reconnection scenario)")
+                return
+            }
+            /// dontPresent: Don't show banner/alert - notification updates silently in Notification Center
+            /// This applies to: answer packets (responses to our requests) and already-displayed notifications (updates)
+            let dontPresent = isAnswer || isAlreadyDisplayed
+            /// shouldMute: Don't play sound - notification may still show banner
+            /// This applies to: silent notifications from Android, plus all dontPresent cases
+            let shouldMute = isSilent || dontPresent
             let hasReply = replyId != nil
             
-            Log.debug?.message("Notification flags - isAnswer: \(isAnswer), isSilent: \(isSilent), isCancelable: \(isCancelable), hasReply: \(hasReply), isUpdate: \(isAlreadyDisplayed), actions: \(actions ?? [])")
+            Log.debug?.message("Notification flags - isAnswer: \(isAnswer), isSilent: \(isSilent), isCancelable: \(isCancelable), hasReply: \(hasReply), isUpdate: \(isAlreadyDisplayed), dontPresent: \(dontPresent), shouldMute: \(shouldMute), actions: \(actions ?? [])")
 
             var notificationIconURL: URL? = nil
             if (self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
@@ -471,7 +490,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
 
             let notification = UNMutableNotificationContent()
             
-            // Filter actions - exclude copy OTP actions, "Reply" actions (handled separately via requestReplyId), and limit to max 3
+            /// Filter actions - exclude copy OTP actions, "Reply" actions (handled separately via requestReplyId), and limit to max 3
             var filteredActions: [String] = []
             if let actions = actions {
                 for action in actions {
@@ -498,6 +517,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 UserInfoProperty.requestReplyId.rawValue: replyId as Any,
                 UserInfoProperty.isCancelable.rawValue: NSNumber(value: isCancelable),
                 UserNotificationManager.Property.dontPresent.rawValue: NSNumber(value: dontPresent),
+                UserNotificationManager.Property.shouldMute.rawValue: NSNumber(value: shouldMute),
                 UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(NotificationsService.self)
             ]
             
@@ -514,12 +534,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             notification.userInfo = userInfo
-            notification.title = device.name
+            notification.title = device.name    // Set Notification Title
             notification.subtitle = "\(appName)"  // Set Notification Subtitle
             notification.body = ticker  // Set Notification Body
             
-            // Get or create a category with actual action titles from the remote device
-            // Categories are cached by shape + titles for reuse across notifications
+            /// Get or create a category with actual action titles from the remote device
+            /// Categories are cached by shape + titles for reuse across notifications
             let actionTitles = Array(filteredActions.prefix(3))
             let categoryId = AppDelegate.shared().userNotificationManager.getOrCreateCategory(
                 hasReply: hasReply,
@@ -527,9 +547,18 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             )
             notification.categoryIdentifier = categoryId
             
-            // Don't set notification sound if it's an answer to request packet or is a silent notification
-            if !dontPresent {
+            /// Only play sound if notification is not muted
+            /// shouldMute is true for: silent notifications, answer packets, and updates to existing notifications
+            if !shouldMute {
                 notification.sound = UNNotificationSound.default
+            }
+            /// Set interruption level based on notification type
+            /// - passive: for silent/muted notifications (won't interrupt user)
+            /// - active: for normal notifications (default behavior)
+            if dontPresent {
+                notification.setUrgency(.passive)
+            } else {
+                notification.setUrgency(.active)
             }
             
             // Set Notification App Icon
