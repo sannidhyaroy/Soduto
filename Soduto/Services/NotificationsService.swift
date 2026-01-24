@@ -56,6 +56,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         case notificationId = "com.soduto.services.notifications.notificationId"
         case requestReplyId = "com.soduto.services.notifications.requestReplyId"
         case isCancelable = "com.soduto.services.notifications.isCancelable"
+        case dontPresent = "com.soduto.services.notifications.dontPresent"
     }
     
     enum ActionId: ServiceAction.Id {
@@ -140,12 +141,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         for device in devices {
             guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { return }
             self.notificationIds.removeAll()
-            if #available(macOS 11.0, *) {
-                un.removeAllDeliveredNotifications()
-                un.removeAllPendingNotificationRequests()
-            } else {
-                NSUserNotificationCenter.default.removeAllDeliveredNotifications()
-            }
+            un.removeAllDeliveredNotifications()
+            un.removeAllPendingNotificationRequests()
             device.send(DataPacket.notificationRequestPacket())
         }
     }
@@ -205,25 +202,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     // MARK: UserNotificationActionHandler
     
-    public static func handleAction(for notification: NSUserNotification, context: UserNotificationContext) {
-        guard let userInfo = notification.userInfo else { return }
-        guard let deviceId = userInfo[UserInfoProperty.deviceId.rawValue] as? String else { return }
-        guard let notificationId = userInfo[UserInfoProperty.notificationId.rawValue] as? NotificationId else { return }
-        guard let isCancelable = userInfo[UserInfoProperty.isCancelable.rawValue] as? NSNumber else { return }
-        guard let device = context.deviceManager.device(withId: deviceId) else { return }
-        guard device.pairingStatus == .Paired else { return }
-        
-        if isCancelable.boolValue {
-            device.send(DataPacket.notificationCancelPacket(forId: notificationId))
-        }
-        
-        for service in context.serviceManager.services {
-            guard let notificationsService = service as? NotificationsService else { continue }
-            notificationsService.removeNotificationId(notificationId, from: device)
-        }
-    }
-    
-    public func handleUNNotificationAction(for response: UNNotificationResponse, context: UserNotificationContext) {
+    public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
         guard let deviceId = response.notification.request.content.userInfo[UserInfoProperty.deviceId.rawValue] as? String else { return }
         guard let notificationId = response.notification.request.content.userInfo[UserInfoProperty.notificationId.rawValue] as? NotificationId else { return }
         guard let isCancelable = response.notification.request.content.userInfo[UserInfoProperty.isCancelable.rawValue] as? NSNumber else { return }
@@ -235,16 +214,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         } else if response.actionIdentifier != "DismissNotification" && response.actionIdentifier != "ReplyNotification"{
             device.send(DataPacket.notificationActionPacket(forAction: response.actionIdentifier, forKey: notificationId))
         }
-        if response is UNTextInputNotificationResponse {
-            // Cast the response to UNTextInputNotificationResponse
-            let textInputResponse = response as! UNTextInputNotificationResponse
-            let message = textInputResponse.userText
+        if let textInputResponse = response as? UNTextInputNotificationResponse {
+            let message = textInputResponse.userText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let requestReplyId = response.notification.request.content.userInfo[UserInfoProperty.requestReplyId.rawValue] as? String else { return }
-            if message != "" {
-                device.send(DataPacket.notificationReplyPacket(forId: requestReplyId, message: message))
-            } else {
-                self.ShowCustomNotification(title: "Soduto", body: "Notification Reply message was empty!", sound: true, id: "NotificationReplyEmpty")
+            guard !message.isEmpty else {
+                Log.debug?.message("Empty reply message ignored for notification \(notificationId)")
+                return
             }
+            device.send(DataPacket.notificationReplyPacket(forId: requestReplyId, message: message))
         }
         
         for service in context.serviceManager.services {
@@ -256,42 +233,17 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     //MARK: Custom Notification Push method
     
     public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
-        if #available(macOS 11.0, *) {
-            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                if authorized {
-                    print("Authorized to send notifications!")
-                } else if !authorized {
-                    print("Not authorized to send notifications")
-                } else {
-                    print(error?.localizedDescription as Any)
-                }
+        let notification = UNMutableNotificationContent()
+        notification.title = title
+        notification.body = body
+        if sound {
+            notification.sound = UNNotificationSound.default
+        }
+        let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
+        un.add(request) { error in
+            if let error = error {
+                print(error.localizedDescription)
             }
-            un.getNotificationSettings { (settings) in
-                if settings.authorizationStatus == .authorized {
-                    let notification = UNMutableNotificationContent()
-                    notification.title = title
-                    notification.body = body
-                    if sound {
-                        notification.sound = UNNotificationSound.default
-                    }
-                    let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
-                    self.un.add(request){ (error) in
-                        if error != nil {print(error?.localizedDescription as Any)}
-                    }
-                }
-                else {
-                    Log.debug?.message("Soduto isn't authorized to send notifications!")
-                }
-            }
-        } else {
-            let notification = NSUserNotification()
-            notification.title = title
-            notification.informativeText = body
-            if sound {
-                notification.soundName = NSUserNotificationDefaultSoundName
-            }
-            notification.identifier = id
-            NSUserNotificationCenter.default.deliver(notification)
         }
     }
     
@@ -443,109 +395,73 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 notificationIconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetNotificationId)
             }
 
-            if #available(macOS 11.0, *){
-                un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                    if authorized {
-                        print("Authorized to send notifications!")
-                    } else if !authorized {
-                        print("Not authorized to send notifications")
+            let notification = UNMutableNotificationContent()
+            
+            // Set Notification UserInfo
+            notification.userInfo = [
+                UserInfoProperty.deviceId.rawValue: device.id,
+                UserInfoProperty.notificationId.rawValue: packetNotificationId,
+                UserInfoProperty.requestReplyId.rawValue: replyId as Any,
+                UserInfoProperty.isCancelable.rawValue: NSNumber(value: isCancelable),
+                UserNotificationManager.Property.dontPresent.rawValue: NSNumber(value: dontPresent),
+                UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(NotificationsService.self)
+            ]
+            
+            notification.title = "\(appName)"  // Set Notification Title
+            notification.subtitle = "\(device.name)"
+            notification.body = ticker  // Set Notification Body
+            notification.categoryIdentifier = "IncomingNotification"    // Set Notification Category Identifier
+            
+            // Don't set notification sound if it's an answer to request packet or is a silent notification
+            if !dontPresent {
+                notification.sound = UNNotificationSound.default
+            }
+            
+            // Set Notification App Icon
+            if let iconURL = notificationIconURL {
+                do {
+                    let attachment = try UNNotificationAttachment(identifier: notificationId, url: iconURL, options: nil)
+                    notification.attachments = [attachment]
+                } catch {
+                    print(error.localizedDescription)
+                }
+            }
+            
+            var notificationActions = [UNNotificationAction]()
+            
+            // Add Reply Action Button if Reply Actions are available
+            if replyId != nil {
+                notificationActions.append(UNTextInputNotificationAction(identifier: "ReplyNotification", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your message here..."))
+            }
+            
+            // Add Action Buttons, if available
+            if let actions = actions {
+                for action in actions {
+                    // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
+                    if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
+                        self.copyOTP(from: action) // Copy OTP to clipboard
                     } else {
-                        print(error?.localizedDescription as Any)
+                        notificationActions.append(UNNotificationAction(identifier: action, title: action))
                     }
                 }
-                un.getNotificationSettings { (settings) in
-                    if settings.authorizationStatus == .authorized {
-                        let notification = UNMutableNotificationContent()
-                        
-                        // Set Notification UserInfo
-                        var userInfo = notification.userInfo
-                        userInfo[UserInfoProperty.deviceId.rawValue] = device.id as AnyObject
-                        userInfo[UserInfoProperty.notificationId.rawValue] = packetNotificationId as AnyObject
-                        userInfo[UserInfoProperty.requestReplyId.rawValue] = replyId as AnyObject
-                        userInfo[UserInfoProperty.isCancelable.rawValue] = NSNumber(value: isCancelable)
-                        userInfo[UserNotificationManager.Property.dontPresent.rawValue] = NSNumber(value: dontPresent)
-                        notification.userInfo = userInfo
-                        
-                        notification.title = "\(appName)"  // Set Notification Title
-                        notification.subtitle = "\(device.name)"
-                        notification.body = ticker  // Set Notification Body
-                        notification.categoryIdentifier = "IncomingNotification"    // Set Notification Category Identifier
-                        
-                        // Don't set notification sound if it's an answer to request packet or is a silent notification
-                        if !dontPresent {
-                            notification.sound = UNNotificationSound.default
-                        }
-                        
-                        // Set Notification App Icon
-                        if (notificationIconURL != nil) {
-                            do {
-                                let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL!, options: .none)
-                                notification.attachments = [attachment]
-                            }
-                            catch let error {
-                                print(error.localizedDescription)
-                            }
-                        }
-                        
-                        var notificationActions = [UNNotificationAction]()
-                        
-                        // Add Reply Action Button if Reply Actions are available
-                        if replyId != nil {
-                            notificationActions.append(UNTextInputNotificationAction(identifier: "ReplyNotification", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your message here..."))
-                        }
-                        
-                        // Add Action Buttons, if available
-                        if actions != nil {
-                            for action in actions! {
-                                // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
-                                if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
-                                    self.copyOTP(from: action) // Copy OTP to clipboard
-                                } else {
-                                    notificationActions.append(UNNotificationAction(identifier: action, title: action))
-                                }
-                            }
-                        }
-                        // Append a dismiss action that can trigger a dismiss request to the other device
-                        notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))
-                        
-                        // Create Notification Category
-                        let category = UNNotificationCategory(identifier: "IncomingNotification", actions: notificationActions, intentIdentifiers: [], options: [])
-                        
-                        // Create notification request
-                        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-                        
-                        // Set Notification Categories
-                        self.un.setNotificationCategories([category])
-                        
-                        // Push Notification
-                        self.un.add(request){ (error) in
-                            if error != nil {print(error?.localizedDescription as Any)}
-                        }
-                    }
-                    else {
-                        Log.debug?.message("Soduto isn't authorized to send notifications!")
-                    }
+            }
+            // Append a dismiss action that can trigger a dismiss request to the other device
+            notificationActions.append(UNNotificationAction(identifier: "DismissNotification", title: "Dismiss"))
+            
+            // Create Notification Category
+            let category = UNNotificationCategory(identifier: "IncomingNotification", actions: notificationActions, intentIdentifiers: [], options: [])
+            
+            // Create notification request
+            let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+            
+            // Set Notification Categories
+            un.setNotificationCategories([category])
+            
+            // Push Notification
+            un.add(request) { error in
+                if let error = error {
+                    print(error.localizedDescription)
                 }
-            } else {
-                let notification = NSUserNotification.init(actionHandlerClass: type(of: self))
-                var userInfo = notification.userInfo
-                userInfo?[UserInfoProperty.deviceId.rawValue] = device.id as AnyObject
-                userInfo?[UserInfoProperty.notificationId.rawValue] = packetNotificationId as AnyObject
-                userInfo?[UserInfoProperty.requestReplyId.rawValue] = replyId as AnyObject
-                userInfo?[UserInfoProperty.isCancelable.rawValue] = NSNumber(value: isCancelable)
-                userInfo?[UserNotificationManager.Property.dontPresent.rawValue] = NSNumber(value: dontPresent)
-                notification.userInfo = userInfo
-                notification.title = "\(appName) | \(device.name)"
-                notification.informativeText = ticker
-                if (notificationIconURL != nil) {
-                    notification.contentImage = NSImage(contentsOf: URL(fileURLWithPath: notificationIconURL!.path))
-                }
-                if !dontPresent {
-                    notification.soundName = NSUserNotificationDefaultSoundName
-                }
-                notification.hasActionButton = false
-                notification.identifier = notificationId
-                NSUserNotificationCenter.default.scheduleNotification(notification)
             }
 
             self.addNotificationId(notificationId, from: device)    /// Add the Notification ID to the `notificationIds` Dictionary
@@ -564,24 +480,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     private func hideNotification(for id: NotificationId, from device: Device) {
-        if #available(macOS 11.0, *) {
-            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
-            //            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
-        } else {
-            for notification in NSUserNotificationCenter.default.deliveredNotifications {
-                if notification.identifier == id {
-                    NSUserNotificationCenter.default.removeDeliveredNotification(notification)
-                    break
-                }
-            }
-            
-            for notification in NSUserNotificationCenter.default.scheduledNotifications {
-                if notification.identifier == id {
-                    NSUserNotificationCenter.default.removeScheduledNotification(notification)
-                    break
-                }
-            }
-        }
+        UNUserNotificationCenter.current().removeNotification(withId: id)
         
         self.removeNotificationId(id, from: device)
     }

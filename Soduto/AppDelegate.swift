@@ -205,37 +205,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
 extension AppDelegate: UNUserNotificationCenterDelegate {
     
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        if response.notification.request.content.categoryIdentifier == "IncomingCall" {
-            userNotificationManager.handleNotificationAction(for: response, do: "MuteCall")
-        } else if response.notification.request.content.categoryIdentifier == "DownloadFinished" {
-            userNotificationManager.handleNotificationAction(for: response, do: "OpenDownloadedFile")
-        } else if response.notification.request.content.categoryIdentifier == "PairDevice" {
-            switch response.actionIdentifier {
-            case "pair":
-                userNotificationManager.handleNotificationAction(for: response, do: "PairRequest")
-                break
-            case "decline":
-                userNotificationManager.handleNotificationAction(for: response, do: "DeclinePairRequest")
-                break
-            default:
-                break
-            }
-        } else if response.notification.request.content.categoryIdentifier == "SMSReceived" {
-            userNotificationManager.handleNotificationAction(for: response, do: "ReplySMS")
-        } else if response.notification.request.content.categoryIdentifier == "IncomingNotification" {
-            userNotificationManager.handleNotificationAction(for: response, do: "NotificationActionHandler")
-        }
-        else {
-            print("Unknown notification category identifier action!")
-        }
+        // Use dynamic dispatch to handle the notification action
+        userNotificationManager.handleAction(for: response)
+        completionHandler()
     }
     
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        if #available(macOS 11.0, *) {
-            return completionHandler([.list, .sound])
-        } else {
-            // Fallback on earlier versions
-            print("UNNotification system not compatible with macOS Catalina or earlier! Use NSUserNotification instead!")
+        // Check if the notification should not be presented (silent/answer notifications)
+        let userInfo = notification.request.content.userInfo
+        if let dontPresent = userInfo[UserNotificationManager.Property.dontPresent.rawValue] as? NSNumber, dontPresent.boolValue {
+            return completionHandler([])
         }
+        return completionHandler([.list, .sound])
     }
 }

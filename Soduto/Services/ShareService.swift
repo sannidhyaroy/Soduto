@@ -176,10 +176,9 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     
     // MARK: UserNotificationsActionHandler
     
-    public static func handleAction(for notification: NSUserNotification, context: UserNotificationContext) {
-        guard let urlString = notification.userInfo?[NotificationProperty.downloadedFileUrl.rawValue] as? String else { return }
+    public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
+        guard let urlString = response.notification.request.content.userInfo[NotificationProperty.downloadedFileUrl.rawValue] as? String else { return }
         guard let url = URL(string: urlString) else { return }
-        guard notification.activationType == .actionButtonClicked || notification.activationType == .contentsClicked else { return }
         
         NSWorkspace.shared.open(url)
     }
@@ -404,55 +403,31 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     private func showUploadStartNotification(to device: Device) {
         let deviceName = device.name
         let title = "Sending file"
-        let info: String
-        info = "Sending File to '\(deviceName)'"
+        let info = "Sending File to '\(deviceName)'"
         let notificationId = "\(self.id).upload.\(deviceName)"
         
-        if #available(macOS 11.0, *) {
-            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                if authorized {
-                    print("Authorized to send notifications!")
-                } else if !authorized {
-                    print("Not authorized to send notifications")
-                } else {
-                    print(error?.localizedDescription as Any)
-                }
+        let notification = UNMutableNotificationContent()
+        notification.title = title
+        notification.body = info
+        if let iconPath = self.notificationIconPath {
+            let notificationIconURL = URL(fileURLWithPath: iconPath)
+            do {
+                let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
+                notification.attachments = [attachment]
+            } catch {
+                print(error.localizedDescription)
             }
-            un.getNotificationSettings { (settings) in
-                if settings.authorizationStatus == .authorized {
-                    let notification = UNMutableNotificationContent()
-                    notification.title = title
-                    notification.body = info
-                    if (self.notificationIconPath != nil) {
-                        let notificationIconURL = URL(fileURLWithPath: self.notificationIconPath!)
-                        do {
-                            let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
-                            notification.attachments = [attachment]
-                        }
-                        catch let error {
-                            print(error.localizedDescription)
-                        }
-                    }
-                    let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-                    self.un.add(request){ (error) in
-                        if error != nil {print(error?.localizedDescription as Any)}
-                    }
-                    let seconds = 5.0
-                    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-                        // Put your code which should be executed with a delay here
-                        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
-                    }
-                } else {
-                    Log.debug?.message("Soduto isn't authorized to push notifications!")
-                }
+        }
+        
+        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+        un.add(request) { error in
+            if let error = error {
+                print(error.localizedDescription)
             }
-        } else {
-            let notification = NSUserNotification()
-            notification.title = title
-            notification.informativeText = info
-            notification.hasActionButton = false
-            notification.identifier = notificationId
-            NSUserNotificationCenter.default.deliver(notification)
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            self.un.removeNotification(withId: notificationId)
         }
     }
     
@@ -461,57 +436,32 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         
         let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
         let title = "Receiving file"
-        let info: String
-        info = deviceName != nil ? "Receiving File from '\(deviceName!)'" : "Receiving File from an unknown device"
+        let info = deviceName != nil ? "Receiving File from '\(deviceName!)'" : "Receiving File from an unknown device"
         let notificationId = "\(self.id).download.\(task.id)"
         
-        if #available(macOS 11.0, *) {
-            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                if authorized {
-                    print("Authorized to send notifications!")
-                } else if !authorized {
-                    print("Not authorized to send notifications")
-                } else {
-                    print(error?.localizedDescription as Any)
-                }
+        let notification = UNMutableNotificationContent()
+        notification.title = title
+        notification.body = info
+        notification.sound = UNNotificationSound.default
+        if let iconPath = self.notificationIconPath {
+            let notificationIconURL = URL(fileURLWithPath: iconPath)
+            do {
+                let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
+                notification.attachments = [attachment]
+            } catch {
+                print(error.localizedDescription)
             }
-            un.getNotificationSettings { (settings) in
-                if settings.authorizationStatus == .authorized {
-                    let notification = UNMutableNotificationContent()
-                    notification.title = title
-                    notification.body = info
-                    notification.sound = UNNotificationSound.default
-                    if (self.notificationIconPath != nil) {
-                        let notificationIconURL = URL(fileURLWithPath: self.notificationIconPath!)
-                        do {
-                            let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
-                            notification.attachments = [attachment]
-                        }
-                        catch let error {
-                            print(error.localizedDescription)
-                        }
-                    }
-                    let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-                    self.un.add(request){ (error) in
-                        if error != nil {print(error?.localizedDescription as Any)}
-                    }
-                    let seconds = 5.0
-                    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-                        // Put your code which should be executed with a delay here
-                        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
-                    }
-                } else {
-                    Log.debug?.message("Soduto isn't authorized to push notifications!")
-                }
+        }
+        
+        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+        un.add(request) { error in
+            if let error = error {
+                print(error.localizedDescription)
             }
-        } else {
-            let notification = NSUserNotification()
-            notification.title = title
-            notification.informativeText = info
-            notification.soundName = NSUserNotificationDefaultSoundName
-            notification.hasActionButton = false
-            notification.identifier = notificationId
-            NSUserNotificationCenter.default.deliver(notification)
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            self.un.removeNotification(withId: notificationId)
         }
     }
     
@@ -523,61 +473,31 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let info = deviceName != nil ? "File sent to '\(deviceName!)'" : " File sent to an unknown device"
         let notificationId = "\(self.id).upload.\(deviceName!)"
         
-        if #available(macOS 11.0, *) {
-            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                if authorized {
-                    print("Authorized to send notifications!")
-                } else if !authorized {
-                    print("Not authorized to send notifications")
-                } else {
-                    print(error?.localizedDescription as Any)
-                }
+        let notification = UNMutableNotificationContent()
+        notification.title = title
+        if succeeded {
+            notification.body = info
+        }
+        notification.sound = UNNotificationSound.default
+        if let iconPath = self.notificationIconPath {
+            let notificationIconURL = URL(fileURLWithPath: iconPath)
+            do {
+                let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
+                notification.attachments = [attachment]
+            } catch {
+                print(error.localizedDescription)
             }
-            un.getNotificationSettings { (settings) in
-                if settings.authorizationStatus == .authorized {
-                    let notification = UNMutableNotificationContent()
-                    notification.title = title
-                    if succeeded {
-                        notification.body = info
-                    }
-                    notification.sound = UNNotificationSound.default
-                    if (self.notificationIconPath != nil) {
-                        let notificationIconURL = URL(fileURLWithPath: self.notificationIconPath!)
-                        do {
-                            let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
-                            notification.attachments = [attachment]
-                        }
-                        catch let error {
-                            print(error.localizedDescription)
-                        }
-                    }
-                    let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-                    self.un.add(request){ (error) in
-                        if error != nil {print(error?.localizedDescription as Any)}
-                    }
-                    let seconds = 5.0
-                    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-                        // Put your code which should be executed with a delay here
-                        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
-                    }
-                } else {
-                    Log.debug?.message("Soduto isn't authorized to push notifications!")
-                }
+        }
+        
+        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+        un.add(request) { error in
+            if let error = error {
+                print(error.localizedDescription)
             }
-        } else {
-            let notification = NSUserNotification(actionHandlerClass: ShareService.self)
-            notification.title = title
-            notification.informativeText = info
-            notification.soundName = NSUserNotificationDefaultSoundName
-            notification.hasActionButton = false
-            notification.identifier = notificationId
-            NSUserNotificationCenter.default.scheduleNotification(notification)
-            
-            if !succeeded {
-                _ = Timer.compatScheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
-                    NSUserNotificationCenter.default.removeDeliveredNotification(notification)
-                }
-            }
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            self.un.removeNotification(withId: notificationId)
         }
     }
     
@@ -595,76 +515,41 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         }
         let notificationId = "\(self.id).download.\(task.id)"
         
-        if #available(macOS 11.0, *) {
-            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                if authorized {
-                    print("Authorized to send notifications!")
-                } else if !authorized {
-                    print("Not authorized to send notifications")
-                } else {
-                    print(error?.localizedDescription as Any)
-                }
+        let notification = UNMutableNotificationContent()
+        if let url = finalUrl {
+            notification.userInfo = [
+                NotificationProperty.downloadedFileUrl.rawValue: url.absoluteString,
+                UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(ShareService.self)
+            ]
+        }
+        notification.title = title
+        notification.body = info
+        notification.sound = UNNotificationSound.default
+        if let iconPath = self.notificationIconPath {
+            let notificationIconURL = URL(fileURLWithPath: iconPath)
+            do {
+                let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
+                notification.attachments = [attachment]
+            } catch {
+                print(error.localizedDescription)
             }
-            un.getNotificationSettings { (settings) in
-                if settings.authorizationStatus == .authorized {
-                    let notification = UNMutableNotificationContent()
-                    if let url = finalUrl {
-                        var userInfo = notification.userInfo
-                        userInfo[NotificationProperty.downloadedFileUrl.rawValue] = url.absoluteString as AnyObject
-                        notification.userInfo = userInfo
-                    }
-                    notification.title = title
-                    notification.body = info
-                    notification.sound = UNNotificationSound.default
-                    if (self.notificationIconPath != nil) {
-                        let notificationIconURL = URL(fileURLWithPath: self.notificationIconPath!)
-                        do {
-                            let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
-                            notification.attachments = [attachment]
-                        }
-                        catch let error {
-                            print(error.localizedDescription)
-                        }
-                    }
-                    if (succeeded && finalUrl != nil) {
-                        notification.categoryIdentifier = "DownloadFinished"
-                        let openfile = UNNotificationAction(identifier: "openfile", title: "Open")
-                        let category = UNNotificationCategory(identifier: "DownloadFinished", actions: [openfile], intentIdentifiers: [], options: [])
-                        self.un.setNotificationCategories([category])
-                    }
-                    let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-                    self.un.add(request){ (error) in
-                        if error != nil {print(error?.localizedDescription as Any)}
-                    }
-                    let seconds = 5.0
-                    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-                        // Put your code which should be executed with a delay here
-                        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
-                    }
-                } else {
-                    Log.debug?.message("Soduto isn't authorized to push notifications!")
-                }
+        }
+        if succeeded && finalUrl != nil {
+            notification.categoryIdentifier = "DownloadFinished"
+            let openfile = UNNotificationAction(identifier: "openfile", title: "Open")
+            let category = UNNotificationCategory(identifier: "DownloadFinished", actions: [openfile], intentIdentifiers: [], options: [])
+            un.setNotificationCategories([category])
+        }
+        
+        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+        un.add(request) { error in
+            if let error = error {
+                print(error.localizedDescription)
             }
-        } else {
-            let notification = NSUserNotification(actionHandlerClass: ShareService.self)
-            if let url = finalUrl {
-                var userInfo = notification.userInfo
-                userInfo?[NotificationProperty.downloadedFileUrl.rawValue] = url.absoluteString as AnyObject
-                notification.userInfo = userInfo
-            }
-            notification.title = title
-            notification.informativeText = info
-            notification.soundName = NSUserNotificationDefaultSoundName
-            notification.hasActionButton = succeeded && finalUrl != nil
-            notification.actionButtonTitle = "Open"
-            notification.identifier = notificationId
-            NSUserNotificationCenter.default.scheduleNotification(notification)
-            
-            if !succeeded {
-                _ = Timer.compatScheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
-                    NSUserNotificationCenter.default.removeDeliveredNotification(notification)
-                }
-            }
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            self.un.removeNotification(withId: notificationId)
         }
     }
     

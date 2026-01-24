@@ -193,42 +193,17 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
     // MARK: Notification System
     
     public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
-        if #available(macOS 11.0, *) {
-            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                if authorized {
-                    print("Authorized to send notifications!")
-                } else if !authorized {
-                    print("Not authorized to send notifications")
-                } else {
-                    print(error?.localizedDescription as Any)
-                }
+        let notification = UNMutableNotificationContent()
+        notification.title = title
+        notification.body = body
+        if sound {
+            notification.sound = UNNotificationSound.default
+        }
+        let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
+        un.add(request) { error in
+            if let error = error {
+                print(error.localizedDescription)
             }
-            un.getNotificationSettings { (settings) in
-                if settings.authorizationStatus == .authorized {
-                    let notification = UNMutableNotificationContent()
-                    notification.title = title
-                    notification.body = body
-                    if sound {
-                        notification.sound = UNNotificationSound.default
-                    }
-                    let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
-                    self.un.add(request){ (error) in
-                        if error != nil {print(error?.localizedDescription as Any)}
-                    }
-                }
-                else {
-                    print("Soduto isn't authorized to send notifications!")
-                }
-            }
-        } else {
-            let notification = NSUserNotification()
-            notification.title = title
-            notification.informativeText = body
-            if sound {
-                notification.soundName = NSUserNotificationDefaultSoundName
-            }
-            notification.identifier = id
-            NSUserNotificationCenter.default.deliver(notification)
         }
     }
 }
