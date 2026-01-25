@@ -43,6 +43,9 @@ import UserNotifications
 /// "id" set to the id of the notification we want to dismiss and a boolean "cancel"
 /// set to true. The other device will answer with a notification package with
 /// "isCancel" set to true when it is dismissed.
+///
+/// Notification synchronization is best-effort and prioritizes local UI consistency.
+/// Due to KDE Connect protocol limitations, some remote notifications may not be mirrored.
 public class NotificationsService: Service, DownloadTaskDelegate, UserNotificationActionHandler {
     
     let un = UNUserNotificationCenter.current()
@@ -109,8 +112,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// Timers for post-sync reconciliation, keyed by device ID.
     private var syncReconciliationTimers: [Device.Id: Timer] = [:]
     
-    /// Duration to wait after a notification request before reconciling stale notifications (seconds).
-    private let syncReconciliationDelay: TimeInterval = 5.0
+    /// Time to wait for the first notification packet before assuming the device has no notifications.
+    private let initialSyncTimeout: TimeInterval = 3.5
+    
+    /// Time to wait after the last received notification packet before reconciling.
+    /// This acts as a debounce to ensure we received the full batch of notifications even on slow networks.
+    private let syncDebounceTimeout: TimeInterval = 1.0
     
     // MARK: Service methods
     
@@ -403,6 +410,16 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         return "\(self.id).\(deviceId).\(packetId)"
     }
     
+    /// Extracts the packet ID (the last component) from a full notification ID.
+    /// Notification ID format: "com.soduto.services.notifications.<deviceIdEncoded>.<packetIdEncoded>"
+    private func extractPacketId(from notificationId: NotificationId) -> String? {
+        // Find the last dot and extract everything after it
+        guard let range = notificationId.range(of: ".", options: .backwards) else { return nil }
+        let packetIdEncoded = String(notificationId[range.upperBound...])
+        // The packetId in the notification ID is URL encoded, so we decode it to get the original packet Id
+        return packetIdEncoded.removingPercentEncoding
+    }
+    
     /// Sanitizes a string to be safe for use in filenames by replacing invalid characters.
     /// macOS doesn't allow: / : in filenames. We also replace | and other problematic chars.
     private func sanitizeForFilename(_ string: String) -> String {
@@ -433,29 +450,31 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         let prefix = "\(self.id).\(deviceIdEncoded)."
         
         un.getDeliveredNotifications { [weak self] notifications in
-            guard let self = self else {
-                completion()
-                return
-            }
-            
-            var matchCount = 0
-            for notification in notifications {
-                let identifier = notification.request.identifier
-                // Check if this notification belongs to this service and device
-                if identifier.hasPrefix(prefix) {
-                    self.addNotificationId(identifier, from: device)
-                    // Also restore the content hash so we can detect reconnection duplicates
-                    let body = notification.request.content.body
-                    self.notificationContentHashes[identifier] = body.hashValue
-                    matchCount += 1
+            DispatchQueue.main.async {
+                guard let self = self else {
+                    completion()
+                    return
                 }
+                
+                var matchCount = 0
+                for notification in notifications {
+                    let identifier = notification.request.identifier
+                    // Check if this notification belongs to this service and device
+                    if identifier.hasPrefix(prefix) {
+                        self.addNotificationId(identifier, from: device)
+                        // Also restore the content hash so we can detect reconnection duplicates
+                        let body = notification.request.content.body
+                        self.notificationContentHashes[identifier] = body.hashValue
+                        matchCount += 1
+                    }
+                }
+                
+                if matchCount > 0 {
+                    Log.debug?.message("Repopulated \(matchCount) notification IDs for device \(device.name)")
+                }
+                
+                completion()
             }
-            
-            if matchCount > 0 {
-                Log.debug?.message("Repopulated \(matchCount) notification IDs for device \(device.name)")
-            }
-            
-            completion()
         }
     }
     
@@ -471,42 +490,46 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         let prefix = "\(self.id)."
         
         un.getDeliveredNotifications { [weak self] deliveredNotifications in
-            guard let self = self else {
-                completion()
-                return
-            }
-            
-            // Build a set of all notification IDs currently in Notification Center
-            let deliveredIds = Set(deliveredNotifications.map { $0.request.identifier })
-            
-            var removedCount = 0
-            
-            // For each device, remove any tracked IDs that are no longer delivered
-            for (deviceId, trackedIds) in self.notificationIds {
-                for trackedId in trackedIds {
-                    // Only check IDs that belong to this service
-                    if trackedId.hasPrefix(prefix) && !deliveredIds.contains(trackedId) {
-                        // Clean up icon file if present
-                        if let iconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: trackedId) {
-                            do {
-                                try FileManager.default.removeItem(at: iconURL)
-                                Log.debug?.message("Deleted icon file for reconciled notification \(trackedId) at \(iconURL.path)")
-                            } catch {
-                                Log.error?.message("Failed to delete icon file for reconciled notification \(trackedId): \(error)")
+            DispatchQueue.main.async {
+                guard let self = self else {
+                    completion()
+                    return
+                }
+                
+                // Build a set of all notification IDs currently in Notification Center
+                let deliveredIds = Set(deliveredNotifications.map { $0.request.identifier })
+                
+                var removedCount = 0
+                
+                // For each device, remove any tracked IDs that are no longer delivered
+                for (deviceId, trackedIds) in self.notificationIds {
+                    for trackedId in trackedIds {
+                        // Only check IDs that belong to this service
+                        if trackedId.hasPrefix(prefix) && !deliveredIds.contains(trackedId) {
+                            // Clean up icon file if present
+                            // extractPacketId required because dictionary is keyed by packetId, not full notificationId
+                            if let packetId = self.extractPacketId(from: trackedId),
+                               let iconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetId) {
+                                do {
+                                    try FileManager.default.removeItem(at: iconURL)
+                                    Log.debug?.message("Deleted icon file for reconciled notification \(trackedId) at \(iconURL.path)")
+                                } catch {
+                                    Log.error?.message("Failed to delete icon file for reconciled notification \(trackedId): \(error)")
+                                }
                             }
+                            self.notificationIds[deviceId]?.remove(trackedId)
+                            self.notificationContentHashes.removeValue(forKey: trackedId)
+                            removedCount += 1
                         }
-                        self.notificationIds[deviceId]?.remove(trackedId)
-                        self.notificationContentHashes.removeValue(forKey: trackedId)
-                        removedCount += 1
                     }
                 }
+                
+                if removedCount > 0 {
+                    Log.debug?.message("Reconciled notification state: removed \(removedCount) stale entries")
+                }
+                
+                completion()
             }
-            
-            if removedCount > 0 {
-                Log.debug?.message("Reconciled notification state: removed \(removedCount) stale entries")
-            }
-            
-            completion()
         }
     }
     
@@ -758,6 +781,15 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
 
     private func showNotification(for dataPacket: DataPacket, from device: Device) {
+        // Should run on main thread to ensure thread safety for state dictionaries
+        // (notificationIds, notificationContentHashes, downloadedNotificationIconFileURLByNotificationId)
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                self.showNotification(for: dataPacket, from: device)
+            }
+            return
+        }
+
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
 
         do {
@@ -914,6 +946,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     private func addNotificationId(_ id: NotificationId, from device: Device) {
+        // Ensure main thread for state mutation
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                self.addNotificationId(id, from: device)
+            }
+            return
+        }
+        
         if self.notificationIds[device.id] == nil {
             self.notificationIds[device.id] = Set<NotificationId>()
         }
@@ -921,6 +961,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     private func removeNotificationId(_ id: NotificationId, from device: Device) {
+        // Ensure main thread for state mutation
+        if !Thread.isMainThread {
+            DispatchQueue.main.async {
+                self.removeNotificationId(id, from: device)
+            }
+            return
+        }
+        
         guard self.notificationIds[device.id] != nil else { return }
         _ = self.notificationIds[device.id]?.remove(id)
     }
@@ -953,11 +1001,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// After the window closes (timer fires), any local notification IDs not received are considered
     /// dismissed on the remote device and are removed from macOS.
     private func startSyncWindow(for device: Device) {
-        syncReconciliationTimers[device.id]?.invalidate() // Cancel any existing timer for this device
-        pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
         DispatchQueue.main.async {
+            self.syncReconciliationTimers[device.id]?.invalidate() // Cancel any existing timer for this device
+            self.pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
+            
             self.syncReconciliationTimers[device.id] = Timer.scheduledTimer(
-                withTimeInterval: self.syncReconciliationDelay, repeats: false) { [weak self] _ in
+                withTimeInterval: self.initialSyncTimeout, repeats: false) { [weak self] _ in
                     self?.finishSyncWindow(for: device)
             }
             Log.debug?.message("Started sync window for device \(device.name)")
@@ -966,12 +1015,32 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     /// Called when a notification is received during a sync window. Adds the notification ID to the pending set.
     private func recordReceivedNotificationId(_ notificationId: NotificationId, for device: Device) {
-        // Only record if a sync window is active for this device
-        guard pendingSyncReceivedIds[device.id] != nil else { return }
-        pendingSyncReceivedIds[device.id]?.insert(notificationId)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // Only record if a sync window is active for this device
+            guard self.pendingSyncReceivedIds[device.id] != nil else { return }
+            self.pendingSyncReceivedIds[device.id]?.insert(notificationId)
+            
+            // Debounce: Reschedule the reconciliation timer to wait for end of stream
+            // This prevents the window from closing while large batches of notifications are still arriving
+            self.syncReconciliationTimers[device.id]?.invalidate()
+            self.syncReconciliationTimers[device.id] = Timer.scheduledTimer(
+                withTimeInterval: self.syncDebounceTimeout,
+                repeats: false
+            ) { [weak self] _ in
+                self?.finishSyncWindow(for: device)
+            }
+        }
     }
     
     /// Finishes the sync window for a device. Removes any local notifications not received during the sync.
+    /// NOTE: KDE Connect does not provide an authoritative or complete notification snapshot.
+    /// There is no explicit end-of-list marker or completeness guarantee.
+    /// Stale removal performed here is therefore best-effort and heuristic-based.
+    /// In rare cases, notifications that still exist on the remote device may be
+    /// removed locally, if they are not re-sent during the sync window.
+    /// This behavior is an intentional trade-off to provide a cleaner and more
+    /// seamless notification mirroring experience on macOS.
     private func finishSyncWindow(for device: Device) {
         guard let receivedIds = pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
         syncReconciliationTimers.removeValue(forKey: device.id)
@@ -992,8 +1061,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         Log.debug?.message("Finished sync window for \(device.name): removing \(staleIds.count) stale notifications")
         
         for staleId in staleIds {
-            // Clean up icon file if present (extract packetId from notificationId)
-            if let iconURL = downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: staleId) {
+            // Clean up icon file if present
+            // Must extract packetId because dictionary keys are packetIds, not full notificationIds
+            if let packetId = self.extractPacketId(from: staleId),
+               let iconURL = downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetId) {
                 do {
                     try FileManager.default.removeItem(at: iconURL)
                     Log.debug?.message("Deleted icon file for stale notification \(staleId) at \(iconURL.path)")
