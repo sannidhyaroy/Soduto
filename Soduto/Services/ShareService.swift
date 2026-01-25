@@ -182,8 +182,9 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
         guard let urlString = response.notification.request.content.userInfo[NotificationProperty.downloadedFileUrl.rawValue] as? String else { return }
         guard let url = URL(string: urlString) else { return }
-        
-        NSWorkspace.shared.open(url)
+        if response.actionIdentifier == "openfile" || response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            NSWorkspace.shared.open(url)
+        }
     }
     
     // MARK: NSDraggingDestination
