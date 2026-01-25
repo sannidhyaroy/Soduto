@@ -164,28 +164,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         }
     }
     
-    public static func handleMuteAction(for notification: UNNotificationResponse, context: UserNotificationContext) {
-        guard let userInfo = notification.notification.request.content.userInfo as [AnyHashable: Any]? else { return }
-        guard let deviceId = userInfo[NotificationProperty.deviceId.rawValue] as? String else { return }
-        guard let device = context.deviceManager.device(withId: deviceId) else { return }
-        guard device.pairingStatus == .Paired else { return }
-        device.send(DataPacket.mutePhonePacket())
-    }
-    
-    public static func handleReplySMSAction(for notification: UNNotificationResponse, context: UserNotificationContext) {
-        guard let userInfo = notification.notification.request.content.userInfo as [AnyHashable: Any]? else { return }
-        guard let deviceId = userInfo[NotificationProperty.deviceId.rawValue] as? String else { return }
-        guard let device = context.deviceManager.device(withId: deviceId) else { return }
-        guard device.pairingStatus == .Paired else { return }
-        if notification.actionIdentifier == "reply" {
-            if let response = notification as? UNTextInputNotificationResponse {
-                let responseText = response.userText
-                guard let phoneNumber = userInfo[NotificationProperty.phoneNumber.rawValue] as? String else { return }
-                device.send(DataPacket.smsRequestPacket(phoneNumber: phoneNumber, message: responseText))
-            }
-        }
-    }
-    
     // MARK: Private methods
     
     private func notificationId(for dataPacket: DataPacket, from device: Device) -> String? {

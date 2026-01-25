@@ -186,14 +186,6 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         NSWorkspace.shared.open(url)
     }
     
-    public static func handleOpenDownloadedFileAction(for notification: UNNotificationResponse, context: UserNotificationContext) {
-        guard let urlString = notification.notification.request.content.userInfo[NotificationProperty.downloadedFileUrl.rawValue] as? String else { return }
-        guard let url = URL(string: urlString) else { return }
-        
-        NSWorkspace.shared.open(url)
-    }
-    
-    
     // MARK: NSDraggingDestination
     
     public dynamic func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
