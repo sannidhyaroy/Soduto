@@ -769,18 +769,25 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             // UNNotificationAttachment MOVES the file to its data store, so we must copy it first
             // to preserve the original for potential notification updates
             if let iconURL = notificationIconURL {
+                // Track temp file for cleanup on error
+                var tempCopyURL: URL? = nil
                 do {
                     // Create a temporary copy for the attachment (will be moved by the system)
-                    let tempCopyURL = iconURL.deletingLastPathComponent()
+                    tempCopyURL = iconURL.deletingLastPathComponent()
                         .appendingPathComponent(UUID().uuidString + ".png")
-                    try FileManager.default.copyItem(at: iconURL, to: tempCopyURL)
+                    try FileManager.default.copyItem(at: iconURL, to: tempCopyURL!)
                     
                     // Use sanitized identifier for attachment
                     let attachmentId = sanitizeForFilename(notificationId)
-                    let attachment = try UNNotificationAttachment(identifier: attachmentId, url: tempCopyURL, options: nil)
+                    let attachment = try UNNotificationAttachment(identifier: attachmentId, url: tempCopyURL!, options: nil)
                     notification.attachments = [attachment]
+                    // On success, tempCopyURL is moved by UNNotificationAttachment - no cleanup needed
                 } catch {
                     Log.error?.message("Failed to create notification attachment: \(error.localizedDescription)")
+                    // Clean up the temporary file if it was created but attachment failed
+                    if let tempURL = tempCopyURL, FileManager.default.fileExists(atPath: tempURL.path) {
+                        try? FileManager.default.removeItem(at: tempURL)
+                    }
                 }
             }
             
