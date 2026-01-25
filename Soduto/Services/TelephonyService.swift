@@ -309,7 +309,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(TelephonyService.self)
                 ]
                 notification.title = device.name
-                notification.subtitle = "SMS from  \(contactName)"
+                notification.subtitle = "SMS from \(contactName)"
                 notification.body = messageBody
                 notification.sound = UNNotificationSound.default
                 notification.setUrgency(.active)
