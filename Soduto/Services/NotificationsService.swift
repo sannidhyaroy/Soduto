@@ -797,7 +797,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     private func hideNotification(for id: NotificationId, from device: Device) {
-        UNUserNotificationCenter.current().removeNotification(withId: id)
+        un.removeNotification(withId: id)
         
         self.removeNotificationId(id, from: device)
         self.notificationContentHashes.removeValue(forKey: id)

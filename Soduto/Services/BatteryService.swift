@@ -31,6 +31,8 @@ public class BatteryService: Service {
     
     // MARK: Types
     
+    let un = UNUserNotificationCenter.current()
+    
     public struct BatteryStatus {
         var currentCharge: Int
         var isCharging: Bool
@@ -165,8 +167,8 @@ public class BatteryService: Service {
     
     private func hideNotification(for device: Device) {
         let notificationId = self.notificationId(for: device)
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationId])
+        un.removeDeliveredNotifications(withIdentifiers: [notificationId])
+        un.removePendingNotificationRequests(withIdentifiers: [notificationId])
     }
     
     private func getBatteryStatus() -> BatteryStatus? {

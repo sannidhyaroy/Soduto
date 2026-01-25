@@ -18,7 +18,6 @@ let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
-    let un = UNUserNotificationCenter.current()
     var validDevices: [Device] = []
     var validDeviceNames = [String]()
     @IBOutlet weak var statusBarMenuController: StatusBarMenuController!
@@ -85,7 +84,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: RunCommandService())
         self.serviceManager.add(service: MacToRemoteInputService())
         self.serviceManager.add(service: MPRISService())
-        un.delegate = self
+        // Note: UserNotificationManager sets itself as the UNUserNotificationCenter delegate
         self.updateValidDevices()
         let notificationName = "com.Soduto.Share" as CFString
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
@@ -199,37 +198,5 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
                                         notificationName,
                                         nil,
                                         CFNotificationSuspensionBehavior.deliverImmediately)
-    }
-}
-
-// MARK: - UNUserNotificationCenterDelegate
-
-extension AppDelegate: UNUserNotificationCenterDelegate {
-    
-    /// Handles user actions on notifications by delegating to the UserNotificationManager.
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        // Use dynamic dispatch to handle the notification action
-        userNotificationManager.handleAction(for: response)
-        completionHandler()
-    }
-    
-    /// Determines how to present notifications when the app is in the foreground.
-    /// - `dontPresent`: Notification not presented at all
-    /// - `shouldMute`: Notification shows banner but without sound - for silent notifications from Android
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        let userInfo = notification.request.content.userInfo
-        
-        // Check if the notification should not be presented
-        if let dontPresent = userInfo[UserNotificationManager.Property.dontPresent.rawValue] as? NSNumber, dontPresent.boolValue {
-            return completionHandler([])
-        }
-        
-        // Check if the notification should be shown without sound (silent notifications from Android)
-        if let shouldMute = userInfo[UserNotificationManager.Property.shouldMute.rawValue] as? NSNumber, shouldMute.boolValue {
-            return completionHandler([.list, .banner])
-        }
-        
-        // Default: show notification as banner with sound
-        return completionHandler([.list, .banner, .sound])
     }
 }

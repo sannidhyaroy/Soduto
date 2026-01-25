@@ -358,7 +358,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             Log.error?.message("Error determining call event type: \(error)")
         }
         
-        UNUserNotificationCenter.current().removeNotification(withId: id)
+        un.removeNotification(withId: id)
         
         Log.debug?.message("Notification hidden: \(id)")
     }

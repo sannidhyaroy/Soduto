@@ -38,11 +38,13 @@ public protocol UserNotificationActionHandler: AnyObject {
 /// Manages user notifications for Soduto, including authorization, category registration, and action dispatch.
 ///
 /// This class handles:
+/// - Acting as the UNUserNotificationCenterDelegate for the app
 /// - Requesting notification authorization at app startup
 /// - Registering base notification categories (pairing, telephony, share)
 /// - Creating and caching dynamic notification categories for Android notifications
 /// - Dispatching notification actions to the appropriate handler classes
-public class UserNotificationManager: NSObject {
+/// - Determining how notifications are presented in the foreground
+public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate {
     
     // MARK: Types
     
@@ -97,6 +99,7 @@ public class UserNotificationManager: NSObject {
     
     // MARK: Private properties
     
+    private let un = UNUserNotificationCenter.current()
     private let context: UserNotificationContext
     
     /// Cache for dynamically created categories, keyed by shape + action titles
@@ -115,8 +118,11 @@ public class UserNotificationManager: NSObject {
         
         super.init()
         
+        // Set ourselves as the notification center delegate
+        un.delegate = self
+        
         // Request notification authorization
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { authorized, error in
+        un.requestAuthorization(options: [.alert, .sound, .badge]) { authorized, error in
             if authorized {
                 print("Authorized to send notifications!")
             } else if !authorized {
@@ -128,6 +134,34 @@ public class UserNotificationManager: NSObject {
         
         // Register all shape-based notification categories once at startup
         registerNotificationCategories()
+    }
+    
+    // MARK: UNUserNotificationCenterDelegate
+    
+    /// Handles user actions on notifications by dispatching to the appropriate handler class.
+    public func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        handleAction(for: response)
+        completionHandler()
+    }
+    
+    /// Determines how to present notifications when the app is in the foreground.
+    /// - `dontPresent`: Notification not presented at all (e.g., answer packets)
+    /// - `shouldMute`: Notification shows banner but without sound (silent notifications from Android)
+    public func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        let userInfo = notification.request.content.userInfo
+        
+        // Check if the notification should not be presented
+        if let dontPresent = userInfo[Property.dontPresent.rawValue] as? NSNumber, dontPresent.boolValue {
+            return completionHandler([])
+        }
+        
+        // Check if the notification should be shown without sound (silent notifications from Android)
+        if let shouldMute = userInfo[Property.shouldMute.rawValue] as? NSNumber, shouldMute.boolValue {
+            return completionHandler([.list, .banner])
+        }
+        
+        // Default: show notification as banner with sound
+        return completionHandler([.list, .banner, .sound])
     }
     
     // MARK: Category Registration
@@ -180,7 +214,7 @@ public class UserNotificationManager: NSObject {
         )
         registeredCategories.insert(shareCategory)
         
-        UNUserNotificationCenter.current().setNotificationCategories(registeredCategories)
+        un.setNotificationCategories(registeredCategories)
     }
     
     // MARK: Dynamic Category Management
@@ -260,7 +294,7 @@ public class UserNotificationManager: NSObject {
         
         // Add to registered categories and update the notification center
         registeredCategories.insert(category)
-        UNUserNotificationCenter.current().setNotificationCategories(registeredCategories)
+        un.setNotificationCategories(registeredCategories)
         
         return categoryId
     }
@@ -288,7 +322,7 @@ public class UserNotificationManager: NSObject {
         
         // Remove the notification after handling
         let id = response.notification.request.identifier
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+        un.removeDeliveredNotifications(withIdentifiers: [id])
     }
 }
 
