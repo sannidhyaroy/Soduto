@@ -475,6 +475,15 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 for trackedId in trackedIds {
                     // Only check IDs that belong to this service
                     if trackedId.hasPrefix(prefix) && !deliveredIds.contains(trackedId) {
+                        // Clean up icon file if present
+                        if let iconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: trackedId) {
+                            do {
+                                try FileManager.default.removeItem(at: iconURL)
+                                Log.debug?.message("Deleted icon file for reconciled notification \(trackedId) at \(iconURL.path)")
+                            } catch {
+                                Log.error?.message("Failed to delete icon file for reconciled notification \(trackedId): \(error)")
+                            }
+                        }
                         self.notificationIds[deviceId]?.remove(trackedId)
                         self.notificationContentHashes.removeValue(forKey: trackedId)
                         removedCount += 1
@@ -836,6 +845,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     // Clean up the temporary file if it was created but attachment failed
                     if let tempURL = tempCopyURL, FileManager.default.fileExists(atPath: tempURL.path) {
                         try? FileManager.default.removeItem(at: tempURL)
+                    }
+                    // Opportunistically cleanup icon file dictionary entry, if present
+                    if let iconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetNotificationId) {
+                        Log.debug?.message("Removed icon file dictionary entry for failed notification attachment: \(packetNotificationId) at \(iconURL.path)")
                     }
                 }
             }
