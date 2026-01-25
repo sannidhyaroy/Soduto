@@ -123,6 +123,28 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     self.startIconDownloadTaskAndShowNotification(downloadTask: iconDownloadTask!, notificationId: id!, dataPacket: dataPacket, device: device)
                 }
                 else {
+                    // No download task - try to find cached icon
+                    if let id = id {
+                        // First, try by payload hash (if the packet includes it)
+                        if let payloadHash = try? dataPacket.getPayloadHash(),
+                           let cachedIconURL = self.cachedDownloadedNotificationIconFileURLByHash[payloadHash] {
+                            Log.debug?.message("Using cached icon for notification \(id) with hash \(payloadHash)")
+                            do {
+                                let copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedIconURL, notificationId: id)
+                                self.downloadedNotificationIconFileURLByNotificationId[id] = copiedFromCacheFileURL
+                            } catch {
+                                Log.error?.message("Failed to copy cached icon: \(error.localizedDescription)")
+                            }
+                        }
+                        // Second, check if we already have a downloaded icon for this notification ID
+                        else if self.downloadedNotificationIconFileURLByNotificationId[id] != nil {
+                            Log.debug?.message("Icon already available for notification \(id)")
+                        }
+                        else {
+                            Log.debug?.message("No icon available for notification \(id) - no downloadTask, no payloadHash match, no cached icon")
+                        }
+                    }
+                    
                     self.showNotification(for: dataPacket, from: device)
                 }
             }
@@ -216,7 +238,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         let info = self.notificationIconDownloadInfos.remove(at: index)
         if success {
             do {
-                let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: "\(info.notificationId).png")
+                // Sanitize the notification ID for use in filename (remove |, :, etc.)
+                let safeFileName = sanitizeForFilename(info.notificationId) + ".png"
+                let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: safeFileName)
                 Log.debug?.message("downloadTask saving icon to: \(finalFileURL.path)")
                 Log.debug?.message("Notification id: \(info.notificationId)")
                 self.downloadedNotificationIconFileURLByNotificationId[info.notificationId] = finalFileURL
@@ -333,6 +357,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         guard let packetId = (try? dataPacket.getId())??.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return nil }
         
         return "\(self.id).\(deviceId).\(packetId)"
+    }
+    
+    /// Sanitizes a string to be safe for use in filenames by replacing invalid characters.
+    /// macOS doesn't allow: / : in filenames. We also replace | and other problematic chars.
+    private func sanitizeForFilename(_ string: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "/:|\\<>\"?*")
+        return string.components(separatedBy: invalidCharacters).joined(separator: "_")
     }
     
     /// Repopulates the `notificationIds` dictionary from the Notification Center's delivered notifications.
@@ -527,7 +558,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
 
     private func copyFileFromCache(url fileURL: URL, notificationId fileNotificationId: String) throws -> URL {
-        let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileNotificationId).png")
+        // Sanitize the notification ID for use in filename
+        let safeFileName = sanitizeForFilename(fileNotificationId) + ".png"
+        let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent(safeFileName)
         for _ in 1...10000 {
             if !FileManager.default.fileExists(atPath: finalFileURL.path) {
                 do {
@@ -692,8 +725,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isStackUpdate = isAlreadyDisplayed && isContentChanged
 
             var notificationIconURL: URL? = nil
-            if (self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] != nil) {
-                notificationIconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetNotificationId)
+            // Don't remove the icon URL - keep it for potential notification updates
+            if let iconURL = self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] {
+                notificationIconURL = iconURL
             }
 
             let notification = buildNotificationContent(
@@ -713,12 +747,21 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             )
             
             // Set Notification App Icon
+            // UNNotificationAttachment MOVES the file to its data store, so we must copy it first
+            // to preserve the original for potential notification updates
             if let iconURL = notificationIconURL {
                 do {
-                    let attachment = try UNNotificationAttachment(identifier: notificationId, url: iconURL, options: nil)
+                    // Create a temporary copy for the attachment (will be moved by the system)
+                    let tempCopyURL = iconURL.deletingLastPathComponent()
+                        .appendingPathComponent(UUID().uuidString + ".png")
+                    try FileManager.default.copyItem(at: iconURL, to: tempCopyURL)
+                    
+                    // Use sanitized identifier for attachment
+                    let attachmentId = sanitizeForFilename(notificationId)
+                    let attachment = try UNNotificationAttachment(identifier: attachmentId, url: tempCopyURL, options: nil)
                     notification.attachments = [attachment]
                 } catch {
-                    print(error.localizedDescription)
+                    Log.error?.message("Failed to create notification attachment: \(error.localizedDescription)")
                 }
             }
             
@@ -744,6 +787,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
         
         guard let id = self.notificationId(for: dataPacket, from: device) else { return }
+        
+        // Clean up downloaded icon for this packet
+        if let packetId = try? dataPacket.getId() {
+            self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetId)
+        }
+        
         self.hideNotification(for: id, from: device)
     }
     
