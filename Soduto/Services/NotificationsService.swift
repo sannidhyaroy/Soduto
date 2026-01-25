@@ -578,7 +578,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         for dataPacket: DataPacket,
         from device: Device,
         with notificationId: String,
-        isStackUpdate: Bool,
         isSilent: Bool,
         dontPresent: Bool,
         title: String?,
@@ -649,7 +648,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         notification.categoryIdentifier = categoryId
         
         /// Only play sound if notification is not muted
-        /// shouldMute is true for: silent notifications, answer packets, and updates to existing notifications
+        /// shouldMute is true for: silent notifications from android
         if !shouldMute {
             notification.sound = UNNotificationSound.default
         }
@@ -720,9 +719,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             /// dontPresent: Don't show notification
             /// This applies to: answer packets (responses to our requests)
             let dontPresent = isAnswer
-            /// isStackUpdate: Notification exists but content changed (e.g., new WhatsApp message in same chat)
-            /// This should show banner + sound to alert user of new message
-            let isStackUpdate = isAlreadyDisplayed && isContentChanged
 
             var notificationIconURL: URL? = nil
             // Don't remove the icon URL - keep it for potential notification updates
@@ -734,7 +730,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 for: dataPacket,
                 from: device,
                 with: notificationId,
-                isStackUpdate: isStackUpdate,
                 isSilent: isSilent,
                 dontPresent: dontPresent,
                 title: title,
