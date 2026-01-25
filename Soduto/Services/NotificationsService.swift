@@ -106,8 +106,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         guard dataPacket.isNotificationPacket else { return false }
         
-        // Log the raw packet for debugging
-        Log.debug?.message("NotificationsService received packet: \(dataPacket.body)")
+        // Log the raw packet (enable only when debugging, as logs may leak sensitive info)
+        //Log.debug?.message("NotificationsService received packet: \(dataPacket.body)")
         
         if (try? dataPacket.getRequestFlag()) ?? false {
             // Doing nothing as we dont (at least currently) provide our own notifications to other devices
