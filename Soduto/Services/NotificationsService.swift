@@ -260,12 +260,36 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     /// Handles user responses to notification actions.
     ///
-    /// Supports the following actions:
+    /// ## Dismiss Philosophy
+    ///
+    /// We provide a custom "Dismiss" action button that dismisses the notification on **both**
+    /// the host (macOS) and remote (Android) device. This is more reliable than relying on
+    /// `UNNotificationDismissActionIdentifier` callbacks from macOS, which are not always
+    /// delivered consistently.
+    ///
+    /// - **Custom Dismiss button**: Dismisses on both macOS and Android (sends cancel packet)
+    /// - **macOS system dismiss** (X button/swipe): Dismisses only on macOS (no cancel packet sent)
+    /// - **Clicking notification body**: Does nothing - notification stays visible
+    ///
+    /// This design ensures users have explicit control over whether a notification is
+    /// dismissed on the remote device, rather than accidentally dismissing it by clicking.
+    ///
+    /// ## Supported Actions
+    ///
     /// - **Dismiss**: Sends a cancel packet to the remote device if the notification is cancelable
     /// - **Reply**: Sends the user's text reply to the remote device
     /// - **Action1/2/3**: Sends the semantic action string stored in userInfo to trigger the remote action
+    /// - **Default (body click)**: Ignored - notification remains visible
     public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
         let userInfo = response.notification.request.content.userInfo
+        
+        // Clicking the notification body should do nothing - the notification stays visible.
+        // Users must use the explicit "Dismiss" button to dismiss on both macOS and Android.
+        // See the Dismiss Philosophy documentation above.
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            return
+        }
+        
         guard let deviceId = userInfo[UserInfoProperty.deviceId.rawValue] as? String else { return }
         guard let notificationId = userInfo[UserInfoProperty.notificationId.rawValue] as? NotificationId else { return }
         guard let isCancelable = userInfo[UserInfoProperty.isCancelable.rawValue] as? NSNumber else { return }
@@ -274,7 +298,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         let actionId = response.actionIdentifier
         
-        // Handle dismiss action
+        // Handle dismiss action - dismisses on both macOS and Android
         if actionId == UserNotificationManager.ActionIdentifier.dismiss.rawValue {
             if isCancelable.boolValue {
                 device.send(DataPacket.notificationCancelPacket(forId: notificationId))

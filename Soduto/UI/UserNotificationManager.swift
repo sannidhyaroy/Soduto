@@ -302,7 +302,20 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
     // MARK: Action Handlers
     
     /// Dynamically dispatches the notification action to the appropriate handler class.
+    ///
     /// The handler class name is stored in the notification's userInfo under the `actionHandlerClass` property.
+    ///
+    /// ## Default Action Handling
+    ///
+    /// When the user clicks on the notification body (triggering `UNNotificationDefaultActionIdentifier`),
+    /// we intentionally do **not** remove the notification from the Notification Center. This allows
+    /// each handler to decide whether clicking the body should have any effect.
+    ///
+    /// For `NotificationsService`, clicking the body does nothing - the notification stays visible.
+    /// For `ShareService`, clicking the body opens the downloaded file.
+    ///
+    /// This design gives users explicit control: they must use action buttons to interact with
+    /// notifications, rather than accidentally dismissing them by clicking.
     public func handleAction(for response: UNNotificationResponse) {
         let userInfo = response.notification.request.content.userInfo
         
@@ -320,7 +333,16 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
         // Call the static handleAction method on the handler class
         handlerClass.handleAction(for: response, context: self.context)
         
-        // Remove the notification after handling
+        // Don't remove the notification if the user just clicked the body.
+        // Each handler decides what to do for the default action.
+        // For most handlers (NotificationsService), clicking does nothing and the notification stays.
+        // For ShareService, clicking opens the file but we still don't auto-remove here -
+        // the notification gets replaced by the system when clicked.
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            return
+        }
+        
+        // Remove the notification after handling an explicit action (button press)
         let id = response.notification.request.identifier
         un.removeDeliveredNotifications(withIdentifiers: [id])
     }
