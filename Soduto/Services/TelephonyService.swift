@@ -214,7 +214,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
                     notification.attachments = [attachment]
                 } catch {
-                    print(error.localizedDescription)
+                    Log.error?.message("Failed to create ringing notification attachment: \(error)")
                 }
             }
             
@@ -225,7 +225,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             un.add(request) { error in
                 if let error = error {
-                    print(error.localizedDescription)
+                    Log.error?.message("Failed to add ringing notification request: \(error)")
                 }
             }
             
@@ -256,14 +256,14 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
                     notification.attachments = [attachment]
                 } catch {
-                    print(error.localizedDescription)
+                    Log.error?.message("Failed to create missed call notification attachment: \(error)")
                 }
             }
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             un.add(request) { error in
                 if let error = error {
-                    print(error.localizedDescription)
+                    Log.error?.message("Failed to add missed call notification request: \(error)")
                 }
             }
             
@@ -320,7 +320,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                         let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
                         notification.attachments = [attachment]
                     } catch {
-                        print(error.localizedDescription)
+                        Log.error?.message("Failed to create SMS notification attachment: \(error)")
                     }
                 }
                 
@@ -331,7 +331,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
                 self.un.add(request) { error in
                     if let error = error {
-                        print(error.localizedDescription)
+                        Log.error?.message("Failed to add SMS notification request: \(error)")
                     }
                 }
                 
