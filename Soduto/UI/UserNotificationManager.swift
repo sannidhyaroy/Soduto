@@ -123,12 +123,12 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
         
         // Request notification authorization
         un.requestAuthorization(options: [.alert, .sound, .badge]) { authorized, error in
-            if authorized {
+            if let error = error {
+                print("Notification authorization error: \(error.localizedDescription)")
+            } else if authorized {
                 print("Authorized to send notifications!")
-            } else if !authorized {
+            } else {
                 print("Not authorized to send notifications")
-            } else if let error = error {
-                print(error.localizedDescription)
             }
         }
         
