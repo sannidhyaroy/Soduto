@@ -405,6 +405,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let notification = UNMutableNotificationContent()
         notification.title = title
         notification.body = info
+        notification.sound = nil
         notification.setUrgency(.passive)
         if let iconPath = self.notificationIconPath {
             let notificationIconURL = URL(fileURLWithPath: iconPath)
@@ -439,7 +440,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let notification = UNMutableNotificationContent()
         notification.title = title
         notification.body = info
-        notification.sound = UNNotificationSound.default
+        notification.sound = nil
         notification.setUrgency(.active)
         if let iconPath = self.notificationIconPath {
             let notificationIconURL = URL(fileURLWithPath: iconPath)
@@ -476,6 +477,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         if succeeded {
             notification.body = info
         }
+        notification.sound = UNNotificationSound.default
         notification.setUrgency(.active)
         if let iconPath = self.notificationIconPath {
             let notificationIconURL = URL(fileURLWithPath: iconPath)
