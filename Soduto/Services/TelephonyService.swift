@@ -153,7 +153,9 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         
         switch event {
         case DataPacket.TelephonyEvent.ringing.rawValue:
-            device.send(DataPacket.mutePhonePacket())
+            if response.actionIdentifier == "mutecall" {
+                device.send(DataPacket.mutePhonePacket())
+            }
         case DataPacket.TelephonyEvent.sms.rawValue:
             if let textResponse = response as? UNTextInputNotificationResponse {
                 guard let phoneNumber = userInfo[NotificationProperty.phoneNumber.rawValue] as? String else { break }
