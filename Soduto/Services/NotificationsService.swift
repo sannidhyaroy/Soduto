@@ -102,6 +102,15 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// Flag to ensure startup cleanup only runs once per app session (static, process-wide)
     private static var hasPerformedStartupCleanup = false
     
+    /// Tracks notification IDs received during a sync window (after a notification request), grouped by device.
+    /// Used to detect notifications that were dismissed on the remote device while disconnected.
+    private var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
+    
+    /// Timers for post-sync reconciliation, keyed by device ID.
+    private var syncReconciliationTimers: [Device.Id: Timer] = [:]
+    
+    /// Duration to wait after a notification request before reconciling stale notifications (seconds).
+    private let syncReconciliationDelay: TimeInterval = 5.0
     
     // MARK: Service methods
     
@@ -183,6 +192,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
         reconcileNotificationState { [weak self] in
             self?.repopulateNotificationIds(for: device) {
+                // Start sync window: track received notification IDs for this device
+                self?.startSyncWindow(for: device)
                 device.send(DataPacket.notificationRequestPacket())
             }
         }
@@ -793,6 +804,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             /// This should be completely ignored - don't update Notification Center at all
             let isReconnectionDuplicate = isAlreadyDisplayed && !isContentChanged
             
+            /// Record this notification as received during sync window (even if it's a reconnection duplicate).
+            /// This ensures we don't incorrectly remove it as "stale" when the sync window finishes.
+            self.recordReceivedNotificationId(notificationId, for: device)
+            
             // Skip reconnection duplicates entirely - no need to update Notification Center
             if isReconnectionDuplicate {
                 Log.debug?.message("Notification skipped (reconnection duplicate): \(appName) - \(packetNotificationId)")
@@ -823,9 +838,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 actions: actions
             )
             
-            // Set Notification App Icon
-            // UNNotificationAttachment MOVES the file to its data store, so we must copy it first
-            // to preserve the original for potential notification updates
+            /// Set Notification App Icon
+            /// UNNotificationAttachment MOVES the file to its data store, so we must copy it first to preserve the original for potential notification updates
             if let iconURL = notificationIconURL {
                 // Track temp file for cleanup on error
                 var tempCopyURL: URL? = nil
@@ -933,6 +947,63 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         pasteboard.setString(otp, forType: .string)
     }
     
+    // MARK: Sync Window & Stale Notification Removal
+    
+    /// Starts a sync window for a device. During this window, all received notification IDs are tracked.
+    /// After the window closes (timer fires), any local notification IDs not received are considered
+    /// dismissed on the remote device and are removed from macOS.
+    private func startSyncWindow(for device: Device) {
+        syncReconciliationTimers[device.id]?.invalidate() // Cancel any existing timer for this device
+        pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
+        DispatchQueue.main.async {
+            self.syncReconciliationTimers[device.id] = Timer.scheduledTimer(
+                withTimeInterval: self.syncReconciliationDelay, repeats: false) { [weak self] _ in
+                    self?.finishSyncWindow(for: device)
+            }
+            Log.debug?.message("Started sync window for device \(device.name)")
+        }
+    }
+    
+    /// Called when a notification is received during a sync window. Adds the notification ID to the pending set.
+    private func recordReceivedNotificationId(_ notificationId: NotificationId, for device: Device) {
+        // Only record if a sync window is active for this device
+        guard pendingSyncReceivedIds[device.id] != nil else { return }
+        pendingSyncReceivedIds[device.id]?.insert(notificationId)
+    }
+    
+    /// Finishes the sync window for a device. Removes any local notifications not received during the sync.
+    private func finishSyncWindow(for device: Device) {
+        guard let receivedIds = pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
+        syncReconciliationTimers.removeValue(forKey: device.id)
+        
+        guard let localIds = notificationIds[device.id] else {
+            Log.debug?.message("Finished sync window for \(device.name): no local notifications to reconcile")
+            return
+        }
+        
+        // Find local notifications that were NOT received from the device (i.e., dismissed on remote)
+        let staleIds = localIds.subtracting(receivedIds)
+        
+        if staleIds.isEmpty {
+            Log.debug?.message("Finished sync window for \(device.name): all local notifications still exist on remote")
+            return
+        }
+        
+        Log.debug?.message("Finished sync window for \(device.name): removing \(staleIds.count) stale notifications")
+        
+        for staleId in staleIds {
+            // Clean up icon file if present (extract packetId from notificationId)
+            if let iconURL = downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: staleId) {
+                do {
+                    try FileManager.default.removeItem(at: iconURL)
+                    Log.debug?.message("Deleted icon file for stale notification \(staleId) at \(iconURL.path)")
+                } catch {
+                    Log.error?.message("Failed to delete icon file for stale notification \(staleId): \(error)")
+                }
+            }
+            hideNotification(for: staleId, from: device)
+        }
+    }
 }
 
 
