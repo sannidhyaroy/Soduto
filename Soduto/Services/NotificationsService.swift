@@ -117,7 +117,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     /// Time to wait after the last received notification packet before reconciling.
     /// This acts as a debounce to ensure we received the full batch of notifications even on slow networks.
-    private let syncDebounceTimeout: TimeInterval = 1.0
+    private let syncDebounceTimeout: TimeInterval = 2.0
     
     // MARK: Service methods
     
@@ -203,23 +203,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 self?.startSyncWindow(for: device)
                 device.send(DataPacket.notificationRequestPacket())
             }
-        }
-    }
-    
-    /// Requests all current notifications from all connected devices.
-    /// This clears local notification state and re-fetches everything.
-    public func refreshNotifications() {
-        let devices = AppDelegate.shared().validDevices
-        
-        self.notificationIds.removeAll()
-        self.notificationContentHashes.removeAll()
-        un.removeAllDeliveredNotifications()
-        un.removeAllPendingNotificationRequests()
-        
-        // Request notifications from each device
-        for device in devices {
-            guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { continue }
-            device.send(DataPacket.notificationRequestPacket())
         }
     }
     
@@ -399,6 +382,26 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     
+    // MARK: Public methods
+    
+    /// Requests all current notifications from all connected devices.
+    /// This clears local notification state and re-fetches everything.
+    public func refreshNotifications() {
+        let devices = AppDelegate.shared().validDevices
+        
+        self.notificationIds.removeAll()
+        self.notificationContentHashes.removeAll()
+        un.removeAllDeliveredNotifications()
+        un.removeAllPendingNotificationRequests()
+        
+        // Request notifications from each device
+        for device in devices {
+            guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { continue }
+            device.send(DataPacket.notificationRequestPacket())
+        }
+    }
+    
+    
     // MARK: Private methods
     
     private func notificationId(for dataPacket: DataPacket, from device: Device) -> NotificationId? {
@@ -408,16 +411,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         guard let packetId = (try? dataPacket.getId())??.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return nil }
         
         return "\(self.id).\(deviceId).\(packetId)"
-    }
-    
-    /// Extracts the packet ID (the last component) from a full notification ID.
-    /// Notification ID format: "com.soduto.services.notifications.<deviceIdEncoded>.<packetIdEncoded>"
-    private func extractPacketId(from notificationId: NotificationId) -> String? {
-        // Find the last dot and extract everything after it
-        guard let range = notificationId.range(of: ".", options: .backwards) else { return nil }
-        let packetIdEncoded = String(notificationId[range.upperBound...])
-        // The packetId in the notification ID is URL encoded, so we decode it to get the original packet Id
-        return packetIdEncoded.removingPercentEncoding
     }
     
     /// Sanitizes a string to be safe for use in filenames by replacing invalid characters.
@@ -506,17 +499,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     for trackedId in trackedIds {
                         // Only check IDs that belong to this service
                         if trackedId.hasPrefix(prefix) && !deliveredIds.contains(trackedId) {
-                            // Clean up icon file if present
-                            // extractPacketId required because dictionary is keyed by packetId, not full notificationId
-                            if let packetId = self.extractPacketId(from: trackedId),
-                               let iconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetId) {
-                                do {
-                                    try FileManager.default.removeItem(at: iconURL)
-                                    Log.debug?.message("Deleted icon file for reconciled notification \(trackedId) at \(iconURL.path)")
-                                } catch {
-                                    Log.error?.message("Failed to delete icon file for reconciled notification \(trackedId): \(error)")
-                                }
-                            }
+                            /// NOTE: DO NOT clean up icon files HERE, because they are cached for the very reason
+                            /// that KDE Connect does NOT send download Tasks on subsequent requests
                             self.notificationIds[deviceId]?.remove(trackedId)
                             self.notificationContentHashes.removeValue(forKey: trackedId)
                             removedCount += 1
@@ -660,7 +644,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     ///
     /// Files in NSTemporaryDirectory are eventually cleaned by macOS, but this
     /// provides more immediate cleanup to prevent accumulation over time.
-    public func cleanupStaleIconFiles() {
+    private func cleanupStaleIconFiles() {
         let tempDirectory = NSTemporaryDirectory()
         let fileManager = FileManager.default
         
@@ -1037,10 +1021,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// NOTE: KDE Connect does not provide an authoritative or complete notification snapshot.
     /// There is no explicit end-of-list marker or completeness guarantee.
     /// Stale removal performed here is therefore best-effort and heuristic-based.
-    /// In rare cases, notifications that still exist on the remote device may be
-    /// removed locally, if they are not re-sent during the sync window.
-    /// This behavior is an intentional trade-off to provide a cleaner and more
-    /// seamless notification mirroring experience on macOS.
+    ///
+    /// In rare cases, notifications that still exist on the remote device may be removed locally, if they are not re-sent during the sync window.
+    /// They will be re-added when the notification packet arrives later. This situation may arise in devices that delay sending notification packets, even after establishing connection.
+    /// This behavior is an intentional trade-off to provide a cleaner and more seamless notification mirroring experience on macOS.
+    /// TODO: Verify if existing notifications are send continuously, then comment out the `for loop` codeblock inside this function
     private func finishSyncWindow(for device: Device) {
         guard let receivedIds = pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
         syncReconciliationTimers.removeValue(forKey: device.id)
@@ -1061,17 +1046,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         Log.debug?.message("Finished sync window for \(device.name): removing \(staleIds.count) stale notifications")
         
         for staleId in staleIds {
-            // Clean up icon file if present
-            // Must extract packetId because dictionary keys are packetIds, not full notificationIds
-            if let packetId = self.extractPacketId(from: staleId),
-               let iconURL = downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetId) {
-                do {
-                    try FileManager.default.removeItem(at: iconURL)
-                    Log.debug?.message("Deleted icon file for stale notification \(staleId) at \(iconURL.path)")
-                } catch {
-                    Log.error?.message("Failed to delete icon file for stale notification \(staleId): \(error)")
-                }
-            }
+            /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach
+            /// and keep our icon caches
             hideNotification(for: staleId, from: device)
         }
     }
