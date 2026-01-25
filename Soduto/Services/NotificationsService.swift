@@ -99,6 +99,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// Key: notificationId, Value: hash of body/ticker content
     private var notificationContentHashes: [NotificationId: Int] = [:]
     
+    /// Flag to ensure startup cleanup only runs once per app session (static, process-wide)
+    private static var hasPerformedStartupCleanup = false
+    
     
     // MARK: Service methods
     
@@ -168,6 +171,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// Notification Center's delivered notifications before requesting new ones.
     public func setup(for device: Device) {
         guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
+        
+        // Clean up stale icon files from previous app sessions (once per app launch, process-wide)
+        if !Self.hasPerformedStartupCleanup {
+            Self.hasPerformedStartupCleanup = true
+            cleanupStaleIconFiles()
+        }
         
         /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
         /// then repopulate from delivered notifications to restore state after app restart.
@@ -597,6 +606,46 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         throw DataPacket.NotificationError.copyFileFailed
     }
+    
+    /// Cleans up stale notification icon files from the temp directory.
+    /// Call this on app startup to remove leftover files from previous sessions.
+    ///
+    /// This cleans up:
+    /// - `.png` files (downloaded icons)
+    /// - `.png.cache` files (cached icons by hash)
+    /// - `.part` files (incomplete downloads)
+    ///
+    /// Files in NSTemporaryDirectory are eventually cleaned by macOS, but this
+    /// provides more immediate cleanup to prevent accumulation over time.
+    public func cleanupStaleIconFiles() {
+        let tempDirectory = NSTemporaryDirectory()
+        let fileManager = FileManager.default
+        
+        do {
+            let tempContents = try fileManager.contentsOfDirectory(atPath: tempDirectory)
+            var cleanedCount = 0
+            
+            for fileName in tempContents {
+                // Only clean up files that look like our notification icons
+                let isNotificationIcon = fileName.hasSuffix(".png") ||
+                                          fileName.hasSuffix(".png.cache") ||
+                                          fileName.hasSuffix(".part")
+                
+                // Skip files that don't match our patterns
+                guard isNotificationIcon else { continue }
+                
+                let filePath = (tempDirectory as NSString).appendingPathComponent(fileName)
+                try? fileManager.removeItem(atPath: filePath)
+                cleanedCount += 1
+            }
+            
+            if cleanedCount > 0 {
+                Log.debug?.message("Cleaned up \(cleanedCount) stale notification icon files from temp directory")
+            }
+        } catch {
+            Log.error?.message("Failed to enumerate temp directory for icon cleanup: \(error)")
+        }
+    }
 
     private func buildNotificationContent(
         for dataPacket: DataPacket,
@@ -814,9 +863,17 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         guard let id = self.notificationId(for: dataPacket, from: device) else { return }
         
-        // Clean up downloaded icon for this packet
+        // Clean up downloaded icon file for this packet
         if let packetId = try? dataPacket.getId() {
-            self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetId)
+            if let iconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetId) {
+                // Delete the actual icon file from disk
+                do {
+                    try FileManager.default.removeItem(at: iconURL)
+                    Log.debug?.message("Deleted icon file for notification \(packetId) at \(iconURL.path)")
+                } catch {
+                    Log.error?.message("Failed to delete icon file for notification \(packetId): \(error)")
+                }
+            }
         }
         
         self.hideNotification(for: id, from: device)
