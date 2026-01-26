@@ -50,6 +50,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     let un = UNUserNotificationCenter.current()
 
+    @MainActor
     private var userNotificationManager: UserNotificationManager {
         return AppDelegate.shared().userNotificationManager
     }
@@ -302,7 +303,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     }
                     else {
                         // No download task - try to find cached icon
-                        var packetHasIcon = false
                         if let id = id {
                             // First, try by payload hash (if the packet includes it)
                             if let payloadHash = try? dataPacket.getPayloadHash(),
@@ -311,7 +311,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                                 do {
                                     let copiedFromCacheFileURL = try await self.iconState.copyFileFromCache(url: cachedIconURL, notificationId: id)
                                     await self.iconState.setDownloadedIconURL(copiedFromCacheFileURL, for: id)
-                                    packetHasIcon = true
                                 } catch {
                                     Log.error?.message("Failed to copy cached icon: \(error.localizedDescription)")
                                 }
@@ -319,7 +318,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                             // Second, check if we already have a downloaded icon for this notification ID
                             else if await self.iconState.getDownloadedIconURL(for: id) != nil {
                                 Log.debug?.message("Icon already available for notification \(id)")
-                                packetHasIcon = true
                             }
                             else {
                                 Log.debug?.message("No icon available for notification \(id) - no downloadTask, no payloadHash match, no cached icon")
@@ -354,25 +352,18 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Clean up stale icon files from previous app sessions (once per app launch, process-wide).
         /// We await this cleanup BEFORE requesting new notifications to avoid race conditions where
         /// we might delete valid icons for newly arriving notifications.
-        
         Task { @MainActor in
             state.setupTasks[device.id]?.cancel()
-            
             let setupTask = Task {
-                await Self.cleanupManager.ensureCleanup {
-                    Self.cleanupStaleIconFiles()
-                }
-                
+                await Self.cleanupManager.ensureCleanup { Self.cleanupStaleIconFiles() }
                 /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
                 /// then repopulate from delivered notifications to restore state after app restart.
                 /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
-                await MainActor.run {
-                    await reconcileNotificationState()
-                    await repopulateNotificationIds(for: device)
-                    // Start sync window: track received notification IDs for this device
-                    startSyncWindow(for: device)
-                    device.send(DataPacket.notificationRequestPacket())
-                }
+                await reconcileNotificationState()
+                await repopulateNotificationIds(for: device)
+                // Start sync window: track received notification IDs for this device
+                startSyncWindow(for: device)
+                device.send(DataPacket.notificationRequestPacket())
             }
             state.setupTasks[device.id] = setupTask
             await setupTask.value
@@ -1043,10 +1034,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             state.pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
             
             let task = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(self.initialSyncTimeout * 1_000_000_000))
-                if !Task.isCancelled {
-                    self.finishSyncWindow(for: device)
-                }
+                try await Task.sleep(nanoseconds: UInt64(self.initialSyncTimeout * 1_000_000_000))
+                self.finishSyncWindow(for: device)
             }
             state.syncReconciliationTasks[device.id] = task
             Log.debug?.message("Started sync window for device \(device.name)")
@@ -1065,10 +1054,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         state.syncReconciliationTasks[device.id]?.cancel()
         
         let task = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(self.syncDebounceTimeout * 1_000_000_000))
-             if !Task.isCancelled {
-                self.finishSyncWindow(for: device)
-            }
+            try await Task.sleep(nanoseconds: UInt64(self.syncDebounceTimeout * 1_000_000_000))
+            self.finishSyncWindow(for: device)
         }
         state.syncReconciliationTasks[device.id] = task
     }
@@ -1103,8 +1090,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             Log.debug?.message("Finished sync window for \(device.name): removing \(staleIds.count) stale notifications")
             
             for staleId in staleIds {
-                /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach
-                /// and keep our icon caches
+                /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach and keep our icon caches
                 await hideNotification(for: staleId, from: device)
             }
         }
