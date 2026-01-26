@@ -132,9 +132,91 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         func getCachedIconURL(for hash: String) -> URL? {
             return cachedDownloadedNotificationIconFileURLByHash[hash]
         }
+
+        // MARK: - File I/O Operations (Thread-safe)
+
+        func streamForTempDownload() -> (OutputStream, URL)? {
+            let temporaryDirectory = NSTemporaryDirectory()
+            let randomUuidForFileName = "\(UUID().uuidString)"
+            let tempFileURL = URL(fileURLWithPath: randomUuidForFileName, relativeTo: URL(fileURLWithPath: temporaryDirectory, isDirectory: true))
+            
+            var partFileURL = tempFileURL.appendingPathExtension("part")
+            var stream: OutputStream? = nil
+            for _ in 1...10000 {
+                if !FileManager.default.fileExists(atPath: partFileURL.path) {
+                    stream = OutputStream(url: partFileURL, append: false)
+                    stream?.open()
+                    if stream?.hasSpaceAvailable ?? false {
+                        break
+                    }
+                }
+                partFileURL = partFileURL.alternativeForDuplicate()
+            }
+            
+            if stream == nil {
+                partFileURL = tempFileURL.appendingPathExtension("part-\(UUID().uuidString)")
+                if !FileManager.default.fileExists(atPath: partFileURL.path) {
+                    stream = OutputStream(url: partFileURL, append: false)
+                    stream?.open()
+                }
+            }
+            
+            if let readyStream = stream, (stream?.hasSpaceAvailable ?? false) {
+                return (readyStream, partFileURL)
+            } else {
+                stream?.close()
+                return nil
+            }
+        }
+
+        func renamePartFile(url partFileURL: URL, to fileName: String) throws -> URL {
+            var finalFileURL = partFileURL.deletingLastPathComponent().appendingPathComponent(fileName)
+            for _ in 1...10000 {
+                if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                    do {
+                        try FileManager.default.moveItem(at: partFileURL, to: finalFileURL)
+                        return finalFileURL
+                    } catch {}
+                }
+                finalFileURL = finalFileURL.alternativeForDuplicate()
+            }
+            throw DataPacket.NotificationError.partFileRenameFailed
+        }
+
+        func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
+            let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
+            for _ in 1...10000 {
+                if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                    do {
+                        try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                        return finalFileURL
+                    } catch {}
+                }
+            }
+            throw DataPacket.NotificationError.copyFileFailed
+        }
+
+        func copyFileFromCache(url fileURL: URL, notificationId: String) throws -> URL {
+            let safeFileName = sanitize(notificationId) + ".png"
+            let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent(safeFileName)
+            for _ in 1...10000 {
+                if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                    do {
+                        try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                        return finalFileURL
+                    } catch {}
+                }
+            }
+            throw DataPacket.NotificationError.copyFileFailed
+        }
+        
+        private func sanitize(_ string: String) -> String {
+            let invalidCharacters = CharacterSet(charactersIn: "/:|\\<>\"?*")
+            return string.components(separatedBy: invalidCharacters).joined(separator: "_")
+        }
     }
     
-    /// MainActor-isolated state manager for active notifications and sync timers.
+    /// MainActor-isolated state manager for active notifications and sync tasks.
     @MainActor
     private class NotificationStateManager {
         nonisolated init() {}
@@ -148,8 +230,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         /// Tracks notification IDs received during a sync window
         var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
         
-        /// Timers for post-sync reconciliation
-        var syncReconciliationTimers: [Device.Id: Timer] = [:]
+        /// Tasks for post-sync reconciliation
+        var syncReconciliationTasks: [Device.Id: Task<Void, Never>] = [:]
         
         func addNotificationId(_ id: NotificationId, from device: Device) {
             if notificationIds[device.id] == nil {
@@ -165,6 +247,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         func reset() {
             notificationIds.removeAll()
             notificationContentHashes.removeAll()
+            syncReconciliationTasks.values.forEach { $0.cancel() }
+            syncReconciliationTasks.removeAll()
         }
     }
     
@@ -220,7 +304,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                                let cachedIconURL = await self.iconState.getCachedIconURL(for: payloadHash) {
                                 Log.debug?.message("Using cached icon for notification \(id) with hash \(payloadHash)")
                                 do {
-                                    let copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedIconURL, notificationId: id)
+                                    let copiedFromCacheFileURL = try await self.iconState.copyFileFromCache(url: cachedIconURL, notificationId: id)
                                     await self.iconState.setDownloadedIconURL(copiedFromCacheFileURL, for: id)
                                     packetHasIcon = true
                                 } catch {
@@ -340,14 +424,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 do {
                     // Sanitize the notification ID for use in filename (remove |, :, etc.)
                     let safeFileName = sanitizeForFilename(info.notificationId) + ".png"
-                    let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: safeFileName)
+                    let finalFileURL = try await self.iconState.renamePartFile(url: info.partFileURL, to: safeFileName)
                     Log.debug?.message("downloadTask saving icon to: \(finalFileURL.path)")
                     Log.debug?.message("Notification id: \(info.notificationId)")
                     
                     await self.iconState.setDownloadedIconURL(finalFileURL, for: info.notificationId)
                     
                     if let fileHash = info.fileHash, await self.iconState.getCachedIconURL(for: fileHash) == nil {
-                        let cachedFileURL = try self.copyFileToCache(url: finalFileURL, hash: fileHash)
+                        let cachedFileURL = try await self.iconState.copyFileToCache(url: finalFileURL, hash: fileHash)
                         await self.iconState.setCachedIconURL(cachedFileURL, for: fileHash)
                         Log.debug?.message("New icon found with hash \(fileHash), saving to cached icons as \(cachedFileURL)")
                     }
@@ -602,7 +686,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         if let hash = downloadFileHash, let cachedURL = await iconState.getCachedIconURL(for: hash) {
             Log.debug?.message("Found cached icon for hash \(hash) at \(cachedURL)")
             do {
-                let copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedURL, notificationId: notificationId)
+                let copiedFromCacheFileURL = try await iconState.copyFileFromCache(url: cachedURL, notificationId: notificationId)
                 await iconState.setDownloadedIconURL(copiedFromCacheFileURL, for: notificationId)
             }
             catch let error {
@@ -610,7 +694,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             await self.showNotification(for: dataPacket, from: device)
         } else {
-            if let (readyStream, partFileURL) = self.streamForTempDownload() {
+            if let (readyStream, partFileURL) = await iconState.streamForTempDownload() {
                 await iconState.addDownloadInfo(DownloadInfo(
                     task: task,
                     fileHash: downloadFileHash,
@@ -625,93 +709,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
 
-    private func streamForTempDownload() -> (OutputStream, URL)? {
-        let temporaryDirectory = NSTemporaryDirectory()
-        let randomUuidForFileName = "\(UUID().uuidString)"
-        let tempFileURL = URL(fileURLWithPath: randomUuidForFileName, relativeTo: URL(fileURLWithPath: temporaryDirectory, isDirectory: true))
-        // Try open stream for new file. Try alternative names on fail
-        var partFileURL = tempFileURL.appendingPathExtension("part")
-        var stream: OutputStream? = nil
-        for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: partFileURL.path) {
-                stream = OutputStream(url: partFileURL, append: false)
-                stream?.open()
-                if stream?.hasSpaceAvailable ?? false {
-                    break
-                }
-            }
-            
-            partFileURL = partFileURL.alternativeForDuplicate()
-        }
-        
-        // Last attempt with completely random extension
-        if stream == nil {
-            partFileURL = tempFileURL.appendingPathExtension("part-\(UUID().uuidString)")
-            if !FileManager.default.fileExists(atPath: partFileURL.path) {
-                stream = OutputStream(url: partFileURL, append: false)
-                stream?.open()
-            }
-        }
-        
-        if let readyStream = stream, (stream?.hasSpaceAvailable ?? false) {
-            return (readyStream, partFileURL)
-        }
-        else {
-            stream?.close()
-            return nil
-        }
-    }
-
-    private func renamePartFile(url partFileURL: URL, to fileName: String) throws -> URL {
-        // Try rename file from temporary *.part name to final path based on original file name
-        // NOTE: *.part name might not necesarily be equal to filename with appended .part suffix
-        var finalFileURL = partFileURL.deletingLastPathComponent().appendingPathComponent(fileName)
-        for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
-                do {
-                    try FileManager.default.moveItem(at: partFileURL, to: finalFileURL)
-                    return finalFileURL
-                }
-                catch {}
-            }
-            finalFileURL = finalFileURL.alternativeForDuplicate()
-        }
-        
-        throw DataPacket.NotificationError.partFileRenameFailed
-    }
-
-    private func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
-        let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
-        for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
-                do {
-                    try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
-                    return finalFileURL
-                }
-                catch {}
-            }
-        }
-        
-        throw DataPacket.NotificationError.copyFileFailed
-    }
-
-    private func copyFileFromCache(url fileURL: URL, notificationId fileNotificationId: String) throws -> URL {
-        // Sanitize the notification ID for use in filename
-        let safeFileName = sanitizeForFilename(fileNotificationId) + ".png"
-        let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent(safeFileName)
-        for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
-                do {
-                    try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
-                    return finalFileURL
-                }
-                catch {}
-            }
-        }
-        
-        throw DataPacket.NotificationError.copyFileFailed
-    }
-    
     /// Cleans up stale notification icon files from the temp directory.
     /// Call this on app startup to remove leftover files from previous sessions.
     ///
@@ -1030,13 +1027,16 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     private func startSyncWindow(for device: Device) {
         // Must be called on MainActor
         Task { @MainActor in
-            state.syncReconciliationTimers[device.id]?.invalidate() // Cancel any existing timer for this device
+            state.syncReconciliationTasks[device.id]?.cancel() // Cancel any existing task for this device
             state.pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
             
-            state.syncReconciliationTimers[device.id] = Timer.scheduledTimer(
-                withTimeInterval: self.initialSyncTimeout, repeats: false) { [weak self] _ in
-                    self?.finishSyncWindow(for: device)
+            let task = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(self.initialSyncTimeout * 1_000_000_000))
+                if !Task.isCancelled {
+                    self.finishSyncWindow(for: device)
+                }
             }
+            state.syncReconciliationTasks[device.id] = task
             Log.debug?.message("Started sync window for device \(device.name)")
         }
     }
@@ -1049,14 +1049,16 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         guard state.pendingSyncReceivedIds[device.id] != nil else { return }
         state.pendingSyncReceivedIds[device.id]?.insert(notificationId)
         
-        // Debounce: Reschedule the reconciliation timer to wait for end of stream
-        state.syncReconciliationTimers[device.id]?.invalidate()
-        state.syncReconciliationTimers[device.id] = Timer.scheduledTimer(
-            withTimeInterval: self.syncDebounceTimeout,
-            repeats: false
-        ) { [weak self] _ in
-            self?.finishSyncWindow(for: device)
+        // Debounce: Reschedule the reconciliation task to wait for end of stream
+        state.syncReconciliationTasks[device.id]?.cancel()
+        
+        let task = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(self.syncDebounceTimeout * 1_000_000_000))
+             if !Task.isCancelled {
+                self.finishSyncWindow(for: device)
+            }
         }
+        state.syncReconciliationTasks[device.id] = task
     }
     
     /// Finishes the sync window for a device. Removes any local notifications not received during the sync.
@@ -1071,7 +1073,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     private func finishSyncWindow(for device: Device) {
         Task { @MainActor in
             guard let receivedIds = state.pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
-            state.syncReconciliationTimers.removeValue(forKey: device.id)
+            state.syncReconciliationTasks.removeValue(forKey: device.id)
             
             guard let localIds = state.notificationIds[device.id] else {
                 Log.debug?.message("Finished sync window for \(device.name): no local notifications to reconcile")
