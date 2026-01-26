@@ -206,12 +206,22 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
     
+    /// Removes all locally-delivered notifications associated with the given device.
+    /// Called by the Service lifecycle when the device becomes unavailable.
+    ///
+    /// This method is invoked when the device is reported as disconnected or unavailable.
+    /// For `NotificationsService`, this does NOT imply that remote notifications were dismissed. Connections may be transient, and notification state must
+    /// be reconciled on the next successful setup.
+    ///
+    /// IMPORTANT:
+    /// - It may be called multiple times for the same device.
+    /// - It does not distinguish between momentary connection loss and actual device removal.
+    ///
+    /// With modern KDE Connect behavior (frequent transient disconnects), this can cause notifications to be removed prematurely and interfere
+    /// with debounce or time-based synchronization logic, hence this method does not immediately remove notifications. Actual cleanup is
+    /// performed only in response to authoritative remote cancel packets or post-reconnection reconciliation.
     public func cleanup(for device: Device) {
-        // Hide notifications for the device
-        guard let ids = self.notificationIds[device.id] else { return }
-        for id in ids {
-            self.hideNotification(for: id, from: device)
-        }
+        Log.debug?.message("Ignoring cleanup for \(device.name); waiting for reconciliation and reconnection...")
     }
     
     /// Defines service actions for notifications service (like: `Request Notifications`)
