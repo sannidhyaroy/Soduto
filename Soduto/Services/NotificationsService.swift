@@ -508,16 +508,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 
                 // For each device, remove any tracked IDs that are no longer delivered
                 for (deviceId, trackedIds) in self.notificationIds {
-                    for trackedId in trackedIds {
-                        // Only check IDs that belong to this service
-                        if trackedId.hasPrefix(prefix) && !deliveredIds.contains(trackedId) {
-                            /// NOTE: DO NOT clean up icon files HERE, because they are cached for the very reason
-                            /// that KDE Connect does NOT send download Tasks on subsequent requests
-                            self.notificationIds[deviceId]?.remove(trackedId)
-                            self.notificationContentHashes.removeValue(forKey: trackedId)
-                            removedCount += 1
-                        }
+                    let stale = trackedIds.filter { $0.hasPrefix(prefix) && !deliveredIds.contains($0) }
+                    for trackedId in stale {
+                        // NOTE: DO NOT clean up icon files HERE, because they are cached for the very reason
+                        // that KDE Connect does NOT send download Tasks on subsequent requests
+                        self.notificationIds[deviceId]?.remove(trackedId)
+                        self.notificationContentHashes.removeValue(forKey: trackedId)
                     }
+                    removedCount += stale.count
                 }
                 
                 if removedCount > 0 {
