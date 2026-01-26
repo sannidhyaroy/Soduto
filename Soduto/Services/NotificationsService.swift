@@ -105,6 +105,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         var downloadedNotificationIconFileURLByNotificationId: [String: URL] = [:]
         var cachedDownloadedNotificationIconFileURLByHash: [String: URL] = [:]
         
+        /// Represents exclusive ownership of a temporary download stream.
+        /// The stream is created inside IconStateManager and immediately handed off to a single DownloadTask. It is never shared.
+        struct TempIconDownloadStream: @unchecked Sendable {
+            let stream: OutputStream
+            let fileURL: URL
+        }
+        
         func addDownloadInfo(_ info: DownloadInfo) {
             notificationIconDownloadInfos.append(info)
         }
@@ -136,7 +143,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
 
         // MARK: - File I/O Operations (Thread-safe)
 
-        func streamForTempDownload() -> (OutputStream, URL)? {
+        func streamForTempDownload() -> TempIconDownloadStream? {
             let temporaryDirectory = NSTemporaryDirectory()
             let randomUuidForFileName = "\(UUID().uuidString)"
             let tempFileURL = URL(fileURLWithPath: randomUuidForFileName, relativeTo: URL(fileURLWithPath: temporaryDirectory, isDirectory: true))
@@ -163,7 +170,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             if let readyStream = stream, (stream?.hasSpaceAvailable ?? false) {
-                return (readyStream, partFileURL)
+                return TempIconDownloadStream(stream: readyStream, fileURL: partFileURL)
             } else {
                 stream?.close()
                 return nil
@@ -697,7 +704,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             await self.showNotification(for: dataPacket, from: device)
         } else {
-            if let (readyStream, partFileURL) = await iconState.streamForTempDownload() {
+            if let tempStream = await iconState.streamForTempDownload() {
+                let readyStream = tempStream.stream
+                let partFileURL = tempStream.fileURL
                 await iconState.addDownloadInfo(DownloadInfo(
                     task: task,
                     fileHash: downloadFileHash,
