@@ -72,11 +72,18 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
 
     /// Actor to ensure startup cleanup runs exactly once
     private actor StartupCleanupManager {
-        var hasPerformed = false
-        func perform(action: () -> Void) {
-            guard !hasPerformed else { return }
-            hasPerformed = true
-            action()
+        private var cleanupTask: Task<Void, Never>?
+        
+        func ensureCleanup(action: @escaping @Sendable () -> Void) async {
+            if let task = cleanupTask {
+                return await task.value
+            }
+            
+            let task = Task.detached(priority: .utility) {
+                action()
+            }
+            cleanupTask = task
+            return await task.value
         }
     }
 
@@ -130,6 +137,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// MainActor-isolated state manager for active notifications and sync timers.
     @MainActor
     private class NotificationStateManager {
+        nonisolated init() {}
+        
         /// Delivered notification ids grouped by device
         var notificationIds: [Device.Id: Set<NotificationId>] = [:]
         
@@ -253,24 +262,24 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     public func setup(for device: Device) {
         guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
         
-        // Clean up stale icon files from previous app sessions (once per app launch, process-wide)
+        // Clean up stale icon files from previous app sessions (once per app launch, process-wide).
+        /// We await this cleanup BEFORE requesting new notifications to avoid race conditions where
+        /// we might delete valid icons for newly arriving notifications.
         Task {
-            await Self.cleanupManager.perform {
-                Task.detached(priority: .background) {
-                    self.cleanupStaleIconFiles()
-                }
+            await Self.cleanupManager.ensureCleanup {
+                self.cleanupStaleIconFiles()
             }
-        }
-        
-        /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
-        /// then repopulate from delivered notifications to restore state after app restart.
-        /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
-        Task { @MainActor in
-            await reconcileNotificationState()
-            await repopulateNotificationIds(for: device)
-            // Start sync window: track received notification IDs for this device
-            startSyncWindow(for: device)
-            device.send(DataPacket.notificationRequestPacket())
+            
+            /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
+            /// then repopulate from delivered notifications to restore state after app restart.
+            /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
+            await MainActor.run {
+                await reconcileNotificationState()
+                await repopulateNotificationIds(for: device)
+                // Start sync window: track received notification IDs for this device
+                startSyncWindow(for: device)
+                device.send(DataPacket.notificationRequestPacket())
+            }
         }
     }
     
@@ -1033,6 +1042,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     /// Called when a notification is received during a sync window. Adds the notification ID to the pending set.
+    @MainActor
     private func recordReceivedNotificationId(_ notificationId: NotificationId, for device: Device) {
         // Assumes running on MainActor context as called from showNotification's MainActor block
         // Only record if a sync window is active for this device

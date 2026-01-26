@@ -119,10 +119,10 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
         
         super.init()
         
-        Task { @MainActor in
-            // Set ourselves as the notification center delegate
-            un.delegate = self
-            
+        // Set ourselves as the notification center delegate
+        un.delegate = self
+        
+        Task {
             // Request notification authorization
             do {
                 let authorized = try await un.requestAuthorization(options: [.alert, .sound, .badge])
