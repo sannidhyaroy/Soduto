@@ -240,7 +240,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         var notificationIds: [Device.Id: Set<NotificationId>] = [:]
         
         /// Tracks the last known content hash for each notification to detect true updates vs reconnection duplicates
-        var notificationContentHashes: [NotificationId: Int] = [:]
+        var notificationContentHashes: [NotificationId: String] = [:]
         
         /// Tracks notification IDs received during a sync window
         var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
@@ -647,7 +647,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     state.addNotificationId(identifier, from: device)
                     // Also restore the content hash so we can detect reconnection duplicates
                     let body = notification.request.content.body
-                    state.notificationContentHashes[identifier] = body.hashValue
+                    state.notificationContentHashes[identifier] = StableHashing.sha256(body)
                     matchCount += 1
                 }
             }
@@ -898,7 +898,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 
                 /// Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content)
                 let contentForHash = body ?? ticker
-                let currentContentHash = contentForHash.hashValue
+                let currentContentHash = StableHashing.sha256(contentForHash)
                 let previousContentHash = state.notificationContentHashes[notificationId]
                 let isContentChanged = previousContentHash == nil || previousContentHash != currentContentHash
                 

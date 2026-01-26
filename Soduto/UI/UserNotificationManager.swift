@@ -245,7 +245,7 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
         }
         
         // Create a unique category identifier using hash for shorter ID
-        let categoryId = "Dynamic.\(cacheKey.hashValue)"
+        let categoryId = "Dynamic.\(StableHashing.shortSha256(cacheKey))"
         
         // Build actions array
         var actions: [UNNotificationAction] = []
