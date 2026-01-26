@@ -146,8 +146,8 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
     public nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         Task { @MainActor in
             handleAction(for: response)
-            completionHandler()
         }
+        completionHandler()
     }
     
     /// Determines how to present notifications when the app is in the foreground.
