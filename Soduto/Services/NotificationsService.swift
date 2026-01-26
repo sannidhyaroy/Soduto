@@ -1036,25 +1036,22 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     // MARK: Sync Window & Stale Notification Removal
     
     /// Starts a sync window for a device. During this window, all received notification IDs are tracked.
+    @MainActor
     private func startSyncWindow(for device: Device) {
-        // Must be called on MainActor
-        Task { @MainActor in
-            state.syncReconciliationTasks[device.id]?.cancel() // Cancel any existing task for this device
-            state.pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
-            
-            let task = Task { @MainActor in
-                try await Task.sleep(nanoseconds: UInt64(self.initialSyncTimeout * 1_000_000_000))
-                self.finishSyncWindow(for: device)
-            }
-            state.syncReconciliationTasks[device.id] = task
-            Log.debug?.message("Started sync window for device \(device.name)")
+        state.syncReconciliationTasks[device.id]?.cancel() // Cancel any existing task for this device
+        state.pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
+        
+        let task = Task {
+            try await Task.sleep(nanoseconds: UInt64(initialSyncTimeout * 1_000_000_000))
+            await finishSyncWindow(for: device)
         }
+        state.syncReconciliationTasks[device.id] = task
+        Log.debug?.message("Started sync window for device \(device.name)")
     }
     
     /// Called when a notification is received during a sync window. Adds the notification ID to the pending set.
     @MainActor
     private func recordReceivedNotificationId(_ notificationId: NotificationId, for device: Device) {
-        // Assumes running on MainActor context as called from showNotification's MainActor block
         // Only record if a sync window is active for this device
         guard state.pendingSyncReceivedIds[device.id] != nil else { return }
         state.pendingSyncReceivedIds[device.id]?.insert(notificationId)
@@ -1062,9 +1059,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Debounce: Reschedule the reconciliation task to wait for end of stream
         state.syncReconciliationTasks[device.id]?.cancel()
         
-        let task = Task { @MainActor in
-            try await Task.sleep(nanoseconds: UInt64(self.syncDebounceTimeout * 1_000_000_000))
-            self.finishSyncWindow(for: device)
+        let task = Task {
+            try await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
+            await finishSyncWindow(for: device)
         }
         state.syncReconciliationTasks[device.id] = task
     }
@@ -1078,30 +1075,29 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// They will be re-added when the notification packet arrives later. This situation may arise in devices that delay sending notification packets, even after establishing connection.
     /// This behavior is an intentional trade-off to provide a cleaner and more seamless notification mirroring experience on macOS.
     /// TODO: Verify if existing notifications are send continuously, then comment out the `for loop` codeblock inside this function
-    private func finishSyncWindow(for device: Device) {
-        Task { @MainActor in
-            guard let receivedIds = state.pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
-            state.syncReconciliationTasks.removeValue(forKey: device.id)
-            
-            guard let localIds = state.notificationIds[device.id] else {
-                Log.debug?.message("Finished sync window for \(device.name): no local notifications to reconcile")
-                return
-            }
-            
-            // Find local notifications that were NOT received from the device (i.e., dismissed on remote)
-            let staleIds = localIds.subtracting(receivedIds)
-            
-            if staleIds.isEmpty {
-                Log.debug?.message("Finished sync window for \(device.name): all local notifications still exist on remote")
-                return
-            }
-            
-            Log.debug?.message("Finished sync window for \(device.name): removing \(staleIds.count) stale notifications")
-            
-            for staleId in staleIds {
-                /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach and keep our icon caches
-                await hideNotification(for: staleId, from: device)
-            }
+    @MainActor
+    private func finishSyncWindow(for device: Device) async {
+        guard let receivedIds = state.pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
+        state.syncReconciliationTasks.removeValue(forKey: device.id)
+        
+        guard let localIds = state.notificationIds[device.id] else {
+            Log.debug?.message("Finished sync window for \(device.name): no local notifications to reconcile")
+            return
+        }
+        
+        // Find local notifications that were NOT received from the device (i.e., dismissed on remote)
+        let staleIds = localIds.subtracting(receivedIds)
+        
+        if staleIds.isEmpty {
+            Log.debug?.message("Finished sync window for \(device.name): all local notifications still exist on remote")
+            return
+        }
+        
+        Log.debug?.message("Finished sync window for \(device.name): removing \(staleIds.count) stale notifications")
+        
+        for staleId in staleIds {
+            /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach and keep our icon caches
+            await hideNotification(for: staleId, from: device)
         }
     }
 }
