@@ -49,7 +49,7 @@ import UserNotifications
 public class NotificationsService: Service, DownloadTaskDelegate, UserNotificationActionHandler {
     
     let un = UNUserNotificationCenter.current()
-
+    
     @MainActor
     private var userNotificationManager: UserNotificationManager {
         return AppDelegate.shared().userNotificationManager
@@ -70,7 +70,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     enum ActionId: ServiceAction.Id {
         case refresh
     }
-
+    
     /// Actor to ensure startup cleanup runs exactly once
     private actor StartupCleanupManager {
         private var cleanupTask: Task<Void, Never>?
@@ -87,7 +87,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             return await task.value
         }
     }
-
+    
     /// Marked @unchecked Sendable because DownloadTask and Device are legacy classes that do not strictly conform to Sendable,
     /// but are used here in a thread-safe manner (DownloadTask is unique per request, Device is treated as reference).
     private struct DownloadInfo: @unchecked Sendable {
@@ -140,9 +140,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         func getCachedIconURL(for hash: String) -> URL? {
             return cachedDownloadedNotificationIconFileURLByHash[hash]
         }
-
+        
         // MARK: - File I/O Operations (Thread-safe)
-
+        
         func streamForTempDownload() -> TempIconDownloadStream? {
             let temporaryDirectory = NSTemporaryDirectory()
             let randomUuidForFileName = "\(UUID().uuidString)"
@@ -176,7 +176,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 return nil
             }
         }
-
+        
         func renamePartFile(url partFileURL: URL, to fileName: String) throws -> URL {
             var finalFileURL = partFileURL.deletingLastPathComponent().appendingPathComponent(fileName)
             for _ in 1...10000 {
@@ -190,7 +190,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             throw DataPacket.NotificationError.partFileRenameFailed
         }
-
+        
         func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
             let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
             for _ in 1...10000 {
@@ -203,7 +203,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             throw DataPacket.NotificationError.copyFileFailed
         }
-
+        
         func copyFileFromCache(url fileURL: URL, notificationId: String) throws -> URL {
             let safeFileName = sanitize(notificationId) + ".png"
             let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent(safeFileName)
@@ -453,7 +453,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             await self.showNotification(for: info.dataPacket, from: info.device)
         }
     }
-
+    
     
     // MARK: UserNotificationActionHandler
     
@@ -720,7 +720,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
         }
     }
-
+    
     /// Cleans up stale notification icon files from the temp directory.
     /// Call this on app startup to remove leftover files from previous sessions.
     ///
@@ -760,7 +760,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             Log.error?.message("Failed to enumerate temp directory for icon cleanup: \(error)")
         }
     }
-
+    
     private func buildNotificationContent(
         for dataPacket: DataPacket,
         from device: Device,
@@ -850,10 +850,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         return notification
     }
-
+    
     private func showNotification(for dataPacket: DataPacket, from device: Device) async {
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
-
+        
         do {
             guard let packetNotificationId = try dataPacket.getId() else {
                 Log.debug?.message("Notification rejected: missing ID")
@@ -884,7 +884,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isAnswer = try dataPacket.getAnswerFlag()
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
-
+            
             // Interact with MainActor state
             let shouldShow = await MainActor.run { () -> Bool in
                 let isAlreadyDisplayed = state.notificationIds[device.id]?.contains(notificationId) ?? false
@@ -913,12 +913,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             guard shouldShow else { return }
-
+            
             /// dontPresent: Don't show notification
             let dontPresent = isAnswer
-
+            
             let notificationIconURL: URL? = await iconState.getDownloadedIconURL(for: packetNotificationId)
-
+            
             let notification = await buildNotificationContent(
                 for: dataPacket,
                 from: device,
@@ -958,7 +958,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     }
                     // Opportunistically cleanup icon file dictionary entry, if present
                     if await iconState.removeDownloadedIconURL(for: packetNotificationId) != nil {
-                         Log.debug?.message("Removed icon file dictionary entry for failed notification attachment")
+                        Log.debug?.message("Removed icon file dictionary entry for failed notification attachment")
                     }
                 }
             }
@@ -975,10 +975,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
         }
         catch {
-             Log.error?.message("Error while showing notification: \(error)")
+            Log.error?.message("Error while showing notification: \(error)")
         }
     }
-
+    
     
     private func hideNotification(for dataPacket: DataPacket, from device: Device) async {
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
@@ -1251,8 +1251,8 @@ fileprivate extension DataPacket {
     }
     
     /// Gets the available actions of the notification.
-     /// - Returns: An array of action strings, or nil if no actions are present.
-     /// - Throws: `NotificationError.invalidActions` if the actions property is present but not in the expected format.
+    /// - Returns: An array of action strings, or nil if no actions are present.
+    /// - Throws: `NotificationError.invalidActions` if the actions property is present but not in the expected format.
     func getActions() throws -> [String]? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.actions.rawValue) else { return nil }
