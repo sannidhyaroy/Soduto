@@ -192,6 +192,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
         
         func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
+            guard isValidHash(fileHash) else { throw DataPacket.NotificationError.invalidPayloadHash }
+            
             let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
             for _ in 1...10000 {
                 if !FileManager.default.fileExists(atPath: finalFileURL.path) {
@@ -216,6 +218,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 }
             }
             throw DataPacket.NotificationError.copyFileFailed
+        }
+        
+        private func isValidHash(_ hash: String) -> Bool {
+            let allowed = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+            return !hash.isEmpty && hash.unicodeScalars.allSatisfy { allowed.contains($0) }
         }
         
         private func sanitize(_ string: String) -> String {
