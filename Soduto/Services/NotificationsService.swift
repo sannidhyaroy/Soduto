@@ -239,7 +239,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
         
         /// Tasks for post-sync reconciliation
-        var syncReconciliationTasks: [Device.Id: Task<Void, Error>] = [:]
+        var syncReconciliationTasks: [Device.Id: Task<Void, Never>] = [:]
         
         /// Tasks for device setup/sync
         var setupTasks: [Device.Id: Task<Void, Never>] = [:]
@@ -1041,8 +1041,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         state.syncReconciliationTasks[device.id]?.cancel() // Cancel any existing task for this device
         state.pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
         
-        let task = Task {
-            try await Task.sleep(nanoseconds: UInt64(initialSyncTimeout * 1_000_000_000))
+        let task = Task<Void, Never> {
+            try? await Task.sleep(nanoseconds: UInt64(initialSyncTimeout * 1_000_000_000))
+            
+            guard !Task.isCancelled else { return }
             await finishSyncWindow(for: device)
         }
         state.syncReconciliationTasks[device.id] = task
@@ -1059,8 +1061,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Debounce: Reschedule the reconciliation task to wait for end of stream
         state.syncReconciliationTasks[device.id]?.cancel()
         
-        let task = Task {
-            try await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
+        let task = Task<Void, Never> {
+            try? await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
+            
+            guard !Task.isCancelled else { return }
             await finishSyncWindow(for: device)
         }
         state.syncReconciliationTasks[device.id] = task
