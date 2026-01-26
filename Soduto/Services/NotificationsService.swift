@@ -50,6 +50,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     let un = UNUserNotificationCenter.current()
     
+    @MainActor
+    private var userNotificationManager: UserNotificationManager {
+        return AppDelegate.shared().userNotificationManager
+    }
+    
     // MARK: Types
     
     public typealias NotificationId = String
@@ -65,24 +70,207 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     enum ActionId: ServiceAction.Id {
         case refresh
     }
-
-    private struct DownloadInfo {
+    
+    /// Actor to ensure startup cleanup runs exactly once
+    private actor StartupCleanupManager {
+        private var cleanupTask: Task<Void, Never>?
+        
+        func ensureCleanup(action: @escaping @Sendable () async -> Void) async {
+            if let task = cleanupTask {
+                return await task.value
+            }
+            
+            let task = Task {
+                await action()
+            }
+            cleanupTask = task
+            return await task.value
+        }
+    }
+    
+    /// Marked @unchecked Sendable because DownloadTask and Device are legacy classes that do not strictly conform to Sendable,
+    /// but are used here in a thread-safe manner (DownloadTask is unique per request, Device is treated as reference).
+    private struct DownloadInfo: @unchecked Sendable {
         let task: DownloadTask
         let fileHash: String?
         let notificationId: String
         let partFileURL: URL
         let dataPacket: DataPacket
         let device: Device
-        init(task: DownloadTask, fileHash:String?, notificationId: String, partFileURL: URL, dataPacket: DataPacket, device: Device) {
-            self.task = task
-            self.fileHash = fileHash
-            self.notificationId = notificationId
-            self.partFileURL = partFileURL
-            self.dataPacket = dataPacket
-            self.device = device
+    }
+    
+    /// Actor to manage icon download state and cache mappings safely off the main thread.
+    private actor IconStateManager {
+        var notificationIconDownloadInfos: [DownloadInfo] = []
+        var downloadedNotificationIconFileURLByNotificationId: [String: URL] = [:]
+        var cachedDownloadedNotificationIconFileURLByHash: [String: URL] = [:]
+        
+        /// Represents exclusive ownership of a temporary download stream.
+        /// The stream is created inside IconStateManager and immediately handed off to a single DownloadTask. It is never shared.
+        struct TempIconDownloadStream: @unchecked Sendable {
+            let stream: OutputStream
+            let fileURL: URL
+        }
+        
+        func addDownloadInfo(_ info: DownloadInfo) {
+            notificationIconDownloadInfos.append(info)
+        }
+        
+        func removeDownloadInfo(for task: DownloadTask) -> DownloadInfo? {
+            guard let index = notificationIconDownloadInfos.firstIndex(where: { $0.task === task }) else { return nil }
+            return notificationIconDownloadInfos.remove(at: index)
+        }
+        
+        func setDownloadedIconURL(_ url: URL, for notificationId: String) {
+            downloadedNotificationIconFileURLByNotificationId[notificationId] = url
+        }
+        
+        func getDownloadedIconURL(for notificationId: String) -> URL? {
+            return downloadedNotificationIconFileURLByNotificationId[notificationId]
+        }
+        
+        func removeDownloadedIconURL(for notificationId: String) -> URL? {
+            return downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: notificationId)
+        }
+        
+        func setCachedIconURL(_ url: URL, for hash: String) {
+            cachedDownloadedNotificationIconFileURLByHash[hash] = url
+        }
+        
+        func getCachedIconURL(for hash: String) -> URL? {
+            return cachedDownloadedNotificationIconFileURLByHash[hash]
+        }
+        
+        // MARK: - File I/O Operations (Thread-safe)
+        
+        func streamForTempDownload() -> TempIconDownloadStream? {
+            let temporaryDirectory = NSTemporaryDirectory()
+            let randomUuidForFileName = "\(UUID().uuidString)"
+            let tempFileURL = URL(fileURLWithPath: randomUuidForFileName, relativeTo: URL(fileURLWithPath: temporaryDirectory, isDirectory: true))
+            
+            var partFileURL = tempFileURL.appendingPathExtension("part")
+            var stream: OutputStream? = nil
+            for _ in 1...10000 {
+                if !FileManager.default.fileExists(atPath: partFileURL.path) {
+                    stream = OutputStream(url: partFileURL, append: false)
+                    stream?.open()
+                    if stream?.hasSpaceAvailable ?? false {
+                        break
+                    }
+                }
+                partFileURL = partFileURL.alternativeForDuplicate()
+            }
+            
+            if stream == nil {
+                partFileURL = tempFileURL.appendingPathExtension("part-\(UUID().uuidString)")
+                if !FileManager.default.fileExists(atPath: partFileURL.path) {
+                    stream = OutputStream(url: partFileURL, append: false)
+                    stream?.open()
+                }
+            }
+            
+            if let readyStream = stream, (stream?.hasSpaceAvailable ?? false) {
+                return TempIconDownloadStream(stream: readyStream, fileURL: partFileURL)
+            } else {
+                stream?.close()
+                return nil
+            }
+        }
+        
+        func renamePartFile(url partFileURL: URL, to fileName: String) throws -> URL {
+            var finalFileURL = partFileURL.deletingLastPathComponent().appendingPathComponent(fileName)
+            for _ in 1...10000 {
+                if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                    do {
+                        try FileManager.default.moveItem(at: partFileURL, to: finalFileURL)
+                        return finalFileURL
+                    } catch {}
+                }
+                finalFileURL = finalFileURL.alternativeForDuplicate()
+            }
+            throw DataPacket.NotificationError.partFileRenameFailed
+        }
+        
+        func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
+            guard isValidHash(fileHash) else { throw DataPacket.NotificationError.invalidPayloadHash }
+            
+            let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
+            for _ in 1...10000 {
+                if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                    do {
+                        try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                        return finalFileURL
+                    } catch {}
+                }
+            }
+            throw DataPacket.NotificationError.copyFileFailed
+        }
+        
+        func copyFileFromCache(url fileURL: URL, notificationId: String) throws -> URL {
+            let safeFileName = sanitize(notificationId) + ".png"
+            let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent(safeFileName)
+            for _ in 1...10000 {
+                if !FileManager.default.fileExists(atPath: finalFileURL.path) {
+                    do {
+                        try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                        return finalFileURL
+                    } catch {}
+                }
+            }
+            throw DataPacket.NotificationError.copyFileFailed
+        }
+        
+        private func isValidHash(_ hash: String) -> Bool {
+            let allowed = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+            return !hash.isEmpty && hash.unicodeScalars.allSatisfy { allowed.contains($0) }
+        }
+        
+        private func sanitize(_ string: String) -> String {
+            let invalidCharacters = CharacterSet(charactersIn: "/:|\\<>\"?*")
+            return string.components(separatedBy: invalidCharacters).joined(separator: "_")
         }
     }
     
+    /// MainActor-isolated state manager for active notifications and sync tasks.
+    @MainActor
+    private class NotificationStateManager {
+        nonisolated init() {}
+        
+        /// Delivered notification ids grouped by device
+        var notificationIds: [Device.Id: Set<NotificationId>] = [:]
+        
+        /// Tracks the last known content hash for each notification to detect true updates vs reconnection duplicates
+        var notificationContentHashes: [NotificationId: Int] = [:]
+        
+        /// Tracks notification IDs received during a sync window
+        var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
+        
+        /// Tasks for post-sync reconciliation
+        var syncReconciliationTasks: [Device.Id: Task<Void, Never>] = [:]
+        
+        /// Tasks for device setup/sync
+        var setupTasks: [Device.Id: Task<Void, Never>] = [:]
+        
+        func addNotificationId(_ id: NotificationId, from device: Device) {
+            if notificationIds[device.id] == nil {
+                notificationIds[device.id] = Set<NotificationId>()
+            }
+            notificationIds[device.id]?.insert(id)
+        }
+        
+        func removeNotificationId(_ id: NotificationId, from device: Device) {
+            _ = notificationIds[device.id]?.remove(id)
+        }
+        
+        func reset() {
+            notificationIds.removeAll()
+            notificationContentHashes.removeAll()
+            syncReconciliationTasks.values.forEach { $0.cancel() }
+            syncReconciliationTasks.removeAll()
+            setupTasks.values.forEach { $0.cancel() }
+            setupTasks.removeAll()
+        }
+    }
     
     // MARK: Service properties
     
@@ -91,26 +279,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.notificationPacketType ])
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.notificationPacketType ])
     
-    private var notificationIconDownloadInfos: [DownloadInfo] = []
-    private var downloadedNotificationIconFileURLByNotificationId: [String: URL] = [:]
-    private var cachedDownloadedNotificationIconFileURLByHash: [String: URL] = [:]
-
-    /// Delivered notification ids grouped by device
-    private var notificationIds: [Device.Id: Set<NotificationId>] = [:]
+    private let iconState = IconStateManager()
+    private let state = NotificationStateManager()
     
-    /// Tracks the last known content hash for each notification to detect true updates vs reconnection duplicates
-    /// Key: notificationId, Value: hash of body/ticker content
-    private var notificationContentHashes: [NotificationId: Int] = [:]
-    
-    /// Flag to ensure startup cleanup only runs once per app session (static, process-wide)
-    private static var hasPerformedStartupCleanup = false
-    
-    /// Tracks notification IDs received during a sync window (after a notification request), grouped by device.
-    /// Used to detect notifications that were dismissed on the remote device while disconnected.
-    private var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
-    
-    /// Timers for post-sync reconciliation, keyed by device ID.
-    private var syncReconciliationTimers: [Device.Id: Timer] = [:]
+    /// Manager to ensure startup cleanup only runs once per app session (static, process-wide)
+    private static let cleanupManager = StartupCleanupManager()
     
     /// Time to wait for the first notification packet before assuming the device has no notifications.
     private let initialSyncTimeout: TimeInterval = 3.5
@@ -128,47 +301,49 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Log the raw packet (enable only when debugging, as logs may leak sensitive info)
         //Log.debug?.message("NotificationsService received packet: \(dataPacket.body)")
         
-        if (try? dataPacket.getRequestFlag()) ?? false {
-            // Doing nothing as we dont (at least currently) provide our own notifications to other devices
-        }
-        else if (try? dataPacket.getCancelFlag()) ?? false {
-            self.hideNotification(for: dataPacket, from: device)
-        }
-        else {
-            do {
-                let id = try dataPacket.getId() ?? nil
-                if (id != nil && dataPacket.downloadTask != nil) {
-                    let iconDownloadTask = dataPacket.downloadTask
-                    self.startIconDownloadTaskAndShowNotification(downloadTask: iconDownloadTask!, notificationId: id!, dataPacket: dataPacket, device: device)
-                }
-                else {
-                    // No download task - try to find cached icon
-                    if let id = id {
-                        // First, try by payload hash (if the packet includes it)
-                        if let payloadHash = try? dataPacket.getPayloadHash(),
-                           let cachedIconURL = self.cachedDownloadedNotificationIconFileURLByHash[payloadHash] {
-                            Log.debug?.message("Using cached icon for notification \(id) with hash \(payloadHash)")
-                            do {
-                                let copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedIconURL, notificationId: id)
-                                self.downloadedNotificationIconFileURLByNotificationId[id] = copiedFromCacheFileURL
-                            } catch {
-                                Log.error?.message("Failed to copy cached icon: \(error.localizedDescription)")
+        Task {
+            if (try? dataPacket.getRequestFlag()) ?? false {
+                // Doing nothing as we dont (at least currently) provide our own notifications to other devices
+            }
+            else if (try? dataPacket.getCancelFlag()) ?? false {
+                await self.hideNotification(for: dataPacket, from: device)
+            }
+            else {
+                do {
+                    let id = try dataPacket.getId() ?? nil
+                    if (id != nil && dataPacket.downloadTask != nil) {
+                        let iconDownloadTask = dataPacket.downloadTask
+                        await self.startIconDownloadTaskAndShowNotification(downloadTask: iconDownloadTask!, notificationId: id!, dataPacket: dataPacket, device: device)
+                    }
+                    else {
+                        // No download task - try to find cached icon
+                        if let id = id {
+                            // First, try by payload hash (if the packet includes it)
+                            if let payloadHash = try? dataPacket.getPayloadHash(),
+                               let cachedIconURL = await self.iconState.getCachedIconURL(for: payloadHash) {
+                                Log.debug?.message("Using cached icon for notification \(id) with hash \(payloadHash)")
+                                do {
+                                    let copiedFromCacheFileURL = try await self.iconState.copyFileFromCache(url: cachedIconURL, notificationId: id)
+                                    await self.iconState.setDownloadedIconURL(copiedFromCacheFileURL, for: id)
+                                } catch {
+                                    Log.error?.message("Failed to copy cached icon: \(error.localizedDescription)")
+                                }
+                            }
+                            // Second, check if we already have a downloaded icon for this notification ID
+                            else if await self.iconState.getDownloadedIconURL(for: id) != nil {
+                                Log.debug?.message("Icon already available for notification \(id)")
+                            }
+                            else {
+                                Log.debug?.message("No icon available for notification \(id) - no downloadTask, no payloadHash match, no cached icon")
                             }
                         }
-                        // Second, check if we already have a downloaded icon for this notification ID
-                        else if self.downloadedNotificationIconFileURLByNotificationId[id] != nil {
-                            Log.debug?.message("Icon already available for notification \(id)")
-                        }
-                        else {
-                            Log.debug?.message("No icon available for notification \(id) - no downloadTask, no payloadHash match, no cached icon")
-                        }
+                        
+                        await self.showNotification(for: dataPacket, from: device)
                     }
-                    
-                    self.showNotification(for: dataPacket, from: device)
                 }
-            }
-            catch {
-                self.showNotification(for: dataPacket, from: device)
+                catch {
+                    await self.showNotification(for: dataPacket, from: device)
+                }
             }
         }
         
@@ -188,21 +363,24 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     public func setup(for device: Device) {
         guard device.incomingCapabilities.contains(DataPacket.notificationPacketType) else { return }
         
-        // Clean up stale icon files from previous app sessions (once per app launch, process-wide)
-        if !Self.hasPerformedStartupCleanup {
-            Self.hasPerformedStartupCleanup = true
-            cleanupStaleIconFiles()
-        }
-        
-        /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
-        /// then repopulate from delivered notifications to restore state after app restart.
-        /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
-        reconcileNotificationState { [weak self] in
-            self?.repopulateNotificationIds(for: device) {
+        // Clean up stale icon files from previous app sessions (once per app launch, process-wide).
+        /// We await this cleanup BEFORE requesting new notifications to avoid race conditions where
+        /// we might delete valid icons for newly arriving notifications.
+        Task { @MainActor in
+            state.setupTasks[device.id]?.cancel()
+            let setupTask = Task {
+                await Self.cleanupManager.ensureCleanup { Self.cleanupStaleIconFiles() }
+                /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
+                /// then repopulate from delivered notifications to restore state after app restart.
+                /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
+                await reconcileNotificationState()
+                await repopulateNotificationIds(for: device)
                 // Start sync window: track received notification IDs for this device
-                self?.startSyncWindow(for: device)
+                startSyncWindow(for: device)
                 device.send(DataPacket.notificationRequestPacket())
             }
+            state.setupTasks[device.id] = setupTask
+            await setupTask.value
         }
     }
     
@@ -242,8 +420,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         switch actionId {
         case .refresh:
             // Reconcile state first to clean up any notifications dismissed via macOS UI
-            reconcileNotificationState { [weak self] in
-                guard self != nil else { return }
+            Task { @MainActor in
+                await reconcileNotificationState()
                 device.send(DataPacket.notificationRequestPacket())
             }
         }
@@ -251,32 +429,38 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     // MARK: DownloadTaskDelegate
     
+    /// Delegate callback for download completion.
+    /// Note: This is called on the Main Thread (default delegate queue for DownloadTask).
+    /// We offload the processing to a Task to interact with the internal actors safely.
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
         Log.debug?.message("downloadTask(<\(task)> finishedWithSuccess:<\(success)>)")
         
-        guard let index = self.notificationIconDownloadInfos.firstIndex(where: { $0.task === task }) else { return }
-        let info = self.notificationIconDownloadInfos.remove(at: index)
-        if success {
-            do {
-                // Sanitize the notification ID for use in filename (remove |, :, etc.)
-                let safeFileName = sanitizeForFilename(info.notificationId) + ".png"
-                let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: safeFileName)
-                Log.debug?.message("downloadTask saving icon to: \(finalFileURL.path)")
-                Log.debug?.message("Notification id: \(info.notificationId)")
-                self.downloadedNotificationIconFileURLByNotificationId[info.notificationId] = finalFileURL
-                if (info.fileHash != nil && self.cachedDownloadedNotificationIconFileURLByHash[info.fileHash!] == nil) {
-                    let cachedFileURL = try self.copyFileToCache(url: finalFileURL, hash: info.fileHash!)
-                    self.cachedDownloadedNotificationIconFileURLByHash[info.fileHash!] = cachedFileURL
-                    Log.debug?.message("New icon found with hash \(info.fileHash!), saving to cached icons as \(cachedFileURL)")
+        Task {
+            guard let info = await self.iconState.removeDownloadInfo(for: task) else { return }
+            if success {
+                do {
+                    // Sanitize the notification ID for use in filename (remove |, :, etc.)
+                    let safeFileName = sanitizeForFilename(info.notificationId) + ".png"
+                    let finalFileURL = try await self.iconState.renamePartFile(url: info.partFileURL, to: safeFileName)
+                    Log.debug?.message("downloadTask saving icon to: \(finalFileURL.path)")
+                    Log.debug?.message("Notification id: \(info.notificationId)")
+                    
+                    await self.iconState.setDownloadedIconURL(finalFileURL, for: info.notificationId)
+                    
+                    if let fileHash = info.fileHash, await self.iconState.getCachedIconURL(for: fileHash) == nil {
+                        let cachedFileURL = try await self.iconState.copyFileToCache(url: finalFileURL, hash: fileHash)
+                        await self.iconState.setCachedIconURL(cachedFileURL, for: fileHash)
+                        Log.debug?.message("New icon found with hash \(fileHash), saving to cached icons as \(cachedFileURL)")
+                    }
+                }
+                catch let error {
+                    Log.error?.message("Failed to process downloaded icon for \(info.notificationId): \(error)")
                 }
             }
-            catch let error {
-                Log.error?.message("Failed to process downloaded icon for \(info.notificationId): \(error)")
-            }
+            await self.showNotification(for: info.dataPacket, from: info.device)
         }
-        self.showNotification(for: info.dataPacket, from: info.device)
     }
-
+    
     
     // MARK: UserNotificationActionHandler
     
@@ -358,7 +542,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Remove the notification ID from tracking
         for service in context.serviceManager.services {
             guard let notificationsService = service as? NotificationsService else { continue }
-            notificationsService.removeNotificationId(notificationId, from: device)
+            Task { @MainActor in
+                notificationsService.state.removeNotificationId(notificationId, from: device)
+            }
         }
     }
     
@@ -401,15 +587,16 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     public func refreshNotifications() {
         let devices = AppDelegate.shared().validDevices
         
-        self.notificationIds.removeAll()
-        self.notificationContentHashes.removeAll()
-        un.removeAllDeliveredNotifications()
-        un.removeAllPendingNotificationRequests()
-        
-        // Request notifications from each device
-        for device in devices {
-            guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { continue }
-            device.send(DataPacket.notificationRequestPacket())
+        Task { @MainActor in
+            state.reset()
+            un.removeAllDeliveredNotifications()
+            un.removeAllPendingNotificationRequests()
+            
+            // Request notifications from each device
+            for device in devices {
+                guard device.incomingCapabilities.contains(DataPacket.notificationRequestPacketType) else { continue }
+                device.send(DataPacket.notificationRequestPacket())
+            }
         }
     }
     
@@ -434,51 +621,39 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     /// Repopulates the `notificationIds` dictionary from the Notification Center's delivered notifications.
     /// This is necessary because `notificationIds` is in-memory and lost on app restart.
-    /// - Parameters:
-    ///   - device: The device to repopulate notification IDs for.
-    ///   - completion: Called after repopulation is complete.
-    private func repopulateNotificationIds(for device: Device, completion: @escaping () -> Void) {
+    private func repopulateNotificationIds(for device: Device) async {
         // If we already have IDs for this device, skip repopulation
-        if notificationIds[device.id] != nil && !notificationIds[device.id]!.isEmpty {
-            Log.debug?.message("Skipping repopulation for \(device.name) - already have \(notificationIds[device.id]!.count) IDs")
-            completion()
+        if let ids = await state.notificationIds[device.id], !ids.isEmpty {
+            Log.debug?.message("Skipping repopulation for \(device.name) - already have \(ids.count) IDs")
             return
         }
         
         guard let deviceIdEncoded = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
             Log.error?.message("Failed to encode device ID for \(device.name)")
-            completion()
             return
         }
         
         // Build the prefix we use for this device's notifications
         let prefix = "\(self.id).\(deviceIdEncoded)."
         
-        un.getDeliveredNotifications { [weak self] notifications in
-            DispatchQueue.main.async {
-                guard let self = self else {
-                    completion()
-                    return
+        let notifications = await un.deliveredNotifications()
+        
+        await MainActor.run {
+            var matchCount = 0
+            for notification in notifications {
+                let identifier = notification.request.identifier
+                // Check if this notification belongs to this service and device
+                if identifier.hasPrefix(prefix) {
+                    state.addNotificationId(identifier, from: device)
+                    // Also restore the content hash so we can detect reconnection duplicates
+                    let body = notification.request.content.body
+                    state.notificationContentHashes[identifier] = body.hashValue
+                    matchCount += 1
                 }
-                
-                var matchCount = 0
-                for notification in notifications {
-                    let identifier = notification.request.identifier
-                    // Check if this notification belongs to this service and device
-                    if identifier.hasPrefix(prefix) {
-                        self.addNotificationId(identifier, from: device)
-                        // Also restore the content hash so we can detect reconnection duplicates
-                        let body = notification.request.content.body
-                        self.notificationContentHashes[identifier] = body.hashValue
-                        matchCount += 1
-                    }
-                }
-                
-                if matchCount > 0 {
-                    Log.debug?.message("Repopulated \(matchCount) notification IDs for device \(device.name)")
-                }
-                
-                completion()
+            }
+            
+            if matchCount > 0 {
+                Log.debug?.message("Repopulated \(matchCount) notification IDs for device \(device.name)")
             }
         }
     }
@@ -489,63 +664,57 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// "Dismiss" action button.
     ///
     /// Call this at key moments like refresh or before requesting new notifications.
-    ///
-    /// - Parameter completion: Called after reconciliation is complete.
-    private func reconcileNotificationState(completion: @escaping () -> Void) {
+    private func reconcileNotificationState() async {
         let prefix = "\(self.id)."
         
-        un.getDeliveredNotifications { [weak self] deliveredNotifications in
-            DispatchQueue.main.async {
-                guard let self = self else {
-                    completion()
-                    return
+        let deliveredNotifications = await un.deliveredNotifications()
+        
+        await MainActor.run {
+            // Build a set of all notification IDs currently in Notification Center
+            let deliveredIds = Set(deliveredNotifications.map { $0.request.identifier })
+            
+            var removedCount = 0
+            
+            // For each device, remove any tracked IDs that are no longer delivered
+            for (deviceId, trackedIds) in state.notificationIds {
+                let stale = trackedIds.filter { $0.hasPrefix(prefix) && !deliveredIds.contains($0) }
+                for trackedId in stale {
+                    /// NOTE: DO NOT clean up icon files HERE, because they are cached for the very reason
+                    /// that KDE Connect does NOT send download Tasks on subsequent requests
+                    _ = state.notificationIds[deviceId]?.remove(trackedId)
+                    state.notificationContentHashes.removeValue(forKey: trackedId)
                 }
-                
-                // Build a set of all notification IDs currently in Notification Center
-                let deliveredIds = Set(deliveredNotifications.map { $0.request.identifier })
-                
-                var removedCount = 0
-                
-                // For each device, remove any tracked IDs that are no longer delivered
-                for (deviceId, trackedIds) in self.notificationIds {
-                    let stale = trackedIds.filter { $0.hasPrefix(prefix) && !deliveredIds.contains($0) }
-                    for trackedId in stale {
-                        // NOTE: DO NOT clean up icon files HERE, because they are cached for the very reason
-                        // that KDE Connect does NOT send download Tasks on subsequent requests
-                        self.notificationIds[deviceId]?.remove(trackedId)
-                        self.notificationContentHashes.removeValue(forKey: trackedId)
-                    }
-                    removedCount += stale.count
-                }
-                
-                if removedCount > 0 {
-                    Log.debug?.message("Reconciled notification state: removed \(removedCount) stale entries")
-                }
-                
-                completion()
+                removedCount += stale.count
+            }
+            
+            if removedCount > 0 {
+                Log.debug?.message("Reconciled notification state: removed \(removedCount) stale entries")
             }
         }
     }
     
-    private func startIconDownloadTaskAndShowNotification(downloadTask task: DownloadTask, notificationId: String, dataPacket: DataPacket, device: Device) {
+    private func startIconDownloadTaskAndShowNotification(downloadTask task: DownloadTask, notificationId: String, dataPacket: DataPacket, device: Device) async {
         var downloadFileHash: String? = nil
         do {
             downloadFileHash = try dataPacket.getPayloadHash()
         }
         catch {}
-        if (downloadFileHash != nil && cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!] != nil) {
-            Log.debug?.message("Found cached icon for hash \(downloadFileHash!) at \(cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!)")
+        
+        if let hash = downloadFileHash, let cachedURL = await iconState.getCachedIconURL(for: hash) {
+            Log.debug?.message("Found cached icon for hash \(hash) at \(cachedURL)")
             do {
-                let copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!, notificationId: notificationId)
-                self.downloadedNotificationIconFileURLByNotificationId[notificationId] = copiedFromCacheFileURL
+                let copiedFromCacheFileURL = try await iconState.copyFileFromCache(url: cachedURL, notificationId: notificationId)
+                await iconState.setDownloadedIconURL(copiedFromCacheFileURL, for: notificationId)
             }
             catch let error {
                 Log.error?.message("Failed to copy cached icon for \(notificationId): \(error)")
             }
-            self.showNotification(for: dataPacket, from: device)
+            await self.showNotification(for: dataPacket, from: device)
         } else {
-            if let (readyStream, partFileURL) = self.streamForTempDownload() {
-                self.notificationIconDownloadInfos.append(DownloadInfo(
+            if let tempStream = await iconState.streamForTempDownload() {
+                let readyStream = tempStream.stream
+                let partFileURL = tempStream.fileURL
+                await iconState.addDownloadInfo(DownloadInfo(
                     task: task,
                     fileHash: downloadFileHash,
                     notificationId: notificationId,
@@ -559,93 +728,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
     
-    private func streamForTempDownload() -> (OutputStream, URL)? {
-        let temporaryDirectory = NSTemporaryDirectory()
-        let randomUuidForFileName = "\(UUID().uuidString)"
-        let tempFileURL = URL(fileURLWithPath: randomUuidForFileName, relativeTo: URL(fileURLWithPath: temporaryDirectory, isDirectory: true))
-        // Try open stream for new file. Try alternative names on fail
-        var partFileURL = tempFileURL.appendingPathExtension("part")
-        var stream: OutputStream? = nil
-        for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: partFileURL.path) {
-                stream = OutputStream(url: partFileURL, append: false)
-                stream?.open()
-                if stream?.hasSpaceAvailable ?? false {
-                    break
-                }
-            }
-            
-            partFileURL = partFileURL.alternativeForDuplicate()
-        }
-        
-        // Last attempt with completely random extension
-        if stream == nil {
-            partFileURL = tempFileURL.appendingPathExtension("part-\(UUID().uuidString)")
-            if !FileManager.default.fileExists(atPath: partFileURL.path) {
-                stream = OutputStream(url: partFileURL, append: false)
-                stream?.open()
-            }
-        }
-        
-        if let readyStream = stream, (stream?.hasSpaceAvailable ?? false) {
-            return (readyStream, partFileURL)
-        }
-        else {
-            stream?.close()
-            return nil
-        }
-    }
-
-    private func renamePartFile(url partFileURL: URL, to fileName: String) throws -> URL {
-        // Try rename file from temporary *.part name to final path based on original file name
-        // NOTE: *.part name might not necesarily be equal to filename with appended .part suffix
-        var finalFileURL = partFileURL.deletingLastPathComponent().appendingPathComponent(fileName)
-        for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
-                do {
-                    try FileManager.default.moveItem(at: partFileURL, to: finalFileURL)
-                    return finalFileURL
-                }
-                catch {}
-            }
-            finalFileURL = finalFileURL.alternativeForDuplicate()
-        }
-        
-        throw DataPacket.NotificationError.partFileRenameFailed
-    }
-
-    private func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
-        let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
-        for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
-                do {
-                    try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
-                    return finalFileURL
-                }
-                catch {}
-            }
-        }
-        
-        throw DataPacket.NotificationError.copyFileFailed
-    }
-
-    private func copyFileFromCache(url fileURL: URL, notificationId fileNotificationId: String) throws -> URL {
-        // Sanitize the notification ID for use in filename
-        let safeFileName = sanitizeForFilename(fileNotificationId) + ".png"
-        let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent(safeFileName)
-        for _ in 1...10000 {
-            if !FileManager.default.fileExists(atPath: finalFileURL.path) {
-                do {
-                    try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
-                    return finalFileURL
-                }
-                catch {}
-            }
-        }
-        
-        throw DataPacket.NotificationError.copyFileFailed
-    }
-    
     /// Cleans up stale notification icon files from the temp directory.
     /// Call this on app startup to remove leftover files from previous sessions.
     ///
@@ -656,7 +738,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     ///
     /// Files in NSTemporaryDirectory are eventually cleaned by macOS, but this
     /// provides more immediate cleanup to prevent accumulation over time.
-    private func cleanupStaleIconFiles() {
+    private static func cleanupStaleIconFiles() {
         let tempDirectory = NSTemporaryDirectory()
         let fileManager = FileManager.default
         
@@ -685,7 +767,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             Log.error?.message("Failed to enumerate temp directory for icon cleanup: \(error)")
         }
     }
-
+    
     private func buildNotificationContent(
         for dataPacket: DataPacket,
         from device: Device,
@@ -699,7 +781,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         replyId: String?,
         isCancelable: Bool,
         actions: [String]?
-    ) -> UNMutableNotificationContent {
+    ) async -> UNMutableNotificationContent {
         let notification = UNMutableNotificationContent()
         
         /// Filter actions - exclude copy OTP actions, "Reply" actions (handled separately via requestReplyId), and limit to max 3
@@ -708,7 +790,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             for action in actions {
                 // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
                 if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
-                    self.copyOTP(from: action) // Copy OTP to clipboard
+                    await self.copyOTP(from: action) // Copy OTP to clipboard
                 }
                 // Skip "Reply" actions since we handle reply separately via requestReplyId
                 else if action.lowercased() == "reply" {
@@ -753,7 +835,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         let hasReply = replyId != nil
         let actionTitles = Array(filteredActions.prefix(3))
-        let categoryId = AppDelegate.shared().userNotificationManager.getOrCreateCategory(
+        let categoryId = await userNotificationManager.getOrCreateCategory(
             hasReply: hasReply,
             actionTitles: actionTitles
         )
@@ -775,19 +857,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         return notification
     }
-
-    private func showNotification(for dataPacket: DataPacket, from device: Device) {
-        // Should run on main thread to ensure thread safety for state dictionaries
-        // (notificationIds, notificationContentHashes, downloadedNotificationIconFileURLByNotificationId)
-        if !Thread.isMainThread {
-            DispatchQueue.main.async {
-                self.showNotification(for: dataPacket, from: device)
-            }
-            return
-        }
-
+    
+    private func showNotification(for dataPacket: DataPacket, from device: Device) async {
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
-
+        
         do {
             guard let packetNotificationId = try dataPacket.getId() else {
                 Log.debug?.message("Notification rejected: missing ID")
@@ -805,53 +878,55 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 Log.debug?.message("Notification rejected: from KDE Connect itself")
                 return
             }
+            // Gather all data before hopping between threads
             guard let ticker = try dataPacket.getTicker() else {
                 Log.debug?.message("Notification rejected: missing ticker for \(appName) - \(packetNotificationId)")
                 return
             }
             
             let title = try dataPacket.getTitle()
-            let body = try dataPacket.getText()            
+            let body = try dataPacket.getText()
             let replyId = try dataPacket.getReplyRequestId()
             let actions = try dataPacket.getActions()
             let isAnswer = try dataPacket.getAnswerFlag()
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
-            let isAlreadyDisplayed = self.notificationIds[device.id]?.contains(notificationId) ?? false
             
-            // Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content)
-            let contentForHash = body ?? ticker
-            let currentContentHash = contentForHash.hashValue
-            let previousContentHash = self.notificationContentHashes[notificationId]
-            let isContentChanged = previousContentHash == nil || previousContentHash != currentContentHash
-            
-            // Update the stored content hash
-            self.notificationContentHashes[notificationId] = currentContentHash
-            
-            /// isReconnectionDuplicate: Same notification with same content arriving again (e.g., after network change)
-            /// This should be completely ignored - don't update Notification Center at all
-            let isReconnectionDuplicate = isAlreadyDisplayed && !isContentChanged
-            
-            /// Record this notification as received during sync window (even if it's a reconnection duplicate).
-            /// This ensures we don't incorrectly remove it as "stale" when the sync window finishes.
-            self.recordReceivedNotificationId(notificationId, for: device)
-            
-            // Skip reconnection duplicates entirely - no need to update Notification Center
-            if isReconnectionDuplicate {
-                Log.debug?.message("Notification skipped (reconnection duplicate): \(appName) - \(packetNotificationId)")
-                return
+            // Interact with MainActor state
+            let shouldShow = await MainActor.run { () -> Bool in
+                let isAlreadyDisplayed = state.notificationIds[device.id]?.contains(notificationId) ?? false
+                
+                // Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content)
+                let contentForHash = body ?? ticker
+                let currentContentHash = contentForHash.hashValue
+                let previousContentHash = state.notificationContentHashes[notificationId]
+                let isContentChanged = previousContentHash == nil || previousContentHash != currentContentHash
+                
+                // Update the stored content hash
+                state.notificationContentHashes[notificationId] = currentContentHash
+                
+                /// isReconnectionDuplicate: Same notification with same content arriving again
+                let isReconnectionDuplicate = isAlreadyDisplayed && !isContentChanged
+                
+                /// Record this notification as received during sync window
+                self.recordReceivedNotificationId(notificationId, for: device)
+                
+                // Skip reconnection duplicates entirely
+                if isReconnectionDuplicate {
+                    Log.debug?.message("Notification skipped (reconnection duplicate): \(appName) - \(packetNotificationId)")
+                    return false
+                }
+                return true
             }
+            
+            guard shouldShow else { return }
+            
             /// dontPresent: Don't show notification
-            /// This applies to: answer packets (responses to our requests)
             let dontPresent = isAnswer
-
-            var notificationIconURL: URL? = nil
-            // Don't remove the icon URL - keep it for potential notification updates
-            if let iconURL = self.downloadedNotificationIconFileURLByNotificationId[packetNotificationId] {
-                notificationIconURL = iconURL
-            }
-
-            let notification = buildNotificationContent(
+            
+            let notificationIconURL: URL? = await iconState.getDownloadedIconURL(for: packetNotificationId)
+            
+            let notification = await buildNotificationContent(
                 for: dataPacket,
                 from: device,
                 with: notificationId,
@@ -867,7 +942,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             )
             
             /// Set Notification App Icon
-            /// UNNotificationAttachment MOVES the file to its data store, so we must copy it first to preserve the original for potential notification updates
+            /// UNNotificationAttachment MOVES the file to its data store, so we must copy it first
             if let iconURL = notificationIconURL {
                 // Track temp file for cleanup on error
                 var tempCopyURL: URL? = nil
@@ -889,8 +964,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                         try? FileManager.default.removeItem(at: tempURL)
                     }
                     // Opportunistically cleanup icon file dictionary entry, if present
-                    if let iconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetNotificationId) {
-                        Log.debug?.message("Removed icon file dictionary entry for failed notification attachment: \(packetNotificationId) at \(iconURL.path)")
+                    if await iconState.removeDownloadedIconURL(for: packetNotificationId) != nil {
+                        Log.debug?.message("Removed icon file dictionary entry for failed notification attachment")
                     }
                 }
             }
@@ -898,29 +973,28 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             // Create notification request
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             
-            // Push Notification (categories are already registered at app startup)
-            un.add(request) { error in
-                if let error = error {
-                    Log.error?.message("Failed to add UNNotificationRequest: \(error)")
-                }
+            // Push Notification
+            do {
+                try await un.add(request)
+                await state.addNotificationId(notificationId, from: device)
+            } catch {
+                Log.error?.message("Failed to add UNNotificationRequest: \(error)")
             }
-
-            self.addNotificationId(notificationId, from: device)    /// Add the Notification ID to the `notificationIds` Dictionary
         }
         catch {
             Log.error?.message("Error while showing notification: \(error)")
         }
     }
-
     
-    private func hideNotification(for dataPacket: DataPacket, from device: Device) {
+    
+    private func hideNotification(for dataPacket: DataPacket, from device: Device) async {
         assert(dataPacket.isNotificationPacket, "Expected notification data packet")
         
         guard let id = self.notificationId(for: dataPacket, from: device) else { return }
         
         // Clean up downloaded icon file for this packet
         if let packetId = try? dataPacket.getId() {
-            if let iconURL = self.downloadedNotificationIconFileURLByNotificationId.removeValue(forKey: packetId) {
+            if let iconURL = await iconState.removeDownloadedIconURL(for: packetId) {
                 // Delete the actual icon file from disk
                 do {
                     try FileManager.default.removeItem(at: iconURL)
@@ -931,44 +1005,19 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
         }
         
-        self.hideNotification(for: id, from: device)
+        await self.hideNotification(for: id, from: device)
     }
     
-    private func hideNotification(for id: NotificationId, from device: Device) {
+    private func hideNotification(for id: NotificationId, from device: Device) async {
         un.removeNotification(withId: id)
         
-        self.removeNotificationId(id, from: device)
-        self.notificationContentHashes.removeValue(forKey: id)
+        await MainActor.run {
+            state.removeNotificationId(id, from: device)
+            state.notificationContentHashes.removeValue(forKey: id)
+        }
     }
     
-    private func addNotificationId(_ id: NotificationId, from device: Device) {
-        // Ensure main thread for state mutation
-        if !Thread.isMainThread {
-            DispatchQueue.main.async {
-                self.addNotificationId(id, from: device)
-            }
-            return
-        }
-        
-        if self.notificationIds[device.id] == nil {
-            self.notificationIds[device.id] = Set<NotificationId>()
-        }
-        self.notificationIds[device.id]?.insert(id)
-    }
-    
-    private func removeNotificationId(_ id: NotificationId, from device: Device) {
-        // Ensure main thread for state mutation
-        if !Thread.isMainThread {
-            DispatchQueue.main.async {
-                self.removeNotificationId(id, from: device)
-            }
-            return
-        }
-        
-        guard self.notificationIds[device.id] != nil else { return }
-        _ = self.notificationIds[device.id]?.remove(id)
-    }
-    
+    @MainActor
     private func copyOTP(from string:String) {
         let prefixToRemove = "Copy \""
         let suffixToRemove = "\""
@@ -994,39 +1043,38 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     // MARK: Sync Window & Stale Notification Removal
     
     /// Starts a sync window for a device. During this window, all received notification IDs are tracked.
-    /// After the window closes (timer fires), any local notification IDs not received are considered
-    /// dismissed on the remote device and are removed from macOS.
+    @MainActor
     private func startSyncWindow(for device: Device) {
-        DispatchQueue.main.async {
-            self.syncReconciliationTimers[device.id]?.invalidate() // Cancel any existing timer for this device
-            self.pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
+        state.syncReconciliationTasks[device.id]?.cancel() // Cancel any existing task for this device
+        state.pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
+        
+        let task = Task<Void, Never> {
+            try? await Task.sleep(nanoseconds: UInt64(initialSyncTimeout * 1_000_000_000))
             
-            self.syncReconciliationTimers[device.id] = Timer.scheduledTimer(
-                withTimeInterval: self.initialSyncTimeout, repeats: false) { [weak self] _ in
-                    self?.finishSyncWindow(for: device)
-            }
-            Log.debug?.message("Started sync window for device \(device.name)")
+            guard !Task.isCancelled else { return }
+            await finishSyncWindow(for: device)
         }
+        state.syncReconciliationTasks[device.id] = task
+        Log.debug?.message("Started sync window for device \(device.name)")
     }
     
     /// Called when a notification is received during a sync window. Adds the notification ID to the pending set.
+    @MainActor
     private func recordReceivedNotificationId(_ notificationId: NotificationId, for device: Device) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            // Only record if a sync window is active for this device
-            guard self.pendingSyncReceivedIds[device.id] != nil else { return }
-            self.pendingSyncReceivedIds[device.id]?.insert(notificationId)
+        // Only record if a sync window is active for this device
+        guard state.pendingSyncReceivedIds[device.id] != nil else { return }
+        state.pendingSyncReceivedIds[device.id]?.insert(notificationId)
+        
+        // Debounce: Reschedule the reconciliation task to wait for end of stream
+        state.syncReconciliationTasks[device.id]?.cancel()
+        
+        let task = Task<Void, Never> {
+            try? await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
             
-            // Debounce: Reschedule the reconciliation timer to wait for end of stream
-            // This prevents the window from closing while large batches of notifications are still arriving
-            self.syncReconciliationTimers[device.id]?.invalidate()
-            self.syncReconciliationTimers[device.id] = Timer.scheduledTimer(
-                withTimeInterval: self.syncDebounceTimeout,
-                repeats: false
-            ) { [weak self] _ in
-                self?.finishSyncWindow(for: device)
-            }
+            guard !Task.isCancelled else { return }
+            await finishSyncWindow(for: device)
         }
+        state.syncReconciliationTasks[device.id] = task
     }
     
     /// Finishes the sync window for a device. Removes any local notifications not received during the sync.
@@ -1038,11 +1086,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// They will be re-added when the notification packet arrives later. This situation may arise in devices that delay sending notification packets, even after establishing connection.
     /// This behavior is an intentional trade-off to provide a cleaner and more seamless notification mirroring experience on macOS.
     /// TODO: Verify if existing notifications are send continuously, then comment out the `for loop` codeblock inside this function
-    private func finishSyncWindow(for device: Device) {
-        guard let receivedIds = pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
-        syncReconciliationTimers.removeValue(forKey: device.id)
+    @MainActor
+    private func finishSyncWindow(for device: Device) async {
+        guard let receivedIds = state.pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
+        state.syncReconciliationTasks.removeValue(forKey: device.id)
         
-        guard let localIds = notificationIds[device.id] else {
+        guard let localIds = state.notificationIds[device.id] else {
             Log.debug?.message("Finished sync window for \(device.name): no local notifications to reconcile")
             return
         }
@@ -1058,9 +1107,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         Log.debug?.message("Finished sync window for \(device.name): removing \(staleIds.count) stale notifications")
         
         for staleId in staleIds {
-            /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach
-            /// and keep our icon caches
-            hideNotification(for: staleId, from: device)
+            /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach and keep our icon caches
+            await hideNotification(for: staleId, from: device)
         }
     }
 }
@@ -1214,8 +1262,8 @@ fileprivate extension DataPacket {
     }
     
     /// Gets the available actions of the notification.
-     /// - Returns: An array of action strings, or nil if no actions are present.
-     /// - Throws: `NotificationError.invalidActions` if the actions property is present but not in the expected format.
+    /// - Returns: An array of action strings, or nil if no actions are present.
+    /// - Throws: `NotificationError.invalidActions` if the actions property is present but not in the expected format.
     func getActions() throws -> [String]? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.actions.rawValue) else { return nil }

@@ -75,9 +75,9 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 >      "Bad credentials"
 >  ```
 >
->  This is likely due to GitHub Rate Limits. You can create a [GitHub Token](https://github.com/settings/tokens) and export it as an environment variable:
+>  This is likely due to GitHub Rate Limits. You can create a [GitHub Token](https://github.com/settings/tokens) and export it as an environment variable (format: `ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`):
 >  ```bash
->  export GITHUB_ACCESS_TOKEN=<INSERT YOUR TOKEN HERE> // example: GITHUB_ACCESS_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+>  export GITHUB_ACCESS_TOKEN=<INSERT YOUR TOKEN HERE>
 >  ```
         
 

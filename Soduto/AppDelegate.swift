@@ -28,7 +28,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     let connectionProvider: ConnectionProvider
     let deviceManager: DeviceManager
     let serviceManager = ServiceManager()
-    let userNotificationManager: UserNotificationManager
+    var userNotificationManager: UserNotificationManager!
     let updaterController: SPUStandardUpdaterController
     
     static let logLevelConfigurationKey = "com.soduto.logLevel"
@@ -49,7 +49,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         
         self.connectionProvider = ConnectionProvider(config: config)
         self.deviceManager = DeviceManager(config: config, serviceManager: self.serviceManager)
-        self.userNotificationManager = UserNotificationManager(config: self.config, serviceManager: self.serviceManager, deviceManager: self.deviceManager)
         self.updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         
         super.init()
@@ -61,6 +60,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     // MARK: NSApplicationDelegate
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        self.userNotificationManager = UserNotificationManager(config: self.config, serviceManager: self.serviceManager, deviceManager: self.deviceManager)
         self.config.capabilitiesDataSource = self.serviceManager
         self.connectionProvider.delegate = self.deviceManager
         self.statusBarMenuController.deviceDataSource = self.deviceManager

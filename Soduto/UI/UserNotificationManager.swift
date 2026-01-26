@@ -44,6 +44,7 @@ public protocol UserNotificationActionHandler: AnyObject {
 /// - Creating and caching dynamic notification categories for Android notifications
 /// - Dispatching notification actions to the appropriate handler classes
 /// - Determining how notifications are presented in the foreground
+@MainActor
 public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate {
     
     // MARK: Types
@@ -121,33 +122,38 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
         // Set ourselves as the notification center delegate
         un.delegate = self
         
-        // Request notification authorization
-        un.requestAuthorization(options: [.alert, .sound, .badge]) { authorized, error in
-            if let error = error {
+        Task {
+            // Request notification authorization
+            do {
+                let authorized = try await un.requestAuthorization(options: [.alert, .sound, .badge])
+                if authorized {
+                    print("Authorized to send notifications!")
+                } else {
+                    print("Not authorized to send notifications")
+                }
+            } catch {
                 print("Notification authorization error: \(error.localizedDescription)")
-            } else if authorized {
-                print("Authorized to send notifications!")
-            } else {
-                print("Not authorized to send notifications")
             }
+            
+            // Register all shape-based notification categories once at startup
+            registerNotificationCategories()
         }
-        
-        // Register all shape-based notification categories once at startup
-        registerNotificationCategories()
     }
     
     // MARK: UNUserNotificationCenterDelegate
     
     /// Handles user actions on notifications by dispatching to the appropriate handler class.
-    public func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        handleAction(for: response)
+    public nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        Task { @MainActor in
+            handleAction(for: response)
+        }
         completionHandler()
     }
     
     /// Determines how to present notifications when the app is in the foreground.
     /// - `dontPresent`: Notification not presented at all (e.g., answer packets)
     /// - `shouldMute`: Notification shows banner but without sound (silent notifications from Android)
-    public func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    public nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let userInfo = notification.request.content.userInfo
         
         // Check if the notification should not be presented
