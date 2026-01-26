@@ -28,7 +28,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     let connectionProvider: ConnectionProvider
     let deviceManager: DeviceManager
     let serviceManager = ServiceManager()
-    var userNotificationManager: UserNotificationManager!
+    private(set) var userNotificationManager: UserNotificationManager!
     let updaterController: SPUStandardUpdaterController
     
     static let logLevelConfigurationKey = "com.soduto.logLevel"

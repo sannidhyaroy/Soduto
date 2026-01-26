@@ -52,7 +52,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     @MainActor
     private var userNotificationManager: UserNotificationManager {
-        return AppDelegate.shared().userNotificationManager
+        let manager = AppDelegate.shared().userNotificationManager
+        precondition(manager != nil, "UserNotificationManager accessed before applicationDidFinishLaunching")
+        return manager!
     }
     
     // MARK: Types
