@@ -270,7 +270,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     Log.debug?.message("New icon found with hash \(info.fileHash!), saving to cached icons as \(cachedFileURL)")
                 }
             }
-            catch {}
+            catch let error {
+                Log.error?.message("Failed to process downloaded icon for \(info.notificationId): \(error)")
+            }
         }
         self.showNotification(for: info.dataPacket, from: info.device)
     }
@@ -386,7 +388,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
         un.add(request) { error in
             if let error = error {
-                print(error.localizedDescription)
+                Log.error?.message("Failed to add UNNotificationRequest for custom notification id \(id): \(error)")
             }
         }
     }
@@ -539,7 +541,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 let copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedDownloadedNotificationIconFileURLByHash[downloadFileHash!]!, notificationId: notificationId)
                 self.downloadedNotificationIconFileURLByNotificationId[notificationId] = copiedFromCacheFileURL
             }
-            catch {}
+            catch let error {
+                Log.error?.message("Failed to copy cached icon for \(notificationId): \(error)")
+            }
             self.showNotification(for: dataPacket, from: device)
         } else {
             if let (readyStream, partFileURL) = self.streamForTempDownload() {
@@ -899,7 +903,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             // Push Notification (categories are already registered at app startup)
             un.add(request) { error in
                 if let error = error {
-                    print(error.localizedDescription)
+                    Log.error?.message("Failed to add UNNotificationRequest: \(error)")
                 }
             }
 
