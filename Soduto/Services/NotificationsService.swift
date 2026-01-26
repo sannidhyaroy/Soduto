@@ -896,26 +896,25 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let shouldShow = await MainActor.run { () -> Bool in
                 let isAlreadyDisplayed = state.notificationIds[device.id]?.contains(notificationId) ?? false
                 
-                // Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content)
+                /// Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content)
                 let contentForHash = body ?? ticker
                 let currentContentHash = contentForHash.hashValue
                 let previousContentHash = state.notificationContentHashes[notificationId]
                 let isContentChanged = previousContentHash == nil || previousContentHash != currentContentHash
                 
-                // Update the stored content hash
-                state.notificationContentHashes[notificationId] = currentContentHash
-                
                 /// isReconnectionDuplicate: Same notification with same content arriving again
                 let isReconnectionDuplicate = isAlreadyDisplayed && !isContentChanged
                 
-                /// Record this notification as received during sync window
+                /// Record this notification as received during sync window, even if it's a reconnection duplicate
                 self.recordReceivedNotificationId(notificationId, for: device)
                 
-                // Skip reconnection duplicates entirely
-                if isReconnectionDuplicate {
+                guard !isReconnectionDuplicate else {
                     Log.debug?.message("Notification skipped (reconnection duplicate): \(appName) - \(packetNotificationId)")
                     return false
                 }
+                
+                // Update the stored content hash
+                state.notificationContentHashes[notificationId] = currentContentHash
                 return true
             }
             
