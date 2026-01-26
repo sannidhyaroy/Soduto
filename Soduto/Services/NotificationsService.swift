@@ -74,13 +74,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     private actor StartupCleanupManager {
         private var cleanupTask: Task<Void, Never>?
         
-        func ensureCleanup(action: @escaping @Sendable () -> Void) async {
+        func ensureCleanup(action: @escaping @Sendable () async -> Void) async {
             if let task = cleanupTask {
                 return await task.value
             }
             
-            let task = Task.detached(priority: .utility) {
-                action()
+            let task = Task {
+                await action()
             }
             cleanupTask = task
             return await task.value
@@ -231,7 +231,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
         
         /// Tasks for post-sync reconciliation
-        var syncReconciliationTasks: [Device.Id: Task<Void, Never>] = [:]
+        var syncReconciliationTasks: [Device.Id: Task<Void, Error>] = [:]
+        
+        /// Tasks for device setup/sync
+        var setupTasks: [Device.Id: Task<Void, Never>] = [:]
         
         func addNotificationId(_ id: NotificationId, from device: Device) {
             if notificationIds[device.id] == nil {
@@ -249,6 +252,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             notificationContentHashes.removeAll()
             syncReconciliationTasks.values.forEach { $0.cancel() }
             syncReconciliationTasks.removeAll()
+            setupTasks.values.forEach { $0.cancel() }
+            setupTasks.removeAll()
         }
     }
     
@@ -349,21 +354,28 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Clean up stale icon files from previous app sessions (once per app launch, process-wide).
         /// We await this cleanup BEFORE requesting new notifications to avoid race conditions where
         /// we might delete valid icons for newly arriving notifications.
-        Task {
-            await Self.cleanupManager.ensureCleanup {
-                self.cleanupStaleIconFiles()
-            }
+        
+        Task { @MainActor in
+            state.setupTasks[device.id]?.cancel()
             
-            /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
-            /// then repopulate from delivered notifications to restore state after app restart.
-            /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
-            await MainActor.run {
-                await reconcileNotificationState()
-                await repopulateNotificationIds(for: device)
-                // Start sync window: track received notification IDs for this device
-                startSyncWindow(for: device)
-                device.send(DataPacket.notificationRequestPacket())
+            let setupTask = Task {
+                await Self.cleanupManager.ensureCleanup {
+                    Self.cleanupStaleIconFiles()
+                }
+                
+                /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
+                /// then repopulate from delivered notifications to restore state after app restart.
+                /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
+                await MainActor.run {
+                    await reconcileNotificationState()
+                    await repopulateNotificationIds(for: device)
+                    // Start sync window: track received notification IDs for this device
+                    startSyncWindow(for: device)
+                    device.send(DataPacket.notificationRequestPacket())
+                }
             }
+            state.setupTasks[device.id] = setupTask
+            await setupTask.value
         }
     }
     
@@ -719,7 +731,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     ///
     /// Files in NSTemporaryDirectory are eventually cleaned by macOS, but this
     /// provides more immediate cleanup to prevent accumulation over time.
-    private nonisolated func cleanupStaleIconFiles() {
+    private static func cleanupStaleIconFiles() {
         let tempDirectory = NSTemporaryDirectory()
         let fileManager = FileManager.default
         
