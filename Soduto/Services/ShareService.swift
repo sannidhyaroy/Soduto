@@ -398,12 +398,14 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     
     private func showUploadStartNotification(to device: Device) {
         let deviceName = device.name
-        let title = "Sending file"
+        let title = device.name
+        let subtitle = "Outbound Transfer in Progress"
         let info = "Sending File to '\(deviceName)'"
         let notificationId = "\(self.id).upload.\(deviceName)"
         
         let notification = UNMutableNotificationContent()
         notification.title = title
+        notification.subtitle = subtitle
         notification.body = info
         notification.sound = nil
         notification.setUrgency(.passive)
@@ -433,12 +435,14 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         assert((try? task.connection.identity?.getDeviceName()) != nil, "Download task expected to have assigned a connection with proper identity info")
         
         let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
-        let title = "Receiving file"
-        let info = deviceName != nil ? "Receiving File from '\(deviceName!)'" : "Receiving File from an unknown device"
+        let title = deviceName ?? "Unknown Device"
+        let subtitle = "Inbound Transfer in Progress"
+        let info = deviceName != nil ? "Receiving File from '\(deviceName!)'" : "Receiving File from an Unknown Device"
         let notificationId = "\(self.id).download.\(task.id)"
         
         let notification = UNMutableNotificationContent()
         notification.title = title
+        notification.subtitle = subtitle
         notification.body = info
         notification.sound = nil
         notification.setUrgency(.active)
@@ -468,12 +472,14 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         assert((try? task.connection.identity?.getDeviceName()) != nil, "Upload task expected to have assigned a connection with proper identity info")
         
         let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
-        let title = succeeded ? "File sent" : "File transfer failed"
-        let info = deviceName != nil ? "File sent to '\(deviceName!)'" : " File sent to an unknown device"
+        let title = deviceName ?? "Unknown Device"
+        let subtitle = succeeded ? "Outbound Transfer Successful" : "Outbound Transfer Failed"
+        let info = deviceName != nil ? "File sent to '\(deviceName!)'" : " File sent to an Unknown Device"
         let notificationId = "\(self.id).upload.\(deviceName!)"
         
         let notification = UNMutableNotificationContent()
         notification.title = title
+        notification.subtitle = subtitle
         if succeeded {
             notification.body = info
         }
@@ -505,10 +511,11 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         assert((try? task.connection.identity?.getDeviceName()) != nil, "Download task expected to have assigned a connection with proper identity info")
         
         let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
-        let title = succeeded ? "File received" : "File transfer failed"
+        let title = deviceName ?? "Unknown Device"
+        let subtitle = succeeded ? "Inbound Transfer Successful" : "Inbound Transfer Failed"
         let info: String
         if let fileName = finalUrl?.lastPathComponent ?? fileName {
-            info = deviceName != nil ? "Received '\(fileName)' from '\(deviceName!)'" : "Received '\(fileName)' from an unknown device"
+            info = deviceName != nil ? "Received '\(fileName)' from '\(deviceName!)'" : "Received '\(fileName)' from an Unknown Device"
         }
         else {
             info = deviceName != nil ? "File received from '\(deviceName!)'" : "File received from an unknown device"
@@ -523,6 +530,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             ]
         }
         notification.title = title
+        notification.subtitle = subtitle
         notification.body = info
         notification.sound = UNNotificationSound.default
         notification.setUrgency(.active)
