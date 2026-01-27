@@ -175,15 +175,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     }
     
     fileprivate func uploadObserver(_ notificationCenter: CFNotificationCenter?, _ notificationName: CFString) {
-        CFNotificationCenterAddObserver(notificationCenter,
-                                        nil,
-                                        { (
-                                            center: CFNotificationCenter?,
-                                            observer: UnsafeMutableRawPointer?,
-                                            name: CFNotificationName?,
-                                            object: UnsafeRawPointer?,
-                                            userInfo: CFDictionary?
-                                        ) in
+        CFNotificationCenterAddObserver(notificationCenter, nil, { (center: CFNotificationCenter?, observer: UnsafeMutableRawPointer?, name: CFNotificationName?, object: UnsafeRawPointer?, userInfo: CFDictionary? ) in
             
             guard let buttonTag = sharedUserDefaults?.integer(forKey: SharedUserDefaults.Keys.buttonTag) else { return }
             guard let data = sharedUserDefaults?.data(forKey: SharedUserDefaults.Keys.kSandboxKey) else { return }
@@ -192,11 +184,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
                 let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
                 ShareService().shareFile(url: url, to: buttonTag)
             } catch {
-                NotificationsService().ShowCustomNotification(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
+                UserNotificationHelper.show(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
             }
-        },
-                                        notificationName,
-                                        nil,
-                                        CFNotificationSuspensionBehavior.deliverImmediately)
+        }, notificationName, nil, CFNotificationSuspensionBehavior.deliverImmediately)
     }
 }

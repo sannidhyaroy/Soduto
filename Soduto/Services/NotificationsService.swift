@@ -568,38 +568,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
     
-    //MARK: Custom Notification Push method
-    
-    /// Displays a custom notification to the user.
-    /// - Parameters:
-    ///   - title: The title of the notification.
-    ///   - subtitle: The subtitle of the notification (optional).
-    ///   - body: The body text of the notification.
-    ///   - sound: Whether to play a sound with the notification.
-    ///   - id: The unique identifier for the notification.
-    ///   - urgency: The urgency level for the notification (default: .active).
-    public func ShowCustomNotification(title: String, subtitle: String? = nil, body: String, sound: Bool, id: String, urgency: UNMutableNotificationContent.NotificationUrgency? = .active) {
-        let notification = UNMutableNotificationContent()
-        notification.title = title
-        if let subtitle = subtitle {
-            notification.subtitle = subtitle
-        }
-        notification.body = body
-        if sound {
-            notification.sound = UNNotificationSound.default
-        }
-        if let urgency = urgency {
-            notification.setUrgency(urgency)
-        }
-        let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
-        un.add(request) { error in
-            if let error = error {
-                Log.error?.message("Failed to add UNNotificationRequest for custom notification id \(id): \(error)")
-            }
-        }
-    }
-    
-    
     // MARK: Public methods
     
     /// Requests all current notifications from all connected devices.

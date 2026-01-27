@@ -243,8 +243,6 @@ public protocol ServicesConfiguartion {
 
 public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration, HostConfiguration {
     
-    let notification: NotificationsService = NotificationsService()
-    
     enum Property: String {
         case hostName = "hostName"
         case hostDeviceId = "hostDeviceId"
@@ -253,13 +251,9 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
         case runCommands = "runCommands"
     }
     
-    
-    
     public weak var capabilitiesDataSource: CapabilitiesDataSource? = nil
     
     private let userDefaults: UserDefaults
-    
-    
    
     convenience init() {
         self.init(userDefaults: UserDefaults.standard)
@@ -275,8 +269,6 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
             self.userDefaults.set("Soduto Host", forKey: Property.hostCertificateName.rawValue)
         }
     }
-    
-    
     
     public var hostDeviceName: String {
         return Host.current().localizedName ?? "Soduto"
@@ -363,11 +355,12 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                     if newValue {
                         self.userDefaults.set(false, forKey: Property.launchOnLogin.rawValue)
                         SMAppService.openSystemSettingsLoginItems()
-                        self.notification.ShowCustomNotification(
+                        UserNotificationHelper.show(
                             title: "Launch on Login",
                             body: "Please enable Soduto under Login Items manually",
                             sound: true,
-                            id: "LoginItemApproval"
+                            id: "LoginItemApproval",
+                            urgency: .active
                         )
                     }
                 }

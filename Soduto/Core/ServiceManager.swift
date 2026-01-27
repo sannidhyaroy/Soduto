@@ -34,6 +34,11 @@ public class ServiceManager: CapabilitiesDataSource {
     
     // MARK: Public methods
     
+    /// Return first service of provided type
+    public func service<T: Service>(ofType type: T.Type) -> T? {
+        return services.first { $0 is T } as? T
+    }
+    
     /// Return services filtered by incoming capabilities
     public func services(supportingIncomingCapabilities capabilities: Set<Service.Capability>) -> [Service] {
         return self.services.filter {
