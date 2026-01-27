@@ -47,10 +47,26 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let task: DownloadTask
         let fileName: String
         let url: URL
-        init(task: DownloadTask, fileName: String, url: URL) {
-            self.task = task
-            self.fileName = fileName
-            self.url = url
+    }
+    
+    /// Owns a temporary download stream and guarantees closure
+    private final class TempDownloadStream {
+        let stream: OutputStream
+        private var isTransferred = false
+        
+        init(stream: OutputStream) {
+            self.stream = stream
+        }
+        
+        deinit {
+            if !isTransferred {
+                stream.close()
+            }
+        }
+        
+        func transfer() -> OutputStream {
+            isTransferred = true
+            return stream
         }
     }
     
@@ -338,17 +354,17 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     }
     
     private func downloadFile(downloadTask task: DownloadTask, fileName: String, destUrl: URL) {
-        if let (readyStream, partUrl) = self.streamForTempDownload(finalUrl: destUrl) {
+        if let (tempStream, partUrl) = self.streamForTempDownload(finalUrl: destUrl) {
             self.downloadInfos.append(DownloadInfo(task: task, fileName: fileName, url: partUrl))
             task.delegate = self
-            task.start(withStream: readyStream)
+            task.start(withStream: tempStream.transfer())
         }
         else {
             self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
         }
     }
     
-    private func streamForTempDownload(finalUrl: URL) -> (OutputStream, URL)? {
+    private func streamForTempDownload(finalUrl: URL) -> (TempDownloadStream, URL)? {
         // Try open stream for new file. Try alternative names on fail
         var partUrl = finalUrl.appendingPathExtension("part")
         var stream: OutputStream? = nil
@@ -356,30 +372,29 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             if !FileManager.default.fileExists(atPath: partUrl.path) {
                 stream = OutputStream(url: partUrl, append: false)
                 stream?.open()
-                if stream?.hasSpaceAvailable ?? false {
-                    break
+                if stream?.hasSpaceAvailable == true {
+                    return (TempDownloadStream(stream: stream!), partUrl)
                 }
+                // Open failed or stream unusable
+                stream?.close()
+                stream = nil
             }
             
             partUrl = partUrl.alternativeForDuplicate()
         }
         
         // Last attempt with completely random extension
-        if stream == nil {
-            partUrl = finalUrl.appendingPathExtension("part-\(UUID().uuidString)")
-            if !FileManager.default.fileExists(atPath: partUrl.path) {
-                stream = OutputStream(url: partUrl, append: false)
-                stream?.open()
+        partUrl = finalUrl.appendingPathExtension("part-\(UUID().uuidString)")
+        if !FileManager.default.fileExists(atPath: partUrl.path) {
+            stream = OutputStream(url: partUrl, append: false)
+            stream?.open()
+            
+            if stream?.hasSpaceAvailable == true {
+                return (TempDownloadStream(stream: stream!), partUrl)
             }
-        }
-        
-        if let readyStream = stream, (stream?.hasSpaceAvailable ?? false) {
-            return (readyStream, partUrl)
-        }
-        else {
             stream?.close()
-            return nil
         }
+        return nil
     }
     
     private func renamePartFile(url partUrl: URL, to fileName: String) throws -> URL {
