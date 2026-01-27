@@ -400,13 +400,13 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let deviceName = device.name
         let title = device.name
         let subtitle = "Outbound Transfer in Progress"
-        let info = "Sending File to '\(deviceName)'"
-        let notificationId = "\(self.id).upload.\(deviceName)"
+        let body = "Sending File to \(deviceName)"
+        let notificationId = "\(self.id).upload.start.\(device.id)"
         
         let notification = UNMutableNotificationContent()
         notification.title = title
         notification.subtitle = subtitle
-        notification.body = info
+        notification.body = body
         notification.sound = nil
         notification.setUrgency(.passive)
         if let iconPath = self.notificationIconPath {
@@ -432,18 +432,16 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     }
     
     private func showDownloadStartNotification(fileName: String?, downloadTask task: DownloadTask) {
-        assert((try? task.connection.identity?.getDeviceName()) != nil, "Download task expected to have assigned a connection with proper identity info")
-        
-        let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
-        let title = deviceName ?? "Unknown Device"
+        let deviceName = (try? task.connection.identity?.getDeviceName()) ?? "Unknown Device"
+        let title = deviceName
         let subtitle = "Inbound Transfer in Progress"
-        let info = deviceName != nil ? "Receiving File from '\(deviceName!)'" : "Receiving File from an Unknown Device"
+        let body = "Receiving File from \(deviceName)"
         let notificationId = "\(self.id).download.\(task.id)"
         
         let notification = UNMutableNotificationContent()
         notification.title = title
         notification.subtitle = subtitle
-        notification.body = info
+        notification.body = body
         notification.sound = nil
         notification.setUrgency(.active)
         if let iconPath = self.notificationIconPath {
@@ -469,21 +467,17 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     }
     
     public func showUploadFinishNotification(uploadTask task: UploadTask, succeeded: Bool) {
-        assert((try? task.connection.identity?.getDeviceName()) != nil, "Upload task expected to have assigned a connection with proper identity info")
-        
-        let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
-        let title = deviceName ?? "Unknown Device"
+        let deviceName = (try? task.connection.identity?.getDeviceName()) ?? "Unknown Device"
+        let deviceId = (try? task.connection.identity?.getDeviceId()) ?? "unknown-device"
+        let title = deviceName
         let subtitle = succeeded ? "Outbound Transfer Successful" : "Outbound Transfer Failed"
-        let info = deviceName != nil ? "File sent to '\(deviceName!)'" : " File sent to an Unknown Device"
-        let notificationId = "\(self.id).upload.\(deviceName!)"
-        
+        let body = succeeded ? "File sent to \(deviceName)" : "Failed to send file to \(deviceName)"
+        let notificationId = "\(self.id).upload.finish.\(deviceId)"
         let notification = UNMutableNotificationContent()
         notification.title = title
         notification.subtitle = subtitle
-        if succeeded {
-            notification.body = info
-        }
-        notification.sound = UNNotificationSound.default
+        notification.body = body
+        notification.sound = .default
         notification.setUrgency(.active)
         if let iconPath = self.notificationIconPath {
             let notificationIconURL = URL(fileURLWithPath: iconPath)
@@ -491,14 +485,14 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
                 let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
                 notification.attachments = [attachment]
             } catch {
-                print(error.localizedDescription)
+                print("Failed to attach upload icon: \(error.localizedDescription)")
             }
         }
         
         let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
         un.add(request) { error in
             if let error = error {
-                print(error.localizedDescription)
+                print("Failed to post upload notification: \(error.localizedDescription)")
             }
         }
         
@@ -508,17 +502,15 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     }
     
     private func showDownloadFinishNotification(fileName: String?, downloadTask task: DownloadTask, succeeded: Bool, finalUrl: URL? = nil) {
-        assert((try? task.connection.identity?.getDeviceName()) != nil, "Download task expected to have assigned a connection with proper identity info")
-        
-        let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
-        let title = deviceName ?? "Unknown Device"
+        let deviceName = (try? task.connection.identity?.getDeviceName()) ?? "Unknown Device"
+        let title = deviceName
         let subtitle = succeeded ? "Inbound Transfer Successful" : "Inbound Transfer Failed"
-        let info: String
+        let body: String
         if let fileName = finalUrl?.lastPathComponent ?? fileName {
-            info = deviceName != nil ? "Received '\(fileName)' from '\(deviceName!)'" : "Received '\(fileName)' from an Unknown Device"
+            body = "Received '\(fileName)' from \(deviceName)"
         }
         else {
-            info = deviceName != nil ? "File received from '\(deviceName!)'" : "File received from an unknown device"
+            body = "File received from \(deviceName)"
         }
         let notificationId = "\(self.id).download.\(task.id)"
         
@@ -531,8 +523,8 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         }
         notification.title = title
         notification.subtitle = subtitle
-        notification.body = info
-        notification.sound = UNNotificationSound.default
+        notification.body = body
+        notification.sound = .default
         notification.setUrgency(.active)
         if let iconPath = self.notificationIconPath {
             let notificationIconURL = URL(fileURLWithPath: iconPath)
