@@ -170,7 +170,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     
     private func notificationId(for dataPacket: DataPacket, from device: Device) -> String? {
         guard dataPacket.isTelephonyPacket else { return nil }
-        guard let event = try? dataPacket.getEvent() else { return nil }
+        guard (try? dataPacket.getEvent()) != nil else { return nil }
         
         guard let deviceId = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return nil }
         guard let event = (try? dataPacket.getEvent() ?? nil) else { return nil }
