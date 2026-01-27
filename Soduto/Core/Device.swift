@@ -253,8 +253,13 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         }
     }
     
+    /// Forward upload completion events to services that explicitly opt-in by conforming to `ConnectionDelegate`.
     public func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
-        
+        for handler in packetHandlers {
+            if let delegate = handler as? ConnectionDelegate {
+                delegate.connection(connection, didSendPacket: packet, uploadedPayload: uploadedPayload)
+            }
+        }
     }
     
     public func connection(_ connection: Connection, didReadPacket packet: DataPacket) {

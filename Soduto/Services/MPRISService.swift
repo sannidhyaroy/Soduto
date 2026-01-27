@@ -63,14 +63,26 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         let albumArtUrl: String
         let partFileURL: URL
         let device: Device
+    }
+    
+    /// Owns a temporary download stream and guarantees closure
+    private final class TempDownloadStream {
+        let stream: OutputStream
+        private var isTransferred = false
         
-        init(task: DownloadTask, fileHash: String?, playerIdentity: String, albumArtUrl: String, partFileURL: URL, device: Device) {
-            self.task = task
-            self.fileHash = fileHash
-            self.playerIdentity = playerIdentity
-            self.albumArtUrl = albumArtUrl
-            self.partFileURL = partFileURL
-            self.device = device
+        init(stream: OutputStream) {
+            self.stream = stream
+        }
+        
+        deinit {
+            if !isTransferred {
+                stream.close()
+            }
+        }
+        
+        func transfer() -> OutputStream {
+            isTransferred = true
+            return stream
         }
     }
     
@@ -595,7 +607,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         }
         
         // Start new download
-        if let (readyStream, partFileURL) = self.streamForTempDownload() {
+        if let (tempStream, partFileURL) = self.streamForTempDownload() {
             let downloadInfo = DownloadInfo(
                 task: downloadTask,
                 fileHash: downloadFileHash,
@@ -606,7 +618,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
             )
             self.albumArtDownloadInfos.append(downloadInfo)
             downloadTask.delegate = self
-            downloadTask.start(withStream: readyStream)
+            downloadTask.start(withStream: tempStream.transfer())
             Log.debug?.message("MPRIS::Started download task for album art")
         } else {
             Log.error?.message("MPRIS::Failed to create download stream for album art")
@@ -633,38 +645,30 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         return cacheDirectory.appendingPathComponent("com.soduto.mpris", isDirectory: true)
     }
     
-    private func streamForTempDownload() -> (OutputStream, URL)? {
+    private func streamForTempDownload() -> (TempDownloadStream, URL)? {
         let temporaryDirectory = NSTemporaryDirectory()
-        let randomUuidForFileName = "\(UUID().uuidString)"
         
-        // Try open stream for new file. Try alternative names on fail
-        var partFileURL = URL(fileURLWithPath: temporaryDirectory).appendingPathComponent("\(randomUuidForFileName).part")
-        var stream: OutputStream? = nil
-        
-        for _ in 1...10000 {
-            // Create the stream
-            stream = OutputStream(toFileAtPath: partFileURL.path, append: false)
+        for attempt in 1...10000 {
+            let partFileURL = URL(fileURLWithPath: temporaryDirectory).appendingPathComponent("\(UUID().uuidString).part")
             
-            if let stream = stream {
-                // Try to open the stream
-                stream.open()
-                
-                // Check if the stream opened successfully
-                if stream.streamStatus == .open || stream.streamStatus == .writing {
-                    Log.debug?.message("MPRIS::Successfully created download stream at: \(partFileURL.path)")
-                    return (stream, partFileURL)
-                } else {
-                    Log.debug?.message("MPRIS::Stream failed to open with status: \(stream.streamStatus.rawValue)")
-                    stream.close()
-                }
+            Log.debug?.message("MPRIS::Attempt \(attempt): creating temp album art file at \(partFileURL.path)")
+            if FileManager.default.fileExists(atPath: partFileURL.path) {
+                Log.debug?.message("MPRIS::Temp file already exists, retrying")
+                continue
             }
-            
-            // Try with a different filename
-            let randomSuffix = UUID().uuidString
-            partFileURL = URL(fileURLWithPath: temporaryDirectory).appendingPathComponent("\(randomUuidForFileName).\(randomSuffix).part")
+            guard let stream = OutputStream(url: partFileURL, append: false) else {
+                Log.debug?.message("MPRIS::Failed to create OutputStream for \(partFileURL.path)")
+                continue
+            }
+            stream.open()
+            if stream.hasSpaceAvailable {
+                Log.debug?.message("MPRIS::Successfully opened writable stream at \(partFileURL.path)")
+                return (TempDownloadStream(stream: stream), partFileURL)
+            }
+            Log.debug?.message("MPRIS::Stream opened but not writable (status=\(stream.streamStatus.rawValue)), retrying")
+            stream.close()
         }
-        
-        Log.error?.message("MPRIS::Failed to create download stream after 10000 attempts")
+        Log.error?.message("MPRIS::Failed to create writable temp album art stream after 10000 attempts")
         return nil
     }
 

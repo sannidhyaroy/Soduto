@@ -153,12 +153,11 @@ public struct SocketAddress: CustomStringConvertible {
     }
     
     
-    mutating func withPointer<T, R>(_ block: (UnsafeMutablePointer<T>)->R) -> R {
-        let capacity = MemoryLayout<sockaddr_storage>.size / MemoryLayout<T>.size
-        return withUnsafeMutablePointer(to: &self.storage) { storagePtr in
-            storagePtr.withMemoryRebound(to: T.self, capacity: capacity) { reboundPtr in
-                block(reboundPtr)
-            }
+    mutating func withPointer<T, R>(_ block: (UnsafeMutablePointer<T>) -> R) -> R {
+        return withUnsafeMutableBytes(of: &storage) { rawBuffer in
+            let rawPtr = rawBuffer.baseAddress!
+            let typedPtr = rawPtr.assumingMemoryBound(to: T.self)
+            return block(typedPtr)
         }
     }
 }

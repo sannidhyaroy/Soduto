@@ -23,7 +23,16 @@ import UserNotifications
 ///
 /// If the content transferred is a url, it can be sent in a field "url" (string).
 /// In that case, this plugin opens that url in the default browser.
-public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotificationActionHandler, NSDraggingDestination {
+///
+/// Transfer completion handling:
+/// - Download completion is delivered via `DownloadTaskDelegate`.
+/// - Upload completion is delivered via `ConnectionDelegate`.
+///
+/// This reflects the architectural distinction between: incoming, service-owned downloads and outgoing, connection-owned uploads.
+/// Note:
+/// `ShareService` is not the primary `ConnectionDelegate`.
+/// Upload completion events are forwarded by `Device`, which owns the active connection lifecycle.
+public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDelegate, UserNotificationActionHandler, NSDraggingDestination {
     
     let un = UNUserNotificationCenter.current()
     let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("AirDrop"))
@@ -47,10 +56,26 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         let task: DownloadTask
         let fileName: String
         let url: URL
-        init(task: DownloadTask, fileName: String, url: URL) {
-            self.task = task
-            self.fileName = fileName
-            self.url = url
+    }
+    
+    /// Owns a temporary download stream and guarantees closure
+    private final class TempDownloadStream {
+        let stream: OutputStream
+        private var isTransferred = false
+        
+        init(stream: OutputStream) {
+            self.stream = stream
+        }
+        
+        deinit {
+            if !isTransferred {
+                stream.close()
+            }
+        }
+        
+        func transfer() -> OutputStream {
+            isTransferred = true
+            return stream
         }
     }
     
@@ -148,6 +173,41 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             break
         }
         
+    }
+    
+    
+    // MARK: ConnectionDelegate
+    
+    /// ShareService receives upload completion events indirectly.
+    /// The active `ConnectionDelegate` is `Device`, which forwards selected events to services that opt-in.
+    
+    /// ShareService does not react to connection state changes.
+    public func connection(_ connection: Connection, didSwitchToState: Connection.State) {
+        // Not needed by ShareService
+    }
+    
+    /// Incoming packets are routed to services via the `Service` API, so this callback is intentionally ignored.
+    public func connection(_ connection: Connection, didReadPacket: DataPacket) {
+        // ShareService already handles packets via Service APIs
+    }
+    
+    /// Upload capacity changes are not handled at the service level.
+    public func connectionCapacityChanged(_ connection: Connection) {
+        // Not relevant for ShareService
+    }
+    
+    /// Called by `Connection` when an outgoing packet (and its payload, if any) has finished sending.
+    ///
+    /// This method is used to detect completion of file uploads initiated by `ShareService`.
+    ///
+    /// Important:
+    /// - Upload completion is reported via `ConnectionDelegate`, not `UploadTaskDelegate`.
+    /// - Only packets with payloads are considered uploads.
+    /// - The `Connection` instance is the authoritative source for the destination device information.
+    public func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
+        guard packet.hasPayload(), packet.type == DataPacket.sharePacketType else { return }
+        
+        self.showUploadFinishNotification(connection: connection, succeeded: uploadedPayload)
     }
     
     
@@ -333,17 +393,17 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
     }
     
     private func downloadFile(downloadTask task: DownloadTask, fileName: String, destUrl: URL) {
-        if let (readyStream, partUrl) = self.streamForTempDownload(finalUrl: destUrl) {
+        if let (tempStream, partUrl) = self.streamForTempDownload(finalUrl: destUrl) {
             self.downloadInfos.append(DownloadInfo(task: task, fileName: fileName, url: partUrl))
             task.delegate = self
-            task.start(withStream: readyStream)
+            task.start(withStream: tempStream.transfer())
         }
         else {
             self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
         }
     }
     
-    private func streamForTempDownload(finalUrl: URL) -> (OutputStream, URL)? {
+    private func streamForTempDownload(finalUrl: URL) -> (TempDownloadStream, URL)? {
         // Try open stream for new file. Try alternative names on fail
         var partUrl = finalUrl.appendingPathExtension("part")
         var stream: OutputStream? = nil
@@ -351,30 +411,29 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             if !FileManager.default.fileExists(atPath: partUrl.path) {
                 stream = OutputStream(url: partUrl, append: false)
                 stream?.open()
-                if stream?.hasSpaceAvailable ?? false {
-                    break
+                if stream?.hasSpaceAvailable == true {
+                    return (TempDownloadStream(stream: stream!), partUrl)
                 }
+                // Open failed or stream unusable
+                stream?.close()
+                stream = nil
             }
             
             partUrl = partUrl.alternativeForDuplicate()
         }
         
         // Last attempt with completely random extension
-        if stream == nil {
-            partUrl = finalUrl.appendingPathExtension("part-\(UUID().uuidString)")
-            if !FileManager.default.fileExists(atPath: partUrl.path) {
-                stream = OutputStream(url: partUrl, append: false)
-                stream?.open()
+        partUrl = finalUrl.appendingPathExtension("part-\(UUID().uuidString)")
+        if !FileManager.default.fileExists(atPath: partUrl.path) {
+            stream = OutputStream(url: partUrl, append: false)
+            stream?.open()
+            
+            if stream?.hasSpaceAvailable == true {
+                return (TempDownloadStream(stream: stream!), partUrl)
             }
-        }
-        
-        if let readyStream = stream, (stream?.hasSpaceAvailable ?? false) {
-            return (readyStream, partUrl)
-        }
-        else {
             stream?.close()
-            return nil
         }
+        return nil
     }
     
     private func renamePartFile(url partUrl: URL, to fileName: String) throws -> URL {
@@ -466,9 +525,9 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         }
     }
     
-    public func showUploadFinishNotification(uploadTask task: UploadTask, succeeded: Bool) {
-        let deviceName = (try? task.connection.identity?.getDeviceName()) ?? "Unknown Device"
-        let deviceId = (try? task.connection.identity?.getDeviceId()) ?? "unknown-device"
+    public func showUploadFinishNotification(connection: Connection, succeeded: Bool) {
+        let deviceName = (try? connection.identity?.getDeviceName()) ?? "Unknown Device"
+        let deviceId = (try? connection.identity?.getDeviceId()) ?? "unknown-device"
         let title = deviceName
         let subtitle = succeeded ? "Outbound Transfer Successful" : "Outbound Transfer Failed"
         let body = succeeded ? "File sent to \(deviceName)" : "Failed to send file to \(deviceName)"
