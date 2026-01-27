@@ -758,7 +758,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     private func buildNotificationContent(
         for dataPacket: DataPacket,
         from device: Device,
-        with notificationId: String,
+        of packetNotificationId: String,
         isSilent: Bool,
         dontPresent: Bool,
         title: String?,
@@ -796,7 +796,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Build userInfo with base properties
         var userInfo: [String: Any] = [
             UserInfoProperty.deviceId.rawValue: device.id,
-            UserInfoProperty.notificationId.rawValue: notificationId,
+            UserInfoProperty.notificationId.rawValue: packetNotificationId,
             UserInfoProperty.requestReplyId.rawValue: replyId as Any,
             UserInfoProperty.isCancelable.rawValue: NSNumber(value: isCancelable),
             UserNotificationManager.Property.dontPresent.rawValue: NSNumber(value: dontPresent),
@@ -915,7 +915,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let notification = await buildNotificationContent(
                 for: dataPacket,
                 from: device,
-                with: notificationId,
+                of: packetNotificationId,
                 isSilent: isSilent,
                 dontPresent: dontPresent,
                 title: title,
