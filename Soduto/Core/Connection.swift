@@ -43,7 +43,7 @@ public protocol ConnectionDataPacketHandler {
 /// - retry / defer logic when capacity is exceeded
 /// - a single authoritative completion signal
 ///
-/// Because of this, `Connection` tracks `uploadTask` instances and determines when an upload is fully complete.
+/// Because of this, `Connection` tracks upload task state internally and emits a single completion event via `ConnectionDelegate`.
 public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegate, Pairable, PairableDelegate, UploadTaskDelegate {
     
     // MARK: Types

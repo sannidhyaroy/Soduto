@@ -29,6 +29,9 @@ import UserNotifications
 /// - Upload completion is delivered via `ConnectionDelegate`.
 ///
 /// This reflects the architectural distinction between: incoming, service-owned downloads and outgoing, connection-owned uploads.
+/// Note:
+/// `ShareService` is not the primary `ConnectionDelegate`.
+/// Upload completion events are forwarded by `Device`, which owns the active connection lifecycle.
 public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDelegate, UserNotificationActionHandler, NSDraggingDestination {
     
     let un = UNUserNotificationCenter.current()
@@ -175,22 +178,19 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     
     // MARK: ConnectionDelegate
     
-    /// Required by `ConnectionDelegate`.
-    ///
+    /// ShareService receives upload completion events indirectly.
+    /// The active `ConnectionDelegate` is `Device`, which forwards selected events to services that opt-in.
+    
     /// ShareService does not react to connection state changes.
     public func connection(_ connection: Connection, didSwitchToState: Connection.State) {
         // Not needed by ShareService
     }
     
-    /// Required by `ConnectionDelegate`.
-    ///
     /// Incoming packets are routed to services via the `Service` API, so this callback is intentionally ignored.
     public func connection(_ connection: Connection, didReadPacket: DataPacket) {
         // ShareService already handles packets via Service APIs
     }
     
-    /// Required by `ConnectionDelegate`.
-    ///
     /// Upload capacity changes are not handled at the service level.
     public func connectionCapacityChanged(_ connection: Connection) {
         // Not relevant for ShareService
