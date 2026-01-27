@@ -169,8 +169,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     // MARK: Private methods
     
     private func notificationId(for dataPacket: DataPacket, from device: Device) -> String? {
-        assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
-        assert(try! dataPacket.getEvent() != nil, "Expected telephony event property")
+        guard dataPacket.isTelephonyPacket else { return nil }
+        guard let event = try? dataPacket.getEvent() else { return nil }
         
         guard let deviceId = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return nil }
         guard let event = (try? dataPacket.getEvent() ?? nil) else { return nil }
@@ -188,16 +188,17 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     }
     
     private func showRingingNotification(for dataPacket: DataPacket, from device: Device) {
-        assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
-        assert(try! dataPacket.getEvent() == DataPacket.TelephonyEvent.ringing.rawValue, "Expected 'ringing' event type")
+        guard dataPacket.isTelephonyPacket else { return }
+        guard (try? dataPacket.getEvent()) == DataPacket.TelephonyEvent.ringing.rawValue else { return }
         
         // Handle audio settings for ringing call
         handleRingingCallAudio()
         
         do {
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
-            let phoneNumber = try dataPacket.getPhoneNumber() ?? "unknown number"
+            let phoneNumber = try dataPacket.getPhoneNumber() ?? "Unknown Number"
             let contactName = try dataPacket.getContactName() ?? phoneNumber
+            let displayName = contactName.trimmingCharacters(in: .whitespacesAndNewlines)
             
             let notification = UNMutableNotificationContent()
             notification.userInfo = [
@@ -206,7 +207,10 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(TelephonyService.self)
             ]
             notification.title = device.name
-            notification.subtitle = "Incoming call from \(contactName)"
+            notification.subtitle = displayName.isEmpty ? "Incoming call" : "Incoming call from \(displayName)"
+            notification.sound = .default
+            notification.categoryIdentifier = "IncomingCall"
+            notification.setUrgency(.timeSensitive)
             
             if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
                 let notificationIconURL = URL(fileURLWithPath: iconPath)
@@ -217,10 +221,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     Log.error?.message("Failed to create ringing notification attachment: \(error)")
                 }
             }
-            
-            notification.sound = UNNotificationSound.default
-            notification.categoryIdentifier = "IncomingCall"
-            notification.setUrgency(.timeSensitive)
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             un.add(request) { error in
@@ -237,18 +237,20 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     }
     
     private func showMissedCallNotification(for dataPacket: DataPacket, from device: Device) {
-        assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
-        assert(try! dataPacket.getEvent() == DataPacket.TelephonyEvent.missedCall.rawValue, "Expected 'missedCall' event type")
+        guard dataPacket.isTelephonyPacket else { return }
+        guard (try? dataPacket.getEvent()) == DataPacket.TelephonyEvent.missedCall.rawValue else { return }
         
         do {
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
-            let phoneNumber = try dataPacket.getPhoneNumber() ?? "unknown number"
-            let contactName = try dataPacket.getContactName() ?? phoneNumber
+            let phoneNumber = try dataPacket.getPhoneNumber() ?? "Unknown Number"
+            let contactName = try dataPacket.getContactName()
+            let displayName = contactName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? phoneNumber
             
             let notification = UNMutableNotificationContent()
             notification.title = device.name
-            notification.subtitle = "Missed a call from \(contactName)"
-            notification.sound = UNNotificationSound.default
+            notification.subtitle = "Missed a call from \(displayName)"
+            notification.sound = .default
+            notification.setUrgency(.active)
             
             if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
                 let notificationIconURL = URL(fileURLWithPath: iconPath)
@@ -275,8 +277,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     }
     
     private func showSmsNotification(for dataPacket: DataPacket, from device: Device) {
-        assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
-        assert(try! dataPacket.getEvent() == DataPacket.TelephonyEvent.sms.rawValue, "Expected 'sms' event type")
+        guard dataPacket.isTelephonyPacket else { return }
+        guard (try? dataPacket.getEvent()) == DataPacket.TelephonyEvent.sms.rawValue else { return }
         
         do {
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
@@ -285,8 +287,9 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             // However if time from last notification is big enough - add a new line when concatening - they probably are
             // separate messages
             let hasPhoneNumber = try dataPacket.getPhoneNumber() != nil
-            let phoneNumber = try dataPacket.getPhoneNumber() ?? "unknown number"
-            let contactName = try dataPacket.getContactName() ?? phoneNumber
+            let phoneNumber = try dataPacket.getPhoneNumber() ?? "Unknown Number"
+            let contactName = try dataPacket.getContactName()
+            let displayName = contactName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? phoneNumber
             var messageBody = try dataPacket.getMessageBody() ?? ""
             
             self.un.getDeliveredNotifications { deliveredNotifications in
@@ -309,9 +312,9 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(TelephonyService.self)
                 ]
                 notification.title = device.name
-                notification.subtitle = "SMS from \(contactName)"
+                notification.subtitle = displayName.isEmpty ? "New SMS message" : "SMS from \(displayName)"
                 notification.body = messageBody
-                notification.sound = UNNotificationSound.default
+                notification.sound = .default
                 notification.setUrgency(.active)
                 
                 if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Messages")) {
