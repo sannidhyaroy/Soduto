@@ -23,7 +23,13 @@ import UserNotifications
 ///
 /// If the content transferred is a url, it can be sent in a field "url" (string).
 /// In that case, this plugin opens that url in the default browser.
-public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotificationActionHandler, NSDraggingDestination {
+///
+/// Transfer completion handling:
+/// - Download completion is delivered via `DownloadTaskDelegate`.
+/// - Upload completion is delivered via `ConnectionDelegate`.
+///
+/// This reflects the architectural distinction between: incoming, service-owned downloads and outgoing, connection-owned uploads.
+public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDelegate, UserNotificationActionHandler, NSDraggingDestination {
     
     let un = UNUserNotificationCenter.current()
     let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("AirDrop"))
@@ -164,6 +170,44 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
             break
         }
         
+    }
+    
+    
+    // MARK: ConnectionDelegate
+    
+    /// Required by `ConnectionDelegate`.
+    ///
+    /// ShareService does not react to connection state changes.
+    public func connection(_ connection: Connection, didSwitchToState: Connection.State) {
+        // Not needed by ShareService
+    }
+    
+    /// Required by `ConnectionDelegate`.
+    ///
+    /// Incoming packets are routed to services via the `Service` API, so this callback is intentionally ignored.
+    public func connection(_ connection: Connection, didReadPacket: DataPacket) {
+        // ShareService already handles packets via Service APIs
+    }
+    
+    /// Required by `ConnectionDelegate`.
+    ///
+    /// Upload capacity changes are not handled at the service level.
+    public func connectionCapacityChanged(_ connection: Connection) {
+        // Not relevant for ShareService
+    }
+    
+    /// Called by `Connection` when an outgoing packet (and its payload, if any) has finished sending.
+    ///
+    /// This method is used to detect completion of file uploads initiated by `ShareService`.
+    ///
+    /// Important:
+    /// - Upload completion is reported via `ConnectionDelegate`, not `UploadTaskDelegate`.
+    /// - Only packets with payloads are considered uploads.
+    /// - The `Connection` instance is the authoritative source for the destination device information.
+    public func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
+        guard packet.hasPayload(), packet.type == DataPacket.sharePacketType else { return }
+        
+        self.showUploadFinishNotification(connection: connection, succeeded: uploadedPayload)
     }
     
     
@@ -530,13 +574,13 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, UserNotifica
         }
     }
     
-    public func showUploadFinishNotification(uploadTask task: UploadTask, succeeded: Bool) {
-        assert((try? task.connection.identity?.getDeviceName()) != nil, "Upload task expected to have assigned a connection with proper identity info")
+    public func showUploadFinishNotification(connection: Connection, succeeded: Bool) {
+        assert((try? connection.identity?.getDeviceName()) != nil, "Upload task expected to have assigned a connection with proper identity info")
         
-        let deviceName: String? = (try? task.connection.identity?.getDeviceName() ?? nil) ?? nil
+        let deviceName: String? = (try? connection.identity?.getDeviceName()) ?? nil
         let title = succeeded ? "File sent" : "File transfer failed"
         let info = deviceName != nil ? "File sent to '\(deviceName!)'" : " File sent to an unknown device"
-        let notificationId = "\(self.id).upload.\(deviceName!)"
+        let notificationId = "\(self.id).upload.\(deviceName ?? "unknown")"
         
         if #available(macOS 11.0, *) {
             un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in

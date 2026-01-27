@@ -14,6 +14,17 @@ public protocol DownloadTaskDelegate: AnyObject {
     func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool)
 }
 
+/// Represents an incoming payload download.
+///
+/// Design note:
+/// Downloads are not owned or tracked by `Connection`.
+/// They are created per incoming packet and delegated directly
+/// to the consuming service, which decides:
+/// - where the data is written
+/// - how success/failure is handled
+/// - how the user is notified
+///
+/// This asymmetry with uploads is intentional.
 public class DownloadTask: NSObject, GCDAsyncSocketDelegate {
     
     // MARK: Types
