@@ -155,7 +155,7 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
                             }
                         })
                     } else {
-                        self.ShowCustomNotification(title: "Soduto Share", body: "Invalid content type selected to share", sound: true, id: "InvalidContent")
+                        UserNotificationHelper.show(title: "Soduto Share", body: "Invalid content type selected to share", sound: true, id: "InvalidContent", urgency: .active)
                     }
                 }
             }
@@ -187,48 +187,6 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
             sharedUserDefaults?.set(bookmarkData, forKey: SharedUserDefaults.Keys.kSandboxKey)
         } catch {
             print("Failed to save bookmark data for \(url)", error)
-        }
-    }
-    
-    // MARK: Notification System
-    
-    public func ShowCustomNotification(title: String, body: String, sound: Bool, id: String) {
-        if #available(macOS 11.0, *) {
-            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                if authorized {
-                    print("Authorized to send notifications!")
-                } else if !authorized {
-                    print("Not authorized to send notifications")
-                } else {
-                    print(error?.localizedDescription as Any)
-                }
-            }
-            un.getNotificationSettings { (settings) in
-                if settings.authorizationStatus == .authorized {
-                    let notification = UNMutableNotificationContent()
-                    notification.title = title
-                    notification.body = body
-                    if sound {
-                        notification.sound = UNNotificationSound.default
-                    }
-                    let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
-                    self.un.add(request){ (error) in
-                        if error != nil {print(error?.localizedDescription as Any)}
-                    }
-                }
-                else {
-                    print("Soduto isn't authorized to send notifications!")
-                }
-            }
-        } else {
-            let notification = NSUserNotification()
-            notification.title = title
-            notification.informativeText = body
-            if sound {
-                notification.soundName = NSUserNotificationDefaultSoundName
-            }
-            notification.identifier = id
-            NSUserNotificationCenter.default.deliver(notification)
         }
     }
 }

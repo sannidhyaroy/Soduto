@@ -25,6 +25,11 @@
 		02968D0C204C4B9100FCE5E0 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 02968CFE204C4B9000FCE5E0 /* README.md */; };
 		02EC48B51F229CCE00C9370F /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B41F229CCE00C9370F /* Configuration.swift */; };
 		02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */; };
+		311BC28D2F2800D400E4A33F /* StableHashing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC28C2F2800D400E4A33F /* StableHashing.swift */; };
+		311BC28F2F2865A200E4A33F /* UserNotificationHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC28E2F2865A200E4A33F /* UserNotificationHelper.swift */; };
+		311BC2912F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC2902F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift */; };
+		311BC2922F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC2902F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift */; };
+		311BC2932F286B9300E4A33F /* UserNotificationHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC28E2F2865A200E4A33F /* UserNotificationHelper.swift */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
 		31711BA82F17435000E3B9FE /* MPRISService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BA72F17435000E3B9FE /* MPRISService.swift */; };
 		31711BAC2F17638000E3B9FE /* ImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BAB2F17638000E3B9FE /* ImageLoader.swift */; };
@@ -255,6 +260,9 @@
 		02968CFE204C4B9000FCE5E0 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		02EC48B41F229CCE00C9370F /* Configuration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Configuration.swift; path = Configuration/Configuration.swift; sourceTree = "<group>"; };
 		02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceConfiguration.swift; sourceTree = "<group>"; };
+		311BC28C2F2800D400E4A33F /* StableHashing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StableHashing.swift; sourceTree = "<group>"; };
+		311BC28E2F2865A200E4A33F /* UserNotificationHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserNotificationHelper.swift; sourceTree = "<group>"; };
+		311BC2902F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UNMutableNotificationContent+Urgency.swift"; sourceTree = "<group>"; };
 		312E76FD2938A93F00F29BFA /* Messages.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messages.png; sourceTree = "<group>"; };
 		31711BA72F17435000E3B9FE /* MPRISService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MPRISService.swift; sourceTree = "<group>"; };
 		31711BAB2F17638000E3B9FE /* ImageLoader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImageLoader.swift; sourceTree = "<group>"; };
@@ -664,6 +672,8 @@
 			children = (
 				0225F6051F06E2110021BFE2 /* Utils */,
 				845BE2DB1EC2455800F3BD62 /* UI */,
+				311BC28E2F2865A200E4A33F /* UserNotificationHelper.swift */,
+				311BC2902F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -718,6 +728,7 @@
 				843B670B1DF3087800289EC9 /* URL.swift */,
 				8436DEF71E956DA000529362 /* Timer.swift */,
 				8436DEF91E958ABA00529362 /* FileManager.swift */,
+				311BC28C2F2800D400E4A33F /* StableHashing.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -1029,6 +1040,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				311BC2932F286B9300E4A33F /* UserNotificationHelper.swift in Sources */,
+				311BC2922F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */,
 				31F3A1AF293BDAF400550088 /* ShareViewController.swift in Sources */,
 				31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */,
 				31F3A1B6293BE76900550088 /* ButtonLabelCell.swift in Sources */,
@@ -1043,6 +1056,7 @@
 				842506731ED4CEF800AEE25F /* DeviceListController.swift in Sources */,
 				0248E0FF1F23C4AF00C411F7 /* DevicePreferencesViewController.swift in Sources */,
 				84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */,
+				311BC2912F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */,
 				84C613E31DECBF6C00CE7F7A /* UploadTask.swift in Sources */,
 				F80E30722DBE0D880047D068 /* MacToRemoteInputService.swift in Sources */,
 				84FA45E81DDE088B00EF3992 /* ServiceManager.swift in Sources */,
@@ -1068,6 +1082,7 @@
 				8FC977F11D4778E9001ADF7E /* StatusBarMenuController.swift in Sources */,
 				F826E6C92DB419AF00E736CE /* RunCommandsWindowController.swift in Sources */,
 				843B670A1DF2CEC400289EC9 /* DownloadTask.swift in Sources */,
+				311BC28D2F2800D400E4A33F /* StableHashing.swift in Sources */,
 				02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */,
 				024F8B191F24FC7700D6E504 /* ServicePreferencesViewController.swift in Sources */,
 				84B933EF1E281AB40071DEFF /* CertificateUtils.m in Sources */,
@@ -1078,6 +1093,7 @@
 				84651A761E5AEBE100D17601 /* SftpService.swift in Sources */,
 				84FA45D71DDDCB3D00EF3992 /* Connection.swift in Sources */,
 				84FFDA2A1E1D8D370069AC9A /* SimplePing.m in Sources */,
+				311BC28F2F2865A200E4A33F /* UserNotificationHelper.swift in Sources */,
 				849961C61D5728B2002B893A /* ExceptionUtils.m in Sources */,
 				F826E6C72DB302F000E736CE /* RunCommandService.swift in Sources */,
 				8456F4AA1D7DEA47006EFE19 /* DefaultPairingHandler.swift in Sources */,

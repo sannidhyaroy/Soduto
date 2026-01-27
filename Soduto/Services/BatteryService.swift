@@ -31,6 +31,8 @@ public class BatteryService: Service {
     
     // MARK: Types
     
+    let un = UNUserNotificationCenter.current()
+    
     public struct BatteryStatus {
         var currentCharge: Int
         var isCharging: Bool
@@ -137,20 +139,7 @@ public class BatteryService: Service {
         self.statuses[device.id] = newStatus
         
         let previousPercentage = notificationSentForPercentage[device.id] ?? 0
-//        let notificationId = self.notificationId(for: device)
-//        var hasNotification = false
-//        if #available(macOS 11.0, *) {
-//            UNUserNotificationCenter.current().getDeliveredNotifications { deliveredNotifications in
-//                for notification in deliveredNotifications {
-//                    if notification.request.identifier == notificationId {
-//                        hasNotification = true
-//                        break
-//                    }
-//                }
-//            }
-//        } else {
-//            hasNotification = NSUserNotificationCenter.default.containsDeliveredNotification(withId: notificationId)
-//        }
+        
         if (thresholdEvent == .batteryLow || newStatus.isCritical) && currentCharge != previousPercentage {
             self.showNotification(for: device, withStatus: newStatus)
             notificationSentForPercentage[device.id] = currentCharge
@@ -164,31 +153,22 @@ public class BatteryService: Service {
         }
     }
     
-    private func notificationId(for device: Device) -> NSUserNotification.Id {
+    private func notificationId(for device: Device) -> String {
         return "\(self.id).\(device.id)"
     }
     
     private func showNotification(for device: Device, withStatus status: BatteryStatus) {
-        let title = NSLocalizedString("Low Battery", comment: "notification title")  + " | \(device.name)"
+        let title = device.name
+        let subtitle = NSLocalizedString("Low Battery", comment: "notification title")
         let info = NSString(format: NSLocalizedString("%d%% of battery remaining", comment: "notification info") as NSString, status.currentCharge)
 
-        if #available(macOS 11.0, *) {
-            NotificationsService().ShowCustomNotification(title: title, body: info as String, sound: true, id: self.notificationId(for: device))
-        } else {
-            let notification = NSUserNotification()
-            notification.title = title
-            notification.informativeText = info as String
-            notification.soundName = NSUserNotificationDefaultSoundName
-            notification.hasActionButton = false
-            notification.identifier = self.notificationId(for: device)
-            NSUserNotificationCenter.default.deliver(notification)
-        }
+        UserNotificationHelper.show(title: title, subtitle: subtitle, body: info as String, sound: true, id: self.notificationId(for: device), urgency: .active)
     }
     
     private func hideNotification(for device: Device) {
         let notificationId = self.notificationId(for: device)
-        NSUserNotificationCenter.default.removeNotification(withId: notificationId)
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationId])
+        un.removeDeliveredNotifications(withIdentifiers: [notificationId])
+        un.removePendingNotificationRequests(withIdentifiers: [notificationId])
     }
     
     private func getBatteryStatus() -> BatteryStatus? {

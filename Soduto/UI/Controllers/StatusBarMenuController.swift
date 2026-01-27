@@ -61,7 +61,8 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     }
     
     @IBAction func refreshNotifications(_ sender: Any?) {
-        self.config?.notification.refresh()
+        AppDelegate.shared().serviceManager.service(ofType: NotificationsService.self)?.refreshNotifications()
+        
     }
     
     @IBAction func openPreferences(_ sender: Any?) {

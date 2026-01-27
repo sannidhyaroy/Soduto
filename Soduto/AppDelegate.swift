@@ -18,7 +18,6 @@ let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
-    let un = UNUserNotificationCenter.current()
     var validDevices: [Device] = []
     var validDeviceNames = [String]()
     @IBOutlet weak var statusBarMenuController: StatusBarMenuController!
@@ -29,7 +28,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     let connectionProvider: ConnectionProvider
     let deviceManager: DeviceManager
     let serviceManager = ServiceManager()
-    let userNotificationManager: UserNotificationManager
+    private(set) var userNotificationManager: UserNotificationManager!
     let updaterController: SPUStandardUpdaterController
     
     static let logLevelConfigurationKey = "com.soduto.logLevel"
@@ -50,7 +49,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         
         self.connectionProvider = ConnectionProvider(config: config)
         self.deviceManager = DeviceManager(config: config, serviceManager: self.serviceManager)
-        self.userNotificationManager = UserNotificationManager(config: self.config, serviceManager: self.serviceManager, deviceManager: self.deviceManager)
         self.updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         
         super.init()
@@ -62,6 +60,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     // MARK: NSApplicationDelegate
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        self.userNotificationManager = UserNotificationManager(config: self.config, serviceManager: self.serviceManager, deviceManager: self.deviceManager)
         self.config.capabilitiesDataSource = self.serviceManager
         self.connectionProvider.delegate = self.deviceManager
         self.statusBarMenuController.deviceDataSource = self.deviceManager
@@ -85,7 +84,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: RunCommandService())
         self.serviceManager.add(service: MacToRemoteInputService())
         self.serviceManager.add(service: MPRISService())
-        un.delegate = self
+        // Note: UserNotificationManager sets itself as the UNUserNotificationCenter delegate
         self.updateValidDevices()
         let notificationName = "com.Soduto.Share" as CFString
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
@@ -176,15 +175,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     }
     
     fileprivate func uploadObserver(_ notificationCenter: CFNotificationCenter?, _ notificationName: CFString) {
-        CFNotificationCenterAddObserver(notificationCenter,
-                                        nil,
-                                        { (
-                                            center: CFNotificationCenter?,
-                                            observer: UnsafeMutableRawPointer?,
-                                            name: CFNotificationName?,
-                                            object: UnsafeRawPointer?,
-                                            userInfo: CFDictionary?
-                                        ) in
+        CFNotificationCenterAddObserver(notificationCenter, nil, { (center: CFNotificationCenter?, observer: UnsafeMutableRawPointer?, name: CFNotificationName?, object: UnsafeRawPointer?, userInfo: CFDictionary? ) in
             
             guard let buttonTag = sharedUserDefaults?.integer(forKey: SharedUserDefaults.Keys.buttonTag) else { return }
             guard let data = sharedUserDefaults?.data(forKey: SharedUserDefaults.Keys.kSandboxKey) else { return }
@@ -193,49 +184,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
                 let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
                 ShareService().shareFile(url: url, to: buttonTag)
             } catch {
-                NotificationsService().ShowCustomNotification(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
+                UserNotificationHelper.show(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
             }
-        },
-                                        notificationName,
-                                        nil,
-                                        CFNotificationSuspensionBehavior.deliverImmediately)
-    }
-}
-
-extension AppDelegate: UNUserNotificationCenterDelegate {
-    
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        if response.notification.request.content.categoryIdentifier == "IncomingCall" {
-            userNotificationManager.handleNotificationAction(for: response, do: "MuteCall")
-        } else if response.notification.request.content.categoryIdentifier == "DownloadFinished" {
-            userNotificationManager.handleNotificationAction(for: response, do: "OpenDownloadedFile")
-        } else if response.notification.request.content.categoryIdentifier == "PairDevice" {
-            switch response.actionIdentifier {
-            case "pair":
-                userNotificationManager.handleNotificationAction(for: response, do: "PairRequest")
-                break
-            case "decline":
-                userNotificationManager.handleNotificationAction(for: response, do: "DeclinePairRequest")
-                break
-            default:
-                break
-            }
-        } else if response.notification.request.content.categoryIdentifier == "SMSReceived" {
-            userNotificationManager.handleNotificationAction(for: response, do: "ReplySMS")
-        } else if response.notification.request.content.categoryIdentifier == "IncomingNotification" {
-            userNotificationManager.handleNotificationAction(for: response, do: "NotificationActionHandler")
-        }
-        else {
-            print("Unknown notification category identifier action!")
-        }
-    }
-    
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        if #available(macOS 11.0, *) {
-            return completionHandler([.list, .sound])
-        } else {
-            // Fallback on earlier versions
-            print("UNNotification system not compatible with macOS Catalina or earlier! Use NSUserNotification instead!")
-        }
+        }, notificationName, nil, CFNotificationSuspensionBehavior.deliverImmediately)
     }
 }

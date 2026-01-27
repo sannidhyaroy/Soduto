@@ -110,47 +110,21 @@ public class PingService: Service {
     private func showNotification(for dataPacket: DataPacket, from device: Device) {
         assert(dataPacket.isPingPacket, "Expected ping data packet")
         
-        if #available(macOS 11.0, *) {
-            un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                if authorized {
-                    print("Authorized to send notifications!")
-                } else if !authorized {
-                    print("Not authorized to send notifications")
-                } else {
-                    print(error?.localizedDescription as Any)
-                }
+        let notification = UNMutableNotificationContent()
+        notification.title = device.name
+        notification.body = (try? dataPacket.getMessage()) ?? "Device was pinged for testing connection status!"
+        notification.sound = .default
+        notification.setUrgency(.active)
+        
+        let id = "\(self.id).\(device.id)"
+        let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
+        un.add(request) { error in
+            if let error = error {
+                print(error.localizedDescription)
             }
-            un.getNotificationSettings { (settings) in
-                if settings.authorizationStatus == .authorized {
-                    let pingnotification = UNMutableNotificationContent()
-                    
-                    pingnotification.title = device.name
-                    pingnotification.body = "Device was pinged for testing connection status!"
-                    pingnotification.sound = UNNotificationSound.default
-                    
-                    let id = "\(self.id).\(device.id)"
-//                    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-                    let pingrequest = UNNotificationRequest(identifier: id, content: pingnotification, trigger: nil)
-                    self.un.add(pingrequest){ (error) in
-                        if error != nil {print(error?.localizedDescription as Any)}
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
-                        self.un.removeDeliveredNotifications(withIdentifiers: [id])
-                    }
-                }
-            }
-        } else {
-            let notification = NSUserNotification()
-            notification.title = device.name
-            notification.informativeText = try? dataPacket.getMessage() ?? "Device was pinged for testing connection status!"
-            notification.soundName = NSUserNotificationDefaultSoundName
-            notification.hasActionButton = false
-            notification.identifier = "\(self.id).\(device.id)"
-            NSUserNotificationCenter.default.scheduleNotification(notification)
-            
-            _ = Timer.compatScheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
-                NSUserNotificationCenter.default.removeDeliveredNotification(notification)
-            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
+            self.un.removeNotification(withId: id)
         }
     }
 }

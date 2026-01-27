@@ -34,8 +34,6 @@
 	<string>Soduto.StatusBarApplication</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Soduto needs access to your contacts to let you send SMS messages to contacts on your Mac.</string>
-	<key>NSUserNotificationAlertStyle</key>
-	<string>alert</string>
 	<key>SUEnableInstallerLauncherService</key>
 	<true/>
 	<key>SUEnableAutomaticChecks</key>

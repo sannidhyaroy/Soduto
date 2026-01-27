@@ -9,6 +9,7 @@
 import Foundation
 import UserNotifications
 
+/// Context object passed to notification action handlers, providing access to app services.
 public struct UserNotificationContext {
     
     public let config: Configuration
@@ -22,33 +23,93 @@ public struct UserNotificationContext {
     }
 }
 
+/// Protocol for services that handle user notification actions.
+/// Conforming types must implement a static method that handles the action response.
 public protocol UserNotificationActionHandler: AnyObject {
     
-    static func handleAction(for notification: NSUserNotification, context: UserNotificationContext)
+    /// Handles the user's response to a notification action.
+    /// - Parameters:
+    ///   - notification: The notification response from the user.
+    ///   - context: The notification context providing access to app services.
+    static func handleAction(for notification: UNNotificationResponse, context: UserNotificationContext)
     
 }
 
-public class UserNotificationManager: NSObject, NSUserNotificationCenterDelegate {
-    
-    private static let deviceIdProperty = "com.soduto.pairinginterfacecontroller.deviceId"
+/// Manages user notifications for Soduto, including authorization, category registration, and action dispatch.
+///
+/// This class handles:
+/// - Acting as the UNUserNotificationCenterDelegate for the app
+/// - Requesting notification authorization at app startup
+/// - Registering base notification categories (pairing, telephony, share)
+/// - Creating and caching dynamic notification categories for Android notifications
+/// - Dispatching notification actions to the appropriate handler classes
+/// - Determining how notifications are presented in the foreground
+@MainActor
+public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate {
     
     // MARK: Types
     
-    enum Property: String {
+    /// Keys for storing notification-related data in userInfo dictionaries.
+    public enum Property: String {
         case actionHandlerClass = "com.soduto.usernotificationmanager.actionhandlerclass"
         case dontPresent = "com.soduto.usernotificationmanager.dontPresent"
+        case shouldMute = "com.soduto.usernotificationmanager.shouldMute"
+        // Positional action mappings - store the semantic action string from the remote device
+        case action1 = "com.soduto.usernotificationmanager.action1"
+        case action2 = "com.soduto.usernotificationmanager.action2"
+        case action3 = "com.soduto.usernotificationmanager.action3"
     }
     
+    /// Fixed positional action identifiers used across all notification categories
+    public enum ActionIdentifier: String {
+        case reply = "Reply"
+        case action1 = "action_1"
+        case action2 = "action_2"
+        case action3 = "action_3"
+        case dismiss = "Dismiss"
+    }
+    
+    /// Shape-based category identifiers - finite and reusable
+    /// Format: [Reply/NoReply]_[N]Actions where N is the number of custom actions (0-3)
+    public enum CategoryIdentifier: String, CaseIterable {
+        case noReply_0Actions = "NoReply_0Actions"
+        case noReply_1Action = "NoReply_1Action"
+        case noReply_2Actions = "NoReply_2Actions"
+        case noReply_3Actions = "NoReply_3Actions"
+        case reply_0Actions = "Reply_0Actions"
+        case reply_1Action = "Reply_1Action"
+        case reply_2Actions = "Reply_2Actions"
+        case reply_3Actions = "Reply_3Actions"
+        
+        /// Get the appropriate category identifier based on notification shape
+        public static func category(hasReply: Bool, actionCount: Int) -> CategoryIdentifier {
+            let clampedCount = min(max(actionCount, 0), 3)
+            switch (hasReply, clampedCount) {
+            case (false, 0): return .noReply_0Actions
+            case (false, 1): return .noReply_1Action
+            case (false, 2): return .noReply_2Actions
+            case (false, 3): return .noReply_3Actions
+            case (true, 0): return .reply_0Actions
+            case (true, 1): return .reply_1Action
+            case (true, 2): return .reply_2Actions
+            case (true, 3): return .reply_3Actions
+            default: return hasReply ? .reply_0Actions : .noReply_0Actions
+            }
+        }
+    }
     
     // MARK: Private properties
     
+    private let un = UNUserNotificationCenter.current()
     private let context: UserNotificationContext
     
-    // Notification dissmissing is not reported by the system, so we use timers to manually check and report such events
-    private var fastTimer: Timer? = nil // more frequently firing timer for notifications needing faster response
-    private var slowTimer: Timer? = nil // less frequently firing timer for longer standing notifications that dont need fast response
-    private var fastNotifications: [String:NSUserNotification] = [:] // notifications monitored by fastTimer
-    private var slowNotifications: [String:NSUserNotification] = [:] // notifications monitored by slowTimer
+    /// Cache for dynamically created categories, keyed by shape + action titles
+    /// This allows reuse of categories when the same action pattern appears again
+    /// Cache is empty on fresh app start (categories only persist for app lifetime)
+    private var categoryCache: [String: String] = [:]  // cacheKey -> categoryIdentifier
+    
+    /// Set of all registered category identifiers (base + dynamic)
+    private var registeredCategories = Set<UNNotificationCategory>()
     
     
     // MARK: Init / Deinit
@@ -58,199 +119,262 @@ public class UserNotificationManager: NSObject, NSUserNotificationCenterDelegate
         
         super.init()
         
-        NSUserNotificationCenter.default.delegate = self
+        // Set ourselves as the notification center delegate
+        un.delegate = self
+        
+        Task {
+            // Request notification authorization
+            do {
+                let authorized = try await un.requestAuthorization(options: [.alert, .sound, .badge])
+                if authorized {
+                    print("Authorized to send notifications!")
+                } else {
+                    print("Not authorized to send notifications")
+                }
+            } catch {
+                print("Notification authorization error: \(error.localizedDescription)")
+            }
+            
+            // Register all shape-based notification categories once at startup
+            registerNotificationCategories()
+        }
     }
     
+    // MARK: UNUserNotificationCenterDelegate
     
-    // MARK: NSUserNotificationCenterDelegate
-    
-    public func userNotificationCenter(_ center: NSUserNotificationCenter, shouldPresent notification: NSUserNotification) -> Bool {
-        // NOTE: This is not called for every notification - only for those that system thinks shouldnt be presented
-        if let dontPresent = notification.userInfo?[Property.dontPresent.rawValue] as? NSNumber {
-            return !dontPresent.boolValue
+    /// Handles user actions on notifications by dispatching to the appropriate handler class.
+    public nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        Task { @MainActor in
+            handleAction(for: response)
         }
-        else {
-            return true
-        }
+        completionHandler()
     }
     
-    public func userNotificationCenter(_ center: NSUserNotificationCenter, didActivate notification: NSUserNotification) {
-        self.handleAction(for: notification)
-        self.stopMonitoringNotification(notification)
-        NSUserNotificationCenter.default.removeDeliveredNotification(notification)
+    /// Determines how to present notifications when the app is in the foreground.
+    /// - `dontPresent`: Notification not presented at all (e.g., answer packets)
+    /// - `shouldMute`: Notification shows banner but without sound (silent notifications from Android)
+    public nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        let userInfo = notification.request.content.userInfo
+        
+        // Check if the notification should not be presented
+        if let dontPresent = userInfo[Property.dontPresent.rawValue] as? NSNumber, dontPresent.boolValue {
+            return completionHandler([])
+        }
+        
+        // Check if the notification should be shown without sound (silent notifications from Android)
+        if let shouldMute = userInfo[Property.shouldMute.rawValue] as? NSNumber, shouldMute.boolValue {
+            return completionHandler([.list, .banner])
+        }
+        
+        // Default: show notification as banner with sound
+        return completionHandler([.list, .banner, .sound])
     }
     
-    public func userNotificationCenter(_ center: NSUserNotificationCenter, didDeliver notification: NSUserNotification) {
-        if notification.isPresented {
-            self.monitorFastNotification(notification)
+    // MARK: Category Registration
+    
+    /// Registers base notification categories. Called once at app startup.
+    /// Dynamic categories for incoming notifications are created on-demand and cached.
+    private func registerNotificationCategories() {
+        // Add pairing category
+        let pairAction = UNNotificationAction(identifier: "pair", title: "Pair")
+        let declineAction = UNNotificationAction(identifier: "decline", title: "Decline")
+        let pairingCategory = UNNotificationCategory(
+            identifier: "PairDevice",
+            actions: [pairAction, declineAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        registeredCategories.insert(pairingCategory)
+        
+        // Add telephony categories
+        let muteAction = UNNotificationAction(identifier: "mutecall", title: "Mute")
+        let ringingCategory = UNNotificationCategory(
+            identifier: "IncomingCall",
+            actions: [muteAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        registeredCategories.insert(ringingCategory)
+        
+        let smsReplyAction = UNTextInputNotificationAction(
+            identifier: "reply",
+            title: "Reply",
+            textInputButtonTitle: "Send",
+            textInputPlaceholder: "Your message here..."
+        )
+        let smsCategory = UNNotificationCategory(
+            identifier: "SMSReceived",
+            actions: [smsReplyAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        registeredCategories.insert(smsCategory)
+        
+        // Add share download category
+        let openFileAction = UNNotificationAction(identifier: "openfile", title: "Open")
+        let shareCategory = UNNotificationCategory(
+            identifier: "DownloadFinished",
+            actions: [openFileAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        registeredCategories.insert(shareCategory)
+        
+        un.setNotificationCategories(registeredCategories)
+    }
+    
+    // MARK: Dynamic Category Management
+    
+    /// Gets or creates a notification category for the given shape and action titles.
+    /// Categories are cached by their full signature (shape + titles) for reuse.
+    /// - Parameters:
+    ///   - hasReply: Whether the notification should have a reply action
+    ///   - actionTitles: The titles of the custom action buttons (max 3)
+    /// - Returns: The category identifier to use for the notification
+    public func getOrCreateCategory(hasReply: Bool, actionTitles: [String]) -> String {
+        let clampedActions = Array(actionTitles.prefix(3))
+        
+        // Build cache key from shape + titles
+        let shape = CategoryIdentifier.category(hasReply: hasReply, actionCount: clampedActions.count).rawValue
+        let titlesKey = clampedActions.joined(separator: "|")
+        let cacheKey = "\(shape):\(titlesKey)"
+        
+        // Return cached category identifier if exists
+        if let cachedCategoryId = categoryCache[cacheKey] {
+            return cachedCategoryId
         }
-        else {
-            self.monitorSlowNotification(notification)
+        
+        // Create a unique category identifier using hash for shorter ID
+        let categoryId = "Dynamic.\(StableHashing.shortSha256(cacheKey))"
+        
+        // Build actions array
+        var actions: [UNNotificationAction] = []
+        
+        // Add reply action if needed
+        if hasReply {
+            let replyAction = UNTextInputNotificationAction(
+                identifier: ActionIdentifier.reply.rawValue,
+                title: "Reply",
+                textInputButtonTitle: "Send",
+                textInputPlaceholder: "Your message here..."
+            )
+            actions.append(replyAction)
         }
+        
+        // Add custom actions with actual titles from Android
+        if clampedActions.count >= 1 {
+            actions.append(UNNotificationAction(
+                identifier: ActionIdentifier.action1.rawValue,
+                title: clampedActions[0]
+            ))
+        }
+        if clampedActions.count >= 2 {
+            actions.append(UNNotificationAction(
+                identifier: ActionIdentifier.action2.rawValue,
+                title: clampedActions[1]
+            ))
+        }
+        if clampedActions.count >= 3 {
+            actions.append(UNNotificationAction(
+                identifier: ActionIdentifier.action3.rawValue,
+                title: clampedActions[2]
+            ))
+        }
+        
+        // Always add dismiss action
+        actions.append(UNNotificationAction(
+            identifier: ActionIdentifier.dismiss.rawValue,
+            title: "Dismiss"
+        ))
+        
+        // Create the category
+        let category = UNNotificationCategory(
+            identifier: categoryId,
+            actions: actions,
+            intentIdentifiers: [],
+            options: []
+        )
+        
+        // Cache the category identifier
+        categoryCache[cacheKey] = categoryId
+        
+        // Add to registered categories and update the notification center
+        registeredCategories.insert(category)
+        un.setNotificationCategories(registeredCategories)
+        
+        return categoryId
     }
     
     // MARK: Action Handlers
     
-    public func handleNotificationAction(for notification: UNNotificationResponse, do action: String) {
-        switch action {
-        case "MuteCall":
-            TelephonyService.handleMuteAction(for: notification, context: self.context)
-            break
-        case "ReplySMS":
-            TelephonyService.handleReplySMSAction(for: notification, context: self.context)
-            break
-        case "OpenDownloadedFile":
-            ShareService.handleOpenDownloadedFileAction(for: notification, context: self.context)
-            break
-        case "PairRequest":
-            guard let deviceId = notification.notification.request.content.userInfo[UserNotificationManager.deviceIdProperty] as? Device.Id else {
-                fatalError("User info with device id property expected to be provided for pairing notification")
-            }
-            self.context.deviceManager.device(withId: deviceId)?.acceptPairing()
-            break
-        case "DeclinePairRequest":
-            guard let deviceId = notification.notification.request.content.userInfo[UserNotificationManager.deviceIdProperty] as? Device.Id else {
-                fatalError("User info with device id property expected to be provided for pairing notification")
-            }
-            self.context.deviceManager.device(withId: deviceId)?.declinePairing()
-            break
-        case "NotificationActionHandler":
-            NotificationsService().handleUNNotificationAction(for: notification, context: self.context)
-            break
-        default:
-            print("Unknown Notification Action Request")
-            break
-        }
-        let id = notification.notification.request.identifier
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
-    }
-    
-    
-    // MARK: Private methods
-    
-    private func handleAction(for notification: NSUserNotification) {
-        guard let handlerClassName = notification.userInfo?[Property.actionHandlerClass.rawValue] as? String else { return }
-        guard let handlerClass = NSClassFromString(handlerClassName) as? UserNotificationActionHandler.Type else { return }
-        handlerClass.handleAction(for: notification, context: self.context)
-    }
-    
-    private func monitorFastNotification(_ notification: NSUserNotification) {
-        guard let id = notification.identifier else { return }
+    /// Dynamically dispatches the notification action to the appropriate handler class.
+    ///
+    /// The handler class name is stored in the notification's userInfo under the `actionHandlerClass` property.
+    ///
+    /// ## Default Action Handling
+    ///
+    /// When the user clicks on the notification body (triggering `UNNotificationDefaultActionIdentifier`),
+    /// we intentionally do **not** remove the notification from the Notification Center. This allows
+    /// each handler to decide whether clicking the body should have any effect.
+    ///
+    /// For `NotificationsService`, clicking the body does nothing - the notification stays visible.
+    /// For `ShareService`, clicking the body opens the downloaded file.
+    ///
+    /// This design gives users explicit control: they must use action buttons to interact with
+    /// notifications, rather than accidentally dismissing them by clicking.
+    public func handleAction(for response: UNNotificationResponse) {
+        let userInfo = response.notification.request.content.userInfo
         
-        self.fastNotifications[id] = notification
-        
-        if self.fastTimer == nil {
-            self.scheduleFastTimer()
-        }
-    }
-    
-    private func monitorSlowNotification(_ notification: NSUserNotification) {
-        guard let id = notification.identifier else { return }
-        
-        self.slowNotifications[id] = notification
-        
-        if self.slowTimer == nil {
-            self.scheduleSlowTimer()
-        }
-    }
-    
-    private func stopMonitoringNotification(_ notification: NSUserNotification) {
-        assert(notification.identifier != nil, "Only notifications with identifiers are monitored")
-        
-        guard let id = notification.identifier else { return }
-        
-        self.slowNotifications.removeValue(forKey: id)
-        if self.slowNotifications.count == 0 {
-            self.slowTimer?.invalidate()
-            self.slowTimer = nil
+        guard let handlerClassName = userInfo[Property.actionHandlerClass.rawValue] as? String else {
+            print("No action handler class specified in notification userInfo")
+            return
         }
         
-        self.fastNotifications.removeValue(forKey: id)
-        if self.fastNotifications.count == 0 {
-            self.fastTimer?.invalidate()
-            self.fastTimer = nil
+        // Look up the handler class by name
+        guard let handlerClass = NSClassFromString(handlerClassName) as? UserNotificationActionHandler.Type else {
+            print("Could not find handler class: \(handlerClassName)")
+            return
         }
-    }
-    
-    private func scheduleFastTimer() {
-        guard self.fastNotifications.count > 0 else { return }
-        guard self.fastTimer == nil else { return }
         
-        self.fastTimer = Timer.compatScheduledTimer(withTimeInterval: 0.3, repeats: true) { timer in
-            let deliveredNotifications = NSUserNotificationCenter.default.deliveredNotifications
-            for (id, notification) in self.fastNotifications {
-                if let n = deliveredNotifications.first(where: { n in n.identifier == id }) {
-                    if !n.isPresented {
-                        // if not showing - move to slow notifications
-                        self.stopMonitoringNotification(n)
-                        self.monitorSlowNotification(n)
-                    }
-                }
-                else {
-                    self.handleAction(for: notification)
-                    self.stopMonitoringNotification(notification)
-                }
-            }
-        }
-    }
-    
-    private func scheduleSlowTimer() {
-        guard self.slowNotifications.count > 0 else { return }
-        guard self.slowTimer == nil else { return }
+        // Call the static handleAction method on the handler class
+        handlerClass.handleAction(for: response, context: self.context)
         
-        self.slowTimer = Timer.compatScheduledTimer(withTimeInterval: 5.0, repeats: true) { timer in
-            let deliveredNotifications = NSUserNotificationCenter.default.deliveredNotifications
-            for (id, notification) in self.slowNotifications {
-                guard !deliveredNotifications.contains(where: { n in n.identifier == id }) else { continue }
-                
-                self.handleAction(for: notification)
-                self.stopMonitoringNotification(notification)
-            }
+        // Don't remove the notification if the user just clicked the body.
+        // Each handler decides what to do for the default action.
+        // For most handlers (NotificationsService), clicking does nothing and the notification stays.
+        // For ShareService, clicking opens the file but we still don't auto-remove here -
+        // the notification gets replaced by the system when clicked.
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            return
         }
+        
+        // Remove the notification after handling an explicit action (button press)
+        let id = response.notification.request.identifier
+        un.removeDeliveredNotifications(withIdentifiers: [id])
     }
 }
 
-extension NSUserNotificationCenter {
-    
-    func containsDeliveredNotification(withId id: NSUserNotification.Id) -> Bool {
-        return deliveredNotifications.first(where: { n in n.identifier == id }) != nil
-    }
-    
-    func removeNotification(withId id: NSUserNotification.Id) {
-        self.removeScheduledNotification(withId: id)
-        self.removeDeliveredNotification(withId: id)
-    }
-    
-    func removeScheduledNotification(withId id: NSUserNotification.Id) {
-        for notification in self.scheduledNotifications {
-            if notification.identifier == id {
-                self.removeScheduledNotification(notification)
-                break
-            }
-        }
-    }
-    
-    func removeDeliveredNotification(withId id: NSUserNotification.Id) {
-        for notification in self.deliveredNotifications {
-            if notification.identifier == id {
-                self.removeDeliveredNotification(notification)
-                break
-            }
-        }
-    }
-}
+// MARK: - UNUserNotificationCenter Utilities
 
-extension NSUserNotification {
+extension UNUserNotificationCenter {
     
-    typealias Id = String
+    typealias NotificationId = String
     
-    /// Convenience notification initializer which appropriately setups action handling information
-    convenience init<C>(actionHandlerClass: C.Type) where C: UserNotificationActionHandler {
-        self.init()
-        
-        self.userInfo = [
-            UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(actionHandlerClass)
-        ]
+    /// Checks if a notification with the given identifier has been delivered.
+    /// - Parameters:
+    ///   - id: The notification identifier to check.
+    ///   - completion: Completion handler called with `true` if the notification exists.
+    func containsDeliveredNotification(withId id: NotificationId, completion: @escaping (Bool) -> Void) {
+        getDeliveredNotifications { notifications in
+            let exists = notifications.contains { $0.request.identifier == id }
+            completion(exists)
+        }
     }
     
+    /// Removes a notification (both pending and delivered) with the given identifier.
+    /// - Parameter id: The notification identifier to remove.
+    func removeNotification(withId id: NotificationId) {
+        removePendingNotificationRequests(withIdentifiers: [id])
+        removeDeliveredNotifications(withIdentifiers: [id])
+    }
 }

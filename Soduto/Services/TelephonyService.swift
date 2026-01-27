@@ -49,7 +49,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     
     // MARK: Private properties
     
-    private var pendingSMSPackets: [NSUserNotification.Id:([DataPacket], Timer)] = [:]
+    private var pendingSMSPackets: [String:([DataPacket], Timer)] = [:]
     private lazy var sendMessageController = SendMessageWindowController.loadController()
     private let audioManager = AudioManager()
     
@@ -139,8 +139,13 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     
     // MARK: UserNotificationActionHandler
     
-    public static func handleAction(for notification: NSUserNotification, context: UserNotificationContext) {
-        guard let userInfo = notification.userInfo else { return }
+    /// Handles user responses to telephony notification actions.
+    ///
+    /// Supports the following actions:
+    /// - **Ringing**: Mutes the incoming call on the remote device
+    /// - **SMS**: Sends the user's reply text to the phone number
+    public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
+        guard let userInfo = response.notification.request.content.userInfo as [AnyHashable: Any]? else { return }
         guard let deviceId = userInfo[NotificationProperty.deviceId.rawValue] as? String else { return }
         guard let device = context.deviceManager.device(withId: deviceId) else { return }
         guard device.pairingStatus == .Paired else { return }
@@ -148,47 +153,24 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         
         switch event {
         case DataPacket.TelephonyEvent.ringing.rawValue:
-            guard notification.activationType == .actionButtonClicked else { break }
-            device.send(DataPacket.mutePhonePacket())
-            break
+            if response.actionIdentifier == "mutecall" {
+                device.send(DataPacket.mutePhonePacket())
+            }
         case DataPacket.TelephonyEvent.sms.rawValue:
-            guard notification.activationType == .replied else { break }
-            guard let response = notification.response?.string else { break }
-            guard let phoneNumber = userInfo[NotificationProperty.phoneNumber.rawValue] as? String else { break }
-            device.send(DataPacket.smsRequestPacket(phoneNumber: phoneNumber, message: response))
-            break
+            if let textResponse = response as? UNTextInputNotificationResponse {
+                guard let phoneNumber = userInfo[NotificationProperty.phoneNumber.rawValue] as? String else { break }
+                device.send(DataPacket.smsRequestPacket(phoneNumber: phoneNumber, message: textResponse.userText))
+            }
         default:
             break
         }
     }
     
-    public static func handleMuteAction(for notification: UNNotificationResponse, context: UserNotificationContext) {
-        guard let userInfo = notification.notification.request.content.userInfo as [AnyHashable: Any]? else { return }
-        guard let deviceId = userInfo[NotificationProperty.deviceId.rawValue] as? String else { return }
-        guard let device = context.deviceManager.device(withId: deviceId) else { return }
-        guard device.pairingStatus == .Paired else { return }
-        device.send(DataPacket.mutePhonePacket())
-    }
-    
-    public static func handleReplySMSAction(for notification: UNNotificationResponse, context: UserNotificationContext) {
-        guard let userInfo = notification.notification.request.content.userInfo as [AnyHashable: Any]? else { return }
-        guard let deviceId = userInfo[NotificationProperty.deviceId.rawValue] as? String else { return }
-        guard let device = context.deviceManager.device(withId: deviceId) else { return }
-        guard device.pairingStatus == .Paired else { return }
-        if notification.actionIdentifier == "reply" {
-            if let response = notification as? UNTextInputNotificationResponse {
-                let responseText = response.userText
-                guard let phoneNumber = userInfo[NotificationProperty.phoneNumber.rawValue] as? String else { return }
-                device.send(DataPacket.smsRequestPacket(phoneNumber: phoneNumber, message: responseText))
-            }
-        }
-    }
-    
     // MARK: Private methods
     
-    private func notificationId(for dataPacket: DataPacket, from device: Device) -> NSUserNotification.Id? {
-        assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
-        assert(try! dataPacket.getEvent() != nil, "Expected telephony event property")
+    private func notificationId(for dataPacket: DataPacket, from device: Device) -> String? {
+        guard dataPacket.isTelephonyPacket else { return nil }
+        guard let event = try? dataPacket.getEvent() else { return nil }
         
         guard let deviceId = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return nil }
         guard let event = (try? dataPacket.getEvent() ?? nil) else { return nil }
@@ -206,82 +188,48 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     }
     
     private func showRingingNotification(for dataPacket: DataPacket, from device: Device) {
-        assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
-        assert(try! dataPacket.getEvent() == DataPacket.TelephonyEvent.ringing.rawValue, "Expected 'ringing' event type")
+        guard dataPacket.isTelephonyPacket else { return }
+        guard (try? dataPacket.getEvent()) == DataPacket.TelephonyEvent.ringing.rawValue else { return }
         
         // Handle audio settings for ringing call
         handleRingingCallAudio()
         
         do {
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
-            let phoneNumber = try dataPacket.getPhoneNumber() ?? "unknown number"
+            let phoneNumber = try dataPacket.getPhoneNumber() ?? "Unknown Number"
             let contactName = try dataPacket.getContactName() ?? phoneNumber
-            let thumbnail = (try? dataPacket.getPhoneThumbnail() ?? nil) ?? nil
+            let displayName = contactName.trimmingCharacters(in: .whitespacesAndNewlines)
             
-            if #available(macOS 11.0, *) {
-                un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                    if authorized {
-                        print("Authorized to send notifications!")
-                    } else if !authorized {
-                        print("Not authorized to send notifications")
-                    } else {
-                        print(error?.localizedDescription as Any)
-                    }
+            let notification = UNMutableNotificationContent()
+            notification.userInfo = [
+                NotificationProperty.deviceId.rawValue: device.id,
+                NotificationProperty.event.rawValue: DataPacket.TelephonyEvent.ringing.rawValue,
+                UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(TelephonyService.self)
+            ]
+            notification.title = device.name
+            notification.subtitle = displayName.isEmpty ? "Incoming call" : "Incoming call from \(displayName)"
+            notification.sound = .default
+            notification.categoryIdentifier = "IncomingCall"
+            notification.setUrgency(.timeSensitive)
+            
+            if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
+                let notificationIconURL = URL(fileURLWithPath: iconPath)
+                do {
+                    let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
+                    notification.attachments = [attachment]
+                } catch {
+                    Log.error?.message("Failed to create ringing notification attachment: \(error)")
                 }
-                un.getNotificationSettings { (settings) in
-                    if settings.authorizationStatus == .authorized {
-                        let notification = UNMutableNotificationContent()
-                        var userInfo = notification.userInfo
-                        userInfo[NotificationProperty.deviceId.rawValue] = device.id as AnyObject
-                        userInfo[NotificationProperty.event.rawValue] = DataPacket.TelephonyEvent.ringing.rawValue as AnyObject
-                        notification.userInfo = userInfo
-                        notification.title = "Incoming call from \(contactName)"
-                        notification.subtitle = device.name
-                        
-                        let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone"))
-                        if (notificationIconPath != nil) {
-                            let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
-                            do {
-                                let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
-                                notification.attachments = [attachment]
-                            }
-                            catch let error {
-                                print(error.localizedDescription)
-                            }
-                        }
-                        
-                        notification.sound = UNNotificationSound.default
-                        notification.categoryIdentifier = "IncomingCall"
-                        let id = notificationId
-                        let mutecall = UNNotificationAction(identifier: "mutecall", title: "Mute call")
-                        let category = UNNotificationCategory(identifier: "IncomingCall", actions: [mutecall], intentIdentifiers: [], options: [])
-                        //let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-                        let request = UNNotificationRequest(identifier: id, content: notification, trigger: nil)
-                        self.un.setNotificationCategories([category])
-                        self.un.add(request){ (error) in
-                            if error != nil {print(error?.localizedDescription as Any)}
-                        }
-                    } else {
-                        Log.debug?.message("Soduto isn't authorized to send notifications!")
-                    }
-                }
-            } else {
-                let notification = NSUserNotification(actionHandlerClass: type(of: self))
-                var userInfo = notification.userInfo
-                userInfo?[NotificationProperty.deviceId.rawValue] = device.id as AnyObject
-                userInfo?[NotificationProperty.event.rawValue] = DataPacket.TelephonyEvent.ringing.rawValue as AnyObject
-                notification.userInfo = userInfo
-                notification.title = "Incoming call from \(contactName)"
-                notification.subtitle = device.name
-                notification.contentImage = thumbnail
-                notification.soundName = NSUserNotificationDefaultSoundName
-                notification.hasActionButton = true
-                notification.actionButtonTitle = "Mute call"
-                notification.identifier = notificationId
-                NSUserNotificationCenter.default.scheduleNotification(notification)
-                
-                Log.debug?.message("Ringing notification shown: \(String(describing: notification.identifier))")
             }
+            
+            let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+            un.add(request) { error in
+                if let error = error {
+                    Log.error?.message("Failed to add ringing notification request: \(error)")
+                }
+            }
+            
+            Log.debug?.message("Ringing notification shown: \(notificationId)")
         }
         catch {
             Log.error?.message("Error while showing ringing notification: \(error)")
@@ -289,25 +237,39 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     }
     
     private func showMissedCallNotification(for dataPacket: DataPacket, from device: Device) {
-        assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
-        assert(try! dataPacket.getEvent() == DataPacket.TelephonyEvent.missedCall.rawValue, "Expected 'missedCall' event type")
+        guard dataPacket.isTelephonyPacket else { return }
+        guard (try? dataPacket.getEvent()) == DataPacket.TelephonyEvent.missedCall.rawValue else { return }
         
         do {
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
-            let phoneNumber = try dataPacket.getPhoneNumber() ?? "unknown number"
-            let contactName = try dataPacket.getContactName() ?? phoneNumber
-            let thumbnail = (try? dataPacket.getPhoneThumbnail() ?? nil) ?? nil
+            let phoneNumber = try dataPacket.getPhoneNumber() ?? "Unknown Number"
+            let contactName = try dataPacket.getContactName()
+            let displayName = contactName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? phoneNumber
             
-            let notification = NSUserNotification()
-            notification.title = "Missed a call from \(contactName)"
-            notification.subtitle = device.name
-            notification.contentImage = thumbnail
-            notification.soundName = NSUserNotificationDefaultSoundName
-            notification.hasActionButton = false
-            notification.identifier = notificationId
-            NSUserNotificationCenter.default.scheduleNotification(notification)
+            let notification = UNMutableNotificationContent()
+            notification.title = device.name
+            notification.subtitle = "Missed a call from \(displayName)"
+            notification.sound = .default
+            notification.setUrgency(.active)
             
-            Log.debug?.message("Missed call notification shown: \(String(describing: notification.identifier))")
+            if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
+                let notificationIconURL = URL(fileURLWithPath: iconPath)
+                do {
+                    let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
+                    notification.attachments = [attachment]
+                } catch {
+                    Log.error?.message("Failed to create missed call notification attachment: \(error)")
+                }
+            }
+            
+            let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+            un.add(request) { error in
+                if let error = error {
+                    Log.error?.message("Failed to add missed call notification request: \(error)")
+                }
+            }
+            
+            Log.debug?.message("Missed call notification shown: \(notificationId)")
         }
         catch {
             Log.error?.message("Error while showing missed call notification: \(error)")
@@ -315,8 +277,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     }
     
     private func showSmsNotification(for dataPacket: DataPacket, from device: Device) {
-        assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
-        assert(try! dataPacket.getEvent() == DataPacket.TelephonyEvent.sms.rawValue, "Expected 'sms' event type")
+        guard dataPacket.isTelephonyPacket else { return }
+        guard (try? dataPacket.getEvent()) == DataPacket.TelephonyEvent.sms.rawValue else { return }
         
         do {
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
@@ -325,100 +287,58 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             // However if time from last notification is big enough - add a new line when concatening - they probably are
             // separate messages
             let hasPhoneNumber = try dataPacket.getPhoneNumber() != nil
-            let phoneNumber = try dataPacket.getPhoneNumber() ?? "unknown number"
-            let contactName = try dataPacket.getContactName() ?? phoneNumber
+            let phoneNumber = try dataPacket.getPhoneNumber() ?? "Unknown Number"
+            let contactName = try dataPacket.getContactName()
+            let displayName = contactName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? phoneNumber
             var messageBody = try dataPacket.getMessageBody() ?? ""
-            let thumbnail = (try? dataPacket.getPhoneThumbnail() ?? nil) ?? nil
             
-            if #available(macOS 11.0, *) {
-                self.un.getDeliveredNotifications { deliveredNotifications in
-                    for deliveredNotification in deliveredNotifications {
-                        if deliveredNotification.request.identifier == notificationId {
-                            let lastNotification = deliveredNotification
-                            let lastNotificationIsOld = lastNotification.date.timeIntervalSinceNow < -10.0
-                            let lastMessageBody = lastNotification.request.content.body + (lastNotificationIsOld ? "\n" : "")
-                            messageBody = lastMessageBody + messageBody
-                            self.un.removeDeliveredNotifications(withIdentifiers: [notificationId])
-                            break
-                        }
+            self.un.getDeliveredNotifications { deliveredNotifications in
+                for deliveredNotification in deliveredNotifications {
+                    if deliveredNotification.request.identifier == notificationId {
+                        let lastNotification = deliveredNotification
+                        let lastNotificationIsOld = lastNotification.date.timeIntervalSinceNow < -10.0
+                        let lastMessageBody = lastNotification.request.content.body + (lastNotificationIsOld ? "\n" : "")
+                        messageBody = lastMessageBody + messageBody
+                        self.un.removeDeliveredNotifications(withIdentifiers: [notificationId])
+                        break
                     }
                 }
-            } else {
-                let lastNotification = NSUserNotificationCenter.default.deliveredNotifications.first { notification in
-                    return notification.identifier == notificationId
-                }
-                let lastNotificationIsOld = (lastNotification?.deliveryDate ?? Date()).timeIntervalSinceNow < -10.0
-                let lastMessageBody = (lastNotification?.informativeText ?? "") + (lastNotificationIsOld ? "\n" : "")
-                messageBody = lastMessageBody + messageBody
-                if let notification = lastNotification {
-                    NSUserNotificationCenter.default.removeDeliveredNotification(notification)
-                }
-            }
-            if #available(macOS 11.0, *) {
-                un.requestAuthorization(options: [.alert, .sound]) { (authorized, error) in
-                    if authorized {
-                        print("Authorized to send notifications!")
-                    } else if !authorized {
-                        print("Not authorized to send notifications")
-                    } else {
-                        print(error?.localizedDescription as Any)
-                    }
-                }
-                un.getNotificationSettings { (settings) in
-                    if settings.authorizationStatus == .authorized {
-                        let notification = UNMutableNotificationContent()
-                        var userInfo = notification.userInfo
-                        userInfo[NotificationProperty.deviceId.rawValue] = device.id as AnyObject
-                        userInfo[NotificationProperty.event.rawValue] = DataPacket.TelephonyEvent.sms.rawValue as AnyObject
-                        userInfo[NotificationProperty.phoneNumber.rawValue] = phoneNumber as AnyObject
-                        notification.userInfo = userInfo
-                        notification.title = "SMS from  \(contactName)"
-                        notification.subtitle = "\(device.name)"
-                        notification.body = messageBody
-                        notification.sound = UNNotificationSound.default
-                        let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("Messages"))
-                        if (notificationIconPath != nil) {
-                            let notificationIconURL = URL(fileURLWithPath: notificationIconPath!)
-                            do {
-                                let attachment = try UNNotificationAttachment.init(identifier: notificationId, url: notificationIconURL, options: .none)
-                                notification.attachments = [attachment]
-                            }
-                            catch let error {
-                                print(error.localizedDescription)
-                            }
-                        }
-                        if hasPhoneNumber {
-                            notification.categoryIdentifier = "SMSReceived"
-                            let reply = UNTextInputNotificationAction(identifier: "reply", title: "Reply", textInputButtonTitle: "Send", textInputPlaceholder: "Your reply message...")
-                            let category = UNNotificationCategory(identifier: "SMSReceived", actions: [reply], intentIdentifiers: [], options: [])
-                            self.un.setNotificationCategories([category])
-                        }
-                        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-                        self.un.add(request){ (error) in
-                            if error != nil {print(error?.localizedDescription as Any)}
-                        }
-                    } else {
-                        Log.debug?.message("Soduto isn't authorized to push notifications!")
-                    }
-                }
-            } else {
-                let notification = NSUserNotification(actionHandlerClass: type(of: self))
-                var userInfo = notification.userInfo
-                userInfo?[NotificationProperty.deviceId.rawValue] = device.id as AnyObject
-                userInfo?[NotificationProperty.event.rawValue] = DataPacket.TelephonyEvent.sms.rawValue as AnyObject
-                userInfo?[NotificationProperty.phoneNumber.rawValue] = phoneNumber as AnyObject
-                notification.userInfo = userInfo
-                notification.title = "SMS from  \(contactName) | \(device.name)"
-                notification.informativeText = messageBody
-                notification.contentImage = thumbnail
-                notification.soundName = NSUserNotificationDefaultSoundName
-                notification.hasActionButton = hasPhoneNumber
-                notification.hasReplyButton = hasPhoneNumber
-                notification.responsePlaceholder = "Write reply message"
-                notification.identifier = notificationId
-                NSUserNotificationCenter.default.deliver(notification)
                 
-                Log.debug?.message("SMS notification shown: \(String(describing: notification.identifier))")
+                let notification = UNMutableNotificationContent()
+                notification.userInfo = [
+                    NotificationProperty.deviceId.rawValue: device.id,
+                    NotificationProperty.event.rawValue: DataPacket.TelephonyEvent.sms.rawValue,
+                    NotificationProperty.phoneNumber.rawValue: phoneNumber,
+                    UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(TelephonyService.self)
+                ]
+                notification.title = device.name
+                notification.subtitle = displayName.isEmpty ? "New SMS message" : "SMS from \(displayName)"
+                notification.body = messageBody
+                notification.sound = .default
+                notification.setUrgency(.active)
+                
+                if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Messages")) {
+                    let notificationIconURL = URL(fileURLWithPath: iconPath)
+                    do {
+                        let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
+                        notification.attachments = [attachment]
+                    } catch {
+                        Log.error?.message("Failed to create SMS notification attachment: \(error)")
+                    }
+                }
+                
+                if hasPhoneNumber {
+                    notification.categoryIdentifier = "SMSReceived"
+                }
+                
+                let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+                self.un.add(request) { error in
+                    if let error = error {
+                        Log.error?.message("Failed to add SMS notification request: \(error)")
+                    }
+                }
+                
+                Log.debug?.message("SMS notification shown: \(notificationId)")
             }
         }
         catch {
@@ -443,24 +363,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             Log.error?.message("Error determining call event type: \(error)")
         }
         
-        if #available(macOS 11.0, *) {
-            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
-            //            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
-        } else {
-            for notification in NSUserNotificationCenter.default.deliveredNotifications {
-                if notification.identifier == id {
-                    NSUserNotificationCenter.default.removeDeliveredNotification(notification)
-                    break
-                }
-            }
-            
-            for notification in NSUserNotificationCenter.default.scheduledNotifications {
-                if notification.identifier == id {
-                    NSUserNotificationCenter.default.removeScheduledNotification(notification)
-                    break
-                }
-            }
-        }
+        un.removeNotification(withId: id)
         
         Log.debug?.message("Notification hidden: \(id)")
     }
