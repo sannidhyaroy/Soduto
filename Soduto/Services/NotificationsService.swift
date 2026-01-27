@@ -109,9 +109,27 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         /// Represents exclusive ownership of a temporary download stream.
         /// The stream is created inside IconStateManager and immediately handed off to a single DownloadTask. It is never shared.
-        struct TempIconDownloadStream: @unchecked Sendable {
+        /// This wrapper ensures the stream is closed if it's never handed off (e.g. error before start).
+        final class TempIconDownloadStream: @unchecked Sendable {
             let stream: OutputStream
             let fileURL: URL
+            private var isTransferred = false
+            
+            init(stream: OutputStream, fileURL: URL) {
+                self.stream = stream
+                self.fileURL = fileURL
+            }
+            
+            deinit {
+                if !isTransferred {
+                    stream.close()
+                }
+            }
+            
+            func transfer() -> OutputStream {
+                isTransferred = true
+                return stream
+            }
         }
         
         func addDownloadInfo(_ info: DownloadInfo) {
@@ -714,7 +732,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             await self.showNotification(for: dataPacket, from: device)
         } else {
             if let tempStream = await iconState.streamForTempDownload() {
-                let readyStream = tempStream.stream
                 let partFileURL = tempStream.fileURL
                 await iconState.addDownloadInfo(DownloadInfo(
                     task: task,
@@ -725,7 +742,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     device: device
                 ))
                 task.delegate = self
-                task.start(withStream: readyStream)
+                task.start(withStream: tempStream.transfer())
             }
         }
     }
