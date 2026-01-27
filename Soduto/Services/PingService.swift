@@ -113,7 +113,7 @@ public class PingService: Service {
         let notification = UNMutableNotificationContent()
         notification.title = device.name
         notification.body = (try? dataPacket.getMessage()) ?? "Device was pinged for testing connection status!"
-        notification.sound = UNNotificationSound.default
+        notification.sound = .default
         notification.setUrgency(.active)
         
         let id = "\(self.id).\(device.id)"

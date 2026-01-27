@@ -831,7 +831,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         /// Only play sound if notification is not muted
         /// shouldMute is true for: silent notifications from android
         if !shouldMute {
-            notification.sound = UNNotificationSound.default
+            notification.sound = .default
         }
         /// Set interruption level based on notification type
         /// - passive: for silent/muted notifications (won't interrupt user)

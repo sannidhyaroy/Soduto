@@ -48,7 +48,7 @@ public class PairingInterfaceController: UserNotificationActionHandler {
         ]
         notification.title = device.name
         notification.body = "Do you want to pair this device?"
-        notification.sound = UNNotificationSound.default
+        notification.sound = .default
         notification.categoryIdentifier = "PairDevice"
         notification.setUrgency(.timeSensitive)
         
