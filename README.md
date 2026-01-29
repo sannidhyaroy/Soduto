@@ -46,8 +46,16 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 * Clone this repo and update submodules
 
   ```bash
-  git clone && git submodule update --init
+  git clone --recurse-submodules git@github.com:sannidhyaroy/Soduto.git Soduto && cd Soduto
   ```
+  <details><summary>Clone using HTTPS? 👀</summary>
+
+  Run this command, instead of the above one:
+    ```bash
+    git clone --recurse-submodules https://github.com/sannidhyaroy/Soduto.git Soduto && cd Soduto
+    ```
+
+  </details> 
 
 * Install [Carthage](https://github.com/Carthage/Carthage#installing-carthage):
 
@@ -174,7 +182,7 @@ You can use the fingerprint above to manually verify that you have obtained the 
   ```
   Expected output includes:
   ```
-  Good signature from "Soduto Releases <releases@soduto.example.org>"
+  Good signature from "Soduto Releases <releases@soduto.thenoton.com>"
   ```
   This confirms that:
   - The checksum file (`.dmg.sha256`) was signed by the Soduto Release Signing Key.
