@@ -8,22 +8,46 @@
 
 import Foundation
 
-struct SharedUserDefaults {
-    static let suiteName = (Bundle.main.object(forInfoDictionaryKey: "TeamIdentifierPrefix") as? String ?? "") + "com.soduto.Soduto"
-    static let preferencesSuite = "com.soduto.Soduto.Preferences.Keys"
+enum AppDefaultsStore {
     
-    struct Keys {
-        static let devicesToShow = "com.soduto.share.devicesToShow"
-        static let uploadFile = "com.soduto.share.uploadFile"
-        static let fileurl = "com.soduto.share.fileurl"
-        static let buttonTag = "com.soduto.share.buttonTag"
-        static let kSandboxKey = "com.soduto.share.kSandboxKey"
-        static let selectedDeviceId = "com.soduto.share.selectedDeviceId"
+    // MARK: - Suite Instances
+    
+    static let appGroupDefaults: UserDefaults? = {
+        let teamId = Bundle.main.object(forInfoDictionaryKey: "TeamIdentifierPrefix") as? String ?? ""
+        return UserDefaults(suiteName: teamId + "com.soduto.Soduto")
+    }()
+    
+    // MARK: - Share Extension Communication
+    
+    enum ShareExtension {
+        static var reachableDevices: [[String: String]] {
+            get { appGroupDefaults?.object(forKey: "com.soduto.share.reachableDevices") as? [[String: String]] ?? [] }
+            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.reachableDevices") }
+        }
+        
+        static var selectedDevice: String? {
+            get { appGroupDefaults?.string(forKey: "com.soduto.share.selectedDevice") }
+            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.selectedDevice") }
+        }
+        
+        static var fileBookmarkData: Data? {
+            get { appGroupDefaults?.data(forKey: "com.soduto.share.fileBookmarkData") }
+            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.fileBookmarkData") }
+        }
     }
     
-    struct Preferences {
-        static let disableSharePopUp = "com.soduto.preferences.disableSharePopUp"
-        static let deviceType = "com.soduto.preferences.deviceType"
-        static let hostName = "com.soduto.preferences.hostName"
+    
+    // MARK: - User Preferences
+    
+    enum Preferences {
+        static var disableSharePopUp: Bool {
+            get { UserDefaults.standard.bool(forKey: "com.soduto.preferences.disablesharepopup") }
+            set { UserDefaults.standard.set(newValue, forKey: "com.soduto.preferences.disablesharepopup") }
+        }
+        
+        static var deviceType: Int {
+            get { UserDefaults.standard.integer(forKey: "com.soduto.preferences.devicetype") }
+            set { UserDefaults.standard.set(newValue, forKey: "com.soduto.preferences.devicetype") }
+        }
     }
 }

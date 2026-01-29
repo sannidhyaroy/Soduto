@@ -13,8 +13,6 @@ import UserNotifications
 import Sparkle
 import MediaPlayer
 
-let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
-
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
@@ -158,7 +156,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             "id": $0.id,
             "name": $0.name
         ] }
-        sharedUserDefaults?.set(deviceEntries, forKey: SharedUserDefaults.Keys.devicesToShow)
+        AppDefaultsStore.ShareExtension.reachableDevices = deviceEntries
     }
     
     static func shared() -> AppDelegate {
@@ -174,12 +172,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     }
     
     private func handleShareExtensionTrigger() {
-        guard let deviceId = sharedUserDefaults?.string(forKey: SharedUserDefaults.Keys.selectedDeviceId), !deviceId.isEmpty else {
+        guard let deviceId = AppDefaultsStore.ShareExtension.selectedDevice, !deviceId.isEmpty else {
             UserNotificationHelper.show(title: "Soduto Share", body: "No target device was specified. Please try sharing again.", sound: true, id: "NoDeviceSelected")
             return
         }
         
-        guard let data = sharedUserDefaults?.data(forKey: SharedUserDefaults.Keys.kSandboxKey) else {
+        guard let data = AppDefaultsStore.ShareExtension.fileBookmarkData else {
             UserNotificationHelper.show(title: "Soduto Share", body: "Could not read the file bookmark. Please try sharing again.", sound: true, id: "NoBookmarkData")
             return
         }
@@ -188,13 +186,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             var isStale = false
             let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
             
-            let appDelegate = AppDelegate.shared()
-            guard let shareService = appDelegate.serviceManager.service(ofType: ShareService.self) else {
+            guard let shareService = self.serviceManager.service(ofType: ShareService.self) else {
                 UserNotificationHelper.show(title: "Soduto Share", body: "Share service is not available. Please restart Soduto.", sound: true, id: "ShareServiceUnavailable")
                 return
             }
             
-            guard let device = appDelegate.deviceManager.device(withId: deviceId) else {
+            guard let device = self.deviceManager.device(withId: deviceId) else {
                 UserNotificationHelper.show(title: "Soduto Share", body: "The selected device is no longer reachable.", sound: true, id: "DeviceUnreachable")
                 return
             }

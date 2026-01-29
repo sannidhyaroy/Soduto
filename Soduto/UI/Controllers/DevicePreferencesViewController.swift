@@ -11,9 +11,6 @@ import Cocoa
 import Sparkle
 
 let updater = AppDelegate.shared().updaterController.updater
-let preferencesUserDefaults = UserDefaults(suiteName: SharedUserDefaults.preferencesSuite)
-var disableSharePopUp = UserDefaults.standard.bool(forKey: SharedUserDefaults.Preferences.disableSharePopUp)
-var deviceTypeInt = preferencesUserDefaults?.integer(forKey: SharedUserDefaults.Preferences.deviceType) ?? 0
 
 class DevicePreferencesViewController: NSViewController {
     
@@ -80,10 +77,10 @@ class DevicePreferencesViewController: NSViewController {
     
     public func loadPreferences() {
         if self.disableSharePopUpCheckbox != nil {
-            self.disableSharePopUpCheckbox.state = disableSharePopUp ? NSButton.StateValue.on : NSButton.StateValue.off
+            self.disableSharePopUpCheckbox.state = AppDefaultsStore.Preferences.disableSharePopUp ? NSButton.StateValue.on : NSButton.StateValue.off
         }
         if self.deviceTypeButton != nil {
-            self.deviceTypeButton.selectItem(withTag: deviceTypeInt)
+            self.deviceTypeButton.selectItem(withTag: AppDefaultsStore.Preferences.deviceType)
         }
         if self.automaticCheckForUpdates != nil {
             self.automaticCheckForUpdates.state = updater.automaticallyChecksForUpdates ? NSButton.StateValue.on : NSButton.StateValue.off
@@ -91,22 +88,14 @@ class DevicePreferencesViewController: NSViewController {
     }
     
     @IBAction func sharePopUp (_ sender: Any?) {
-        let checkBoxState = disableSharePopUpCheckbox.state
-        let state: Bool = (checkBoxState == .on) ? true : false
-        UserDefaults.standard.set(state, forKey: SharedUserDefaults.Preferences.disableSharePopUp)
-        disableSharePopUp = state
-        UserDefaults.standard.synchronize()
+        AppDefaultsStore.Preferences.disableSharePopUp = disableSharePopUpCheckbox.state == .on
     }
     
     @IBAction func deviceTypeAction (_ sender: Any?) {
         let selectedIndex = self.deviceTypeButton.indexOfSelectedItem
         if selectedIndex >= 0 {
-            preferencesUserDefaults?.set(selectedIndex, forKey: SharedUserDefaults.Preferences.deviceType)
-            deviceTypeInt = selectedIndex
-        } else {
-            // No item selected
+            AppDefaultsStore.Preferences.deviceType = selectedIndex
         }
-        preferencesUserDefaults?.synchronize()
     }
     
     @IBAction func autoCheckForUpdates (_ sender: Any?) {

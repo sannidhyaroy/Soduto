@@ -10,8 +10,6 @@ import Cocoa
 import UserNotifications
 import UniformTypeIdentifiers
 
-let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
-
 class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSTouchBarDelegate {
     
     @IBOutlet private weak var infoText: NSTextField!
@@ -20,7 +18,7 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
     var touchButtonTag = 0
     
     /// Each entry is ["id": "<deviceId>", "name": "<displayName>"]
-    var validDeviceEntries = sharedUserDefaults?.object(forKey: SharedUserDefaults.Keys.devicesToShow) as? [[String: String]] ?? []
+    var validDeviceEntries = AppDefaultsStore.ShareExtension.reachableDevices
     var validDeviceNames: [String] {
         return validDeviceEntries.map { $0["name"] ?? "Unknown Device" }
     }
@@ -156,8 +154,8 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
             self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
             return
         }
-        let selectedDeviceId = self.validDeviceEntries[pressedBtnTag]["id"] ?? ""
-        sharedUserDefaults?.set(selectedDeviceId, forKey: SharedUserDefaults.Keys.selectedDeviceId)
+        let selectedDevice = self.validDeviceEntries[pressedBtnTag]["id"] ?? ""
+        AppDefaultsStore.ShareExtension.selectedDevice = selectedDevice
         
         // Use a DispatchGroup to wait for all async loadItem calls to complete before dismissing the extension
         let group = DispatchGroup()
@@ -217,7 +215,7 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            sharedUserDefaults?.set(bookmarkData, forKey: SharedUserDefaults.Keys.kSandboxKey)
+            AppDefaultsStore.ShareExtension.fileBookmarkData = bookmarkData
         } catch {
             print("Failed to save bookmark data for \(url)", error)
         }

@@ -651,7 +651,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         titleItem.isEnabled = false
         menu.addItem(titleItem)
         
-        if disableSharePopUp && self.validDevices.count == 1 {
+        if AppDefaultsStore.Preferences.disableSharePopUp && self.validDevices.count == 1 {
             guard let device = validDevices.first, device.isReachable == true, device.pairingStatus == .Paired else { return false }
             for packet in packets {
                 device.send(packet)
