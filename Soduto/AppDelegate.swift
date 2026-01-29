@@ -154,7 +154,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.validDevices = deviceManager.pairedRechableDevices
         let deviceEntries: [[String: String]] = self.validDevices.map { [
             "id": $0.id,
-            "name": $0.name
+            "name": $0.name,
+            "type": $0.type.rawValue
         ] }
         AppDefaultsStore.ShareExtension.reachableDevices = deviceEntries
     }

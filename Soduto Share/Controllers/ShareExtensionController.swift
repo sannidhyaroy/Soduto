@@ -7,48 +7,22 @@
 //
 
 import Cocoa
+import SwiftUI
 import UserNotifications
 import UniformTypeIdentifiers
 
-class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSTouchBarDelegate {
+class ShareExtensionController: NSViewController, NSTouchBarDelegate {
     
-    @IBOutlet private weak var infoText: NSTextField!
-    @IBOutlet private weak var tableScroll: NSScrollView!
     let un = UNUserNotificationCenter.current()
     var touchButtonTag = 0
     
-    /// Each entry is ["id": "<deviceId>", "name": "<displayName>"]
+    /// Each entry is ["id": "<deviceId>", "name": "<displayName>", "type": "<deviceType>"]
     var validDeviceEntries = AppDefaultsStore.ShareExtension.reachableDevices
     var validDeviceNames: [String] {
         return validDeviceEntries.map { $0["name"] ?? "Unknown Device" }
     }
     
-    //MARK: - NSTableViewDataSource
-    
-    func numberOfRows(in tableView: NSTableView) -> Int {
-        self.validDeviceEntries.count
-    }
-    
-    //MARK: -NSTableViewDelegate
-    
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard let tableColumn = tableColumn else {
-            return nil
-        }
-        
-        if tableColumn.identifier == .labelColumn,
-           let cell = tableView.makeView(withIdentifier: .labelIdentifier, owner: self) as? ButtonLabelCell
-        {
-            // Insert code for button column
-            cell.configure(self.validDeviceNames[row], tag: row)
-            return cell
-        }
-        else {
-            return nil
-        }
-    }
-    
-    //MARK: -NSTouchBar
+    // MARK: - NSTouchBar
     
     @available(macOS 10.12.1, *)
     override func makeTouchBar() -> NSTouchBar? {
@@ -104,21 +78,35 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar)))
     }
     
-    //MARK: -NSViewController
-    
-    override var nibName: NSNib.Name? {
-        return NSNib.Name("ShareViewController")
-    }
+    // MARK: - NSViewController
     
     override func loadView() {
-        super.loadView()
+        let rootView = ShareSheetView(deviceEntries: self.validDeviceEntries, onDeviceSelected: { [weak self] index in
+                self?.shareToDevice(at: index)
+            },
+            onCancel: { [weak self] in
+                self?.cancel(nil)
+            }
+        )
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
         
-        // Insert code here to customize the view
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 410, height: 240))
+        container.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.topAnchor.constraint(equalTo: container.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+        ])
         
-        if (self.validDeviceEntries.isEmpty) {
-            infoText.isHidden = false
-            tableScroll.isHidden = true
-        }
+        self.view = container
+        self.preferredContentSize = NSSize(width: 410, height: 240)
+    }
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
         let item = self.extensionContext!.inputItems[0] as! NSExtensionItem
         if let attachments = item.attachments {
             NSLog("Attachments = %@", attachments as NSArray)
@@ -135,7 +123,9 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         }
     }
     
-    @IBAction func send(_ sender: AnyObject?) {
+    // MARK: - Share Methods
+    
+    func shareToDevice(at index: Int) {
         guard let content = extensionContext!.inputItems[0] as? NSExtensionItem else {
             self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
             return
@@ -147,14 +137,12 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         }
         
         let contentType: String = UTType.url.identifier
-        // Store the selected device ID instead of an array index
-        let pressedBtnTag = sender?.tag ?? 0
-        guard pressedBtnTag < self.validDeviceEntries.count else {
+        guard index < self.validDeviceEntries.count else {
             UserNotificationHelper.show(title: "Soduto Share", body: "Selected device is no longer available.", sound: true, id: "DeviceUnavailable", urgency: .active)
             self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
             return
         }
-        let selectedDevice = self.validDeviceEntries[pressedBtnTag]["id"] ?? ""
+        let selectedDevice = self.validDeviceEntries[index]["id"] ?? ""
         AppDefaultsStore.ShareExtension.selectedDevice = selectedDevice
         
         // Use a DispatchGroup to wait for all async loadItem calls to complete before dismissing the extension
@@ -196,6 +184,11 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         }
     }
     
+    @IBAction func send(_ sender: AnyObject?) {
+        let index = sender?.tag ?? 0
+        shareToDevice(at: index)
+    }
+    
     @IBAction func cancel(_ sender: AnyObject?) {
         let cancelError = NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError, userInfo: nil)
         self.extensionContext!.cancelRequest(withError: cancelError)
@@ -220,9 +213,4 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
             print("Failed to save bookmark data for \(url)", error)
         }
     }
-}
-
-extension NSUserInterfaceItemIdentifier {
-    static let labelColumn = NSUserInterfaceItemIdentifier("LabelColumn")
-    static let labelIdentifier = NSUserInterfaceItemIdentifier("LabelIdentifier")
 }
