@@ -13,16 +13,17 @@ struct SharedUserDefaults {
     static let preferencesSuite = "com.soduto.Soduto.Preferences.Keys"
     
     struct Keys {
-        static let devicesToShow = ""
-        static let uploadFile = ""
-        static let fileurl = ""
-        static let buttonTag = ""
-        static let kSandboxKey = ""
+        static let devicesToShow = "com.soduto.share.devicesToShow"
+        static let uploadFile = "com.soduto.share.uploadFile"
+        static let fileurl = "com.soduto.share.fileurl"
+        static let buttonTag = "com.soduto.share.buttonTag"
+        static let kSandboxKey = "com.soduto.share.kSandboxKey"
+        static let selectedDeviceId = "com.soduto.share.selectedDeviceId"
     }
     
     struct Preferences {
-        static let disableSharePopUp = ""
-        static let deviceType = ""
-        static let hostName = ""
+        static let disableSharePopUp = "com.soduto.preferences.disableSharePopUp"
+        static let deviceType = "com.soduto.preferences.deviceType"
+        static let hostName = "com.soduto.preferences.hostName"
     }
 }

@@ -18,12 +18,17 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
     @IBOutlet private weak var tableScroll: NSScrollView!
     let un = UNUserNotificationCenter.current()
     var touchButtonTag = 0
-    var validDevices = sharedUserDefaults?.object(forKey: SharedUserDefaults.Keys.devicesToShow) as? [String] ?? []
+    
+    /// Each entry is ["id": "<deviceId>", "name": "<displayName>"]
+    var validDeviceEntries = sharedUserDefaults?.object(forKey: SharedUserDefaults.Keys.devicesToShow) as? [[String: String]] ?? []
+    var validDeviceNames: [String] {
+        return validDeviceEntries.map { $0["name"] ?? "Unknown Device" }
+    }
     
     //MARK: - NSTableViewDataSource
     
     func numberOfRows(in tableView: NSTableView) -> Int {
-        self.validDevices.count
+        self.validDeviceEntries.count
     }
     
     //MARK: -NSTableViewDelegate
@@ -37,7 +42,7 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
            let cell = tableView.makeView(withIdentifier: .labelIdentifier, owner: self) as? ButtonLabelCell
         {
             // Insert code for button column
-            cell.configure(self.validDevices[row], tag: row)
+            cell.configure(self.validDeviceNames[row], tag: row)
             return cell
         }
         else {
@@ -53,9 +58,9 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         let touchBarIdenitifier = NSTouchBar.CustomizationIdentifier("com.Soduto.TouchBar")
         let touchBarButtonIdentifier = NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.cancelButton")
         var touchBarAllowedIdentifiers = [touchBarButtonIdentifier]
-        if !(self.validDevices.isEmpty) {
+        if !(self.validDeviceEntries.isEmpty) {
             var i = 0
-            for _ in validDevices {
+            for _ in validDeviceEntries {
                 touchBarAllowedIdentifiers.append(NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.device" + String(i)))
                 i += 1
             }
@@ -84,10 +89,10 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
                 return cancel
             }
         }
-        if !(self.validDevices.isEmpty) {
+        if !(self.validDeviceEntries.isEmpty) {
             let button = NSCustomTouchBarItem(identifier: identifier)
-            button.customizationLabel = self.validDevices[self.touchButtonTag]
-            let label = NSButton.init(title: self.validDevices[self.touchButtonTag], target: self, action: #selector(self.send(_:)))
+            button.customizationLabel = self.validDeviceNames[self.touchButtonTag]
+            let label = NSButton.init(title: self.validDeviceNames[self.touchButtonTag], target: self, action: #selector(self.send(_:)))
             label.tag = self.touchButtonTag
             button.view = label
             self.touchButtonTag += 1
@@ -112,7 +117,7 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
         
         // Insert code here to customize the view
         
-        if (self.validDevices.isEmpty) {
+        if (self.validDeviceEntries.isEmpty) {
             infoText.isHidden = false
             tableScroll.isHidden = true
         }
@@ -133,36 +138,64 @@ class ShareViewController: NSViewController, NSTableViewDataSource, NSTableViewD
     }
     
     @IBAction func send(_ sender: AnyObject?) {
-        var contentType: String
-        if let content = extensionContext!.inputItems[0] as? NSExtensionItem {
-            if #available(macOSApplicationExtension 11.0, *) {
-                contentType = UTType.url.identifier
-            } else {
-                // Fallback on earlier versions
-                contentType = kUTTypeURL as String
-            }
-            
-            if let contents = content.attachments {
-                let pressedBtnTag = sender?.tag
-                sharedUserDefaults?.set(pressedBtnTag, forKey: SharedUserDefaults.Keys.buttonTag)
-                // look for content files
-                for attachment in contents {
-                    if attachment.hasItemConformingToTypeIdentifier(contentType) {
-                        attachment.loadItem(forTypeIdentifier: contentType, options: nil, completionHandler: { (data, error) in
-                            if let url = URL(dataRepresentation: data as! Data, relativeTo: nil) {
-                                self.saveBookmark(url: url)
-                                self.uploadFile()
-                            }
-                        })
-                    } else {
-                        UserNotificationHelper.show(title: "Soduto Share", body: "Invalid content type selected to share", sound: true, id: "InvalidContent", urgency: .active)
+        guard let content = extensionContext!.inputItems[0] as? NSExtensionItem else {
+            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+            return
+        }
+        
+        guard let contents = content.attachments else {
+            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+            return
+        }
+        
+        let contentType: String = UTType.url.identifier
+        // Store the selected device ID instead of an array index
+        let pressedBtnTag = sender?.tag ?? 0
+        guard pressedBtnTag < self.validDeviceEntries.count else {
+            UserNotificationHelper.show(title: "Soduto Share", body: "Selected device is no longer available.", sound: true, id: "DeviceUnavailable", urgency: .active)
+            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+            return
+        }
+        let selectedDeviceId = self.validDeviceEntries[pressedBtnTag]["id"] ?? ""
+        sharedUserDefaults?.set(selectedDeviceId, forKey: SharedUserDefaults.Keys.selectedDeviceId)
+        
+        // Use a DispatchGroup to wait for all async loadItem calls to complete before dismissing the extension
+        let group = DispatchGroup()
+        var didProcessAnyAttachment = false
+        
+        for attachment in contents {
+            if attachment.hasItemConformingToTypeIdentifier(contentType) {
+                group.enter()
+                didProcessAnyAttachment = true
+                attachment.loadItem(forTypeIdentifier: contentType, options: nil) { [weak self] (data, error) in
+                    defer { group.leave() }
+                    guard let self = self else { return }
+                    
+                    if let error = error {
+                        NSLog("Failed to load shared item: \(error)")
+                        return
                     }
+                    guard let data = data as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) else {
+                        NSLog("Failed to create URL from shared data")
+                        return
+                    }
+                    self.saveBookmark(url: url)
+                    self.uploadFile()
                 }
+            } else {
+                UserNotificationHelper.show(title: "Soduto Share", body: "Invalid content type selected to share", sound: true, id: "InvalidContent", urgency: .active)
             }
         }
-        // Complete implementation by setting the appropriate value on the output item
         
-        self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+        if !didProcessAnyAttachment {
+            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+            return
+        }
+        
+        // Complete the extension request only after all async operations finish
+        group.notify(queue: .main) {
+            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+        }
     }
     
     @IBAction func cancel(_ sender: AnyObject?) {

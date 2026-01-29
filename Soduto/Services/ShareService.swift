@@ -36,7 +36,6 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     
     let un = UNUserNotificationCenter.current()
     let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("AirDrop"))
-    let connectedDevices = AppDelegate.shared().validDevices
     
     // MARK: Types
     
@@ -326,6 +325,25 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     }
     
     
+    // MARK: Share Extension methods
+    
+    /// Called by AppDelegate's upload observer when the Share extension signals a file to share.
+    public func uploadFileFromExtension(url: URL, to device: Device) {
+        guard device.isReachable && device.pairingStatus == .Paired else {
+            UserNotificationHelper.show(title: device.name, subtitle: "Outbound Transfer Failed", body: "\(device.name) is no longer reachable.", sound: true, id: "DeviceUnreachableUpload", urgency: .timeSensitive)
+            return
+        }
+
+        if let dataPacket = self.dataPacket(forFileUrl: url) {
+            device.send(dataPacket)
+            self.showUploadStartNotification(to: device)
+        } else {
+            let dataPacket = self.dataPacket(forUrl: url)
+            device.send(dataPacket)
+        }
+    }
+    
+    
     // MARK: Private methods
     
     private func fileSize(path: String) -> Int64? {
@@ -345,17 +363,6 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         guard let dataPacket = self.dataPacket(forFileUrl: url) else { return }
         device.send(dataPacket)
         self.showUploadStartNotification(to: device)
-    }
-    public func shareFile(url: URL, to deviceNum: Int) {
-        var dataPacket = self.dataPacket(forFileUrl: url)
-        let selectedDevice: Device = self.connectedDevices[deviceNum]
-        if dataPacket == nil {
-            dataPacket = self.dataPacket(forUrl: url)
-        } else {
-            self.showUploadStartNotification(to: selectedDevice)
-        }
-        selectedDevice.send(dataPacket!)
-        AppDelegate.shared().updateValidDevices()
     }
     
     private func downloadFile(_ fileName: String?, usingTask task: DownloadTask, from device: Device) {
@@ -525,7 +532,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         }
     }
     
-    public func showUploadFinishNotification(connection: Connection, succeeded: Bool) {
+    private func showUploadFinishNotification(connection: Connection, succeeded: Bool) {
         let deviceName = (try? connection.identity?.getDeviceName()) ?? "Unknown Device"
         let deviceId = (try? connection.identity?.getDeviceId()) ?? "unknown-device"
         let title = deviceName
@@ -645,10 +652,10 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         menu.addItem(titleItem)
         
         if disableSharePopUp && self.validDevices.count == 1 {
-            guard validDevices.first?.isReachable ?? false && validDevices.first?.pairingStatus == .Paired else { return false }
+            guard let device = validDevices.first, device.isReachable == true, device.pairingStatus == .Paired else { return false }
             for packet in packets {
-                validDevices.first?.send(packet)
-                self.showUploadStartNotification(to: validDevices.first!)
+                device.send(packet)
+                self.showUploadStartNotification(to: device)
             }
             return true
         }
