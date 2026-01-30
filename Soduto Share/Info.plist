@@ -4,8 +4,6 @@
 <dict>
 	<key>TeamIdentifierPrefix</key>
 	<string>$(TeamIdentifierPrefix)</string>
-	<key>CFBundleIconFile</key>
-	<string>icon</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionAttributes</key>

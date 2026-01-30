@@ -24,9 +24,8 @@ struct ShareSheetView: View {
                     .frame(width: 24, height: 24)
                 Text("Soduto Share")
                     .font(.headline)
-                Spacer()
             }
-            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity)
             .padding(.top, 12)
             .padding(.bottom, 8)
 
@@ -133,7 +132,8 @@ struct DeviceBubble: View {
             ["id": "pixel-9", "name": "Pixel 9", "type": "phone"],
             ["id": "galaxy-tab", "name": "Galaxy Tab", "type": "tablet"],
             ["id": "thinkstation", "name": "ThinkStation", "type": "desktop"],
-            ["id": "macbookpro", "name" : "MacBook Pro", "type": "laptop" ]
+            ["id": "macbookpro", "name" : "MacBook Pro", "type": "laptop" ],
+            ["id": "unknowndevice", "name": "Unknown Device", "type": "unknowndevice"]
         ],
         onDeviceSelected: { _ in },
         onCancel: { }

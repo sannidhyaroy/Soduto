@@ -184,12 +184,12 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate {
         }
     }
     
-    @IBAction func send(_ sender: AnyObject?) {
+    @objc func send(_ sender: AnyObject?) {
         let index = sender?.tag ?? 0
         shareToDevice(at: index)
     }
     
-    @IBAction func cancel(_ sender: AnyObject?) {
+    @objc func cancel(_ sender: AnyObject?) {
         let cancelError = NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError, userInfo: nil)
         self.extensionContext!.cancelRequest(withError: cancelError)
     }

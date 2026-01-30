@@ -41,10 +41,9 @@
 		31A0A3C52F2C7C6100CDA243 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */; };
 		31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31B189B529ED731B001C8735 /* Sparkle.framework */; };
 		31B189B829ED73A1001C8735 /* Sparkle.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 31B189B529ED731B001C8735 /* Sparkle.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		31F3A152293B5EA300550088 /* icon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 31F3A151293B5EA300550088 /* icon.icns */; };
+		31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */; };
 		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareExtensionController.swift */; };
-		31F3A1B3293BDFBD00550088 /* Soduto Share.png in Resources */ = {isa = PBXBuildFile; fileRef = 31F3A1B5293BDFBD00550088 /* Soduto Share.png */; };
 		761FBEF3293211C50034FD44 /* NMSSH.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF4293212030034FD44 /* CleanroomLogger.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -270,12 +269,11 @@
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
 		31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetView.swift; sourceTree = "<group>"; };
 		31B189B529ED731B001C8735 /* Sparkle.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Sparkle.framework; path = Carthage/Build/Mac/Sparkle.framework; sourceTree = "<group>"; };
+		31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		31F3A14F293B5EA300550088 /* Soduto Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Soduto Share.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
-		31F3A151293B5EA300550088 /* icon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = icon.icns; sourceTree = "<group>"; };
 		31F3A153293B5EA300550088 /* ShareExtensionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionController.swift; sourceTree = "<group>"; };
 		31F3A158293B5EA300550088 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		31F3A159293B5EA300550088 /* Soduto_Share.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto_Share.entitlements; sourceTree = "<group>"; };
-		31F3A1B4293BDFBD00550088 /* Base */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = Base; path = "Base.lproj/Soduto Share.png"; sourceTree = "<group>"; };
 		76B580552930EE1B003453FD /* libcrypto.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libcrypto.a; path = Libraries/lib/libcrypto.a; sourceTree = "<group>"; };
 		76B580562930EE1B003453FD /* libssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssl.a; path = Libraries/lib/libssl.a; sourceTree = "<group>"; };
 		76B580572930EE1B003453FD /* libssh2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssh2.a; path = Libraries/lib/libssh2.a; sourceTree = "<group>"; };
@@ -485,12 +483,11 @@
 		31F3A150293B5EA300550088 /* Soduto Share */ = {
 			isa = PBXGroup;
 			children = (
-				31A0A3C42F2C7AF900CDA243 /* Views */,
-				31A0A3C32F2C7A6D00CDA243 /* Controllers */,
-				31F3A151293B5EA300550088 /* icon.icns */,
-				31F3A1B5293BDFBD00550088 /* Soduto Share.png */,
+				31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */,
 				31F3A158293B5EA300550088 /* Info.plist */,
 				31F3A159293B5EA300550088 /* Soduto_Share.entitlements */,
+				31A0A3C42F2C7AF900CDA243 /* Views */,
+				31A0A3C32F2C7A6D00CDA243 /* Controllers */,
 			);
 			path = "Soduto Share";
 			sourceTree = "<group>";
@@ -986,8 +983,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				31F3A1B3293BDFBD00550088 /* Soduto Share.png in Resources */,
-				31F3A152293B5EA300550088 /* icon.icns in Resources */,
+				31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1213,14 +1209,6 @@
 				024B435E1F23BEEB00037A33 /* Base */,
 			);
 			name = PreferencesWindow.storyboard;
-			sourceTree = "<group>";
-		};
-		31F3A1B5293BDFBD00550088 /* Soduto Share.png */ = {
-			isa = PBXVariantGroup;
-			children = (
-				31F3A1B4293BDFBD00550088 /* Base */,
-			);
-			name = "Soduto Share.png";
 			sourceTree = "<group>";
 		};
 		842506351ED3692300AEE25F /* WelcomeWindow.storyboard */ = {
