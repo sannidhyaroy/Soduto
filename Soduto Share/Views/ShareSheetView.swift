@@ -8,6 +8,17 @@
 
 import SwiftUI
 
+/// Maps a device type string to the corresponding SF Symbol name.
+func sfSymbolName(for deviceType: String) -> String {
+    switch deviceType {
+    case "desktop": return "desktopcomputer"
+    case "laptop":  return "laptopcomputer"
+    case "phone":   return "iphone"
+    case "tablet":  return "ipad"
+    default:        return "display"
+    }
+}
+
 struct ShareSheetView: View {
     let deviceEntries: [[String: String]]
     let onDeviceSelected: (Int) -> Void
@@ -80,21 +91,6 @@ struct DeviceBubble: View {
     
     @State private var isHovering = false
     
-    private var sfSymbolName: String {
-        switch type {
-        case "desktop":
-            return "desktopcomputer"
-        case "laptop":
-            return "laptopcomputer"
-        case "phone":
-            return "iphone"
-        case "tablet":
-            return "ipad"
-        default:
-            return "display"
-        }
-    }
-    
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
@@ -105,7 +101,7 @@ struct DeviceBubble: View {
                               : Color(NSColor.controlBackgroundColor))
                         .frame(width: 56, height: 56)
                     
-                    Image(systemName: sfSymbolName)
+                    Image(systemName: sfSymbolName(for: type))
                         .font(.system(size: 24))
                         .foregroundColor(.primary)
                 }

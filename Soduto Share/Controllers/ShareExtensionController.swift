@@ -10,7 +10,7 @@ import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers
 
-class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubberDataSource, NSScrubberDelegate {
+class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubberDataSource, NSScrubberDelegate, NSScrubberFlowLayoutDelegate {
     
     /// Each entry is ["id": "<deviceId>", "name": "<displayName>", "type": "<deviceType>"]
     var validDeviceEntries: [[String: String]] = AppDefaultsStore.ShareExtension.reachableDevices
@@ -89,16 +89,13 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
         shareToDevice(at: index)
     }
     
-    // MARK: - Helpers
+    // MARK: - NSScrubberFlowLayoutDelegate
     
-    private func sfSymbolName(for type: String) -> String {
-        switch type {
-        case "desktop": return "desktopcomputer"
-        case "laptop":  return "laptopcomputer"
-        case "phone":   return "iphone"
-        case "tablet":  return "ipad"
-        default:        return "display"
-        }
+    func scrubber(_ scrubber: NSScrubber, layout: NSScrubberFlowLayout, sizeForItemAt itemIndex: Int) -> NSSize {
+        let name = validDeviceEntries[itemIndex]["name"] ?? "Unknown Device"
+        let textWidth = (name as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width
+        let itemWidth = min(max(textWidth + 42, 80), 160)
+        return NSSize(width: itemWidth, height: 30)
     }
     
     deinit {
