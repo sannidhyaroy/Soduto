@@ -247,7 +247,21 @@ private class DeviceScrubberItemView: NSScrubberItemView {
     private let nameLabel = NSTextField(labelWithString: "")
     
     override var isSelected: Bool {
-        didSet { alphaValue = isSelected ? 0.85 : 1.0 }
+        didSet { updateAppearance() }
+    }
+    
+    override var isHighlighted: Bool {
+        didSet { updateAppearance() }
+    }
+    
+    private func updateAppearance() {
+        if isHighlighted {
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.35).cgColor
+        } else if isSelected {
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.25).cgColor
+        } else {
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
+        }
     }
     
     override init(frame: NSRect) {
