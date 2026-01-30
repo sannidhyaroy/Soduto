@@ -10,94 +10,10 @@ import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers
 
-class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubberDataSource, NSScrubberDelegate, NSScrubberFlowLayoutDelegate {
+class ShareExtensionController: NSViewController {
     
     /// Each entry is ["id": "<deviceId>", "name": "<displayName>", "type": "<deviceType>"]
     var validDeviceEntries: [[String: String]] = AppDefaultsStore.ShareExtension.reachableDevices
-    
-    private static let scrubberItemId = NSUserInterfaceItemIdentifier("DeviceItem")
-    private static let cancelItemId = NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.cancel")
-    private static let devicesItemId = NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.devices")
-    
-    // MARK: - NSTouchBar
-    
-    override func makeTouchBar() -> NSTouchBar? {
-        let touchBar = NSTouchBar()
-        touchBar.delegate = self
-        touchBar.defaultItemIdentifiers = [Self.cancelItemId, Self.devicesItemId]
-        return touchBar
-    }
-    
-    func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
-        switch identifier {
-        case Self.cancelItemId:
-            let item = NSCustomTouchBarItem(identifier: identifier)
-            item.customizationLabel = "Cancel"
-            let button = NSButton(
-                image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Cancel")!,
-                target: self,
-                action: #selector(cancel(_:))
-            )
-            button.bezelStyle = .inline
-            item.view = button
-            return item
-            
-        case Self.devicesItemId:
-            guard !validDeviceEntries.isEmpty else { return nil }
-            
-            let scrubber = NSScrubber()
-            scrubber.register(DeviceScrubberItemView.self, forItemIdentifier: Self.scrubberItemId)
-            scrubber.dataSource = self
-            scrubber.delegate = self
-            scrubber.mode = .free
-            scrubber.showsAdditionalContentIndicators = true
-            
-            let layout = NSScrubberFlowLayout()
-            layout.itemSpacing = 8
-            scrubber.scrubberLayout = layout
-            
-            let item = NSCustomTouchBarItem(identifier: identifier)
-            item.view = scrubber
-            return item
-            
-        default:
-            return nil
-        }
-    }
-    
-    // MARK: - NSScrubberDataSource
-    
-    func numberOfItems(for scrubber: NSScrubber) -> Int {
-        validDeviceEntries.count
-    }
-    
-    func scrubber(_ scrubber: NSScrubber, viewForItemAt index: Int) -> NSScrubberItemView {
-        let view = scrubber.makeItem(withIdentifier: Self.scrubberItemId, owner: nil) as! DeviceScrubberItemView
-        let entry = validDeviceEntries[index]
-        view.configure(
-            name: entry["name"] ?? "Unknown Device",
-            symbolName: sfSymbolName(for: entry["type"] ?? "unknown")
-        )
-        return view
-    }
-    
-    // MARK: - NSScrubberDelegate
-    
-    func scrubber(_ scrubber: NSScrubber, didSelectItemAt index: Int) {
-        shareToDevice(at: index)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            scrubber.selectedIndex = -1
-        }
-    }
-    
-    // MARK: - NSScrubberFlowLayoutDelegate
-    
-    func scrubber(_ scrubber: NSScrubber, layout: NSScrubberFlowLayout, sizeForItemAt itemIndex: Int) -> NSSize {
-        let name = validDeviceEntries[itemIndex]["name"] ?? "Unknown Device"
-        let textWidth = (name as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width
-        let itemWidth = min(max(textWidth + 42, 80), 160)
-        return NSSize(width: itemWidth, height: 30)
-    }
     
     // MARK: - NSViewController
     
@@ -226,7 +142,7 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
         CFNotificationCenterPostNotification(notificationCenter, notificationName, nil, nil, false)
     }
     
-    func saveBookmark(url: URL) {
+    private func saveBookmark(url: URL) {
         do {
             let bookmarkData = try url.bookmarkData(
                 options: .minimalBookmark,
@@ -237,71 +153,5 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
         } catch {
             print("Failed to save bookmark data for \(url)", error)
         }
-    }
-}
-
-// MARK: - Touch Bar Scrubber Item
-
-private class DeviceScrubberItemView: NSScrubberItemView {
-    private let iconView = NSImageView()
-    private let nameLabel = NSTextField(labelWithString: "")
-    
-    override var isSelected: Bool {
-        didSet { updateAppearance() }
-    }
-    
-    override var isHighlighted: Bool {
-        didSet { updateAppearance() }
-    }
-    
-    private func updateAppearance() {
-        if isHighlighted {
-            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.35).cgColor
-        } else if isSelected {
-            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.25).cgColor
-        } else {
-            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
-        }
-    }
-    
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        
-        wantsLayer = true
-        layer?.cornerRadius = 6
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
-        
-        iconView.imageScaling = .scaleProportionallyDown
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        
-        nameLabel.font = .systemFont(ofSize: 12)
-        nameLabel.textColor = .labelColor
-        nameLabel.backgroundColor = .clear
-        nameLabel.isBordered = false
-        nameLabel.isEditable = false
-        nameLabel.lineBreakMode = .byTruncatingTail
-        nameLabel.translatesAutoresizingMaskIntoConstraints = false
-        
-        addSubview(iconView)
-        addSubview(nameLabel)
-        
-        NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 14),
-            iconView.heightAnchor.constraint(equalToConstant: 14),
-            
-            nameLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 4),
-            nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
-            nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-    
-    required init?(coder: NSCoder) { fatalError() }
-    
-    func configure(name: String, symbolName: String) {
-        nameLabel.stringValue = name
-        iconView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-        iconView.contentTintColor = .labelColor
     }
 }

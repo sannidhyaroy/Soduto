@@ -30,6 +30,8 @@
 		311BC2912F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC2902F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift */; };
 		311BC2922F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC2902F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift */; };
 		311BC2932F286B9300E4A33F /* UserNotificationHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC28E2F2865A200E4A33F /* UserNotificationHelper.swift */; };
+		312674C92F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312674C82F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift */; };
+		312674CD2F2CE5C700D68B2C /* DeviceScrubberItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
 		31711BA82F17435000E3B9FE /* MPRISService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BA72F17435000E3B9FE /* MPRISService.swift */; };
 		31711BAC2F17638000E3B9FE /* ImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BAB2F17638000E3B9FE /* ImageLoader.swift */; };
@@ -261,6 +263,8 @@
 		311BC28C2F2800D400E4A33F /* StableHashing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StableHashing.swift; sourceTree = "<group>"; };
 		311BC28E2F2865A200E4A33F /* UserNotificationHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserNotificationHelper.swift; sourceTree = "<group>"; };
 		311BC2902F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UNMutableNotificationContent+Urgency.swift"; sourceTree = "<group>"; };
+		312674C82F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShareExtensionController+TouchBar.swift"; sourceTree = "<group>"; };
+		312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceScrubberItemView.swift; sourceTree = "<group>"; };
 		312E76FD2938A93F00F29BFA /* Messages.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messages.png; sourceTree = "<group>"; };
 		31711BA72F17435000E3B9FE /* MPRISService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MPRISService.swift; sourceTree = "<group>"; };
 		31711BAB2F17638000E3B9FE /* ImageLoader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImageLoader.swift; sourceTree = "<group>"; };
@@ -468,6 +472,7 @@
 			isa = PBXGroup;
 			children = (
 				31F3A153293B5EA300550088 /* ShareExtensionController.swift */,
+				312674C82F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift */,
 			);
 			path = Controllers;
 			sourceTree = "<group>";
@@ -476,6 +481,7 @@
 			isa = PBXGroup;
 			children = (
 				31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */,
+				312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1049,8 +1055,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				311BC2932F286B9300E4A33F /* UserNotificationHelper.swift in Sources */,
+				312674C92F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift in Sources */,
 				31A0A3C02F2C118F00CDA243 /* ShareSheetView.swift in Sources */,
 				311BC2922F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */,
+				312674CD2F2CE5C700D68B2C /* DeviceScrubberItemView.swift in Sources */,
 				31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */,
 				31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */,
 			);
