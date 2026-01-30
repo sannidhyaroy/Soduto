@@ -12,9 +12,9 @@ struct ShareSheetView: View {
     let deviceEntries: [[String: String]]
     let onDeviceSelected: (Int) -> Void
     let onCancel: () -> Void
-
+    
     private let columns = [GridItem(.adaptive(minimum: 80))]
-
+    
     var body: some View {
         VStack(spacing: 0) {
             // Title bar
@@ -28,9 +28,9 @@ struct ShareSheetView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 12)
             .padding(.bottom, 8)
-
+            
             Divider()
-
+            
             // Content
             if deviceEntries.isEmpty {
                 Spacer()
@@ -55,9 +55,9 @@ struct ShareSheetView: View {
                     .padding(16)
                 }
             }
-
+            
             Divider()
-
+            
             // Footer
             HStack {
                 Spacer()
@@ -69,7 +69,7 @@ struct ShareSheetView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         }
-        .frame(width: 410, height: 240)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -77,9 +77,9 @@ struct DeviceBubble: View {
     let name: String
     let type: String
     let action: () -> Void
-
+    
     @State private var isHovering = false
-
+    
     private var sfSymbolName: String {
         switch type {
         case "desktop":
@@ -94,7 +94,7 @@ struct DeviceBubble: View {
             return "display"
         }
     }
-
+    
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
@@ -104,12 +104,12 @@ struct DeviceBubble: View {
                               ? Color.accentColor.opacity(0.15)
                               : Color(NSColor.controlBackgroundColor))
                         .frame(width: 56, height: 56)
-
+                    
                     Image(systemName: sfSymbolName)
                         .font(.system(size: 24))
                         .foregroundColor(.primary)
                 }
-
+                
                 Text(name)
                     .font(.system(size: 11))
                     .lineLimit(1)

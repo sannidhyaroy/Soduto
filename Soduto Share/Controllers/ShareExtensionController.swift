@@ -1,5 +1,5 @@
 //
-//  ShareViewController.swift
+//  ShareExtensionController.swift
 //  Soduto Share
 //
 //  Created by Sannidhya Roy on 03/12/22.
@@ -8,100 +8,95 @@
 
 import Cocoa
 import SwiftUI
-import UserNotifications
 import UniformTypeIdentifiers
 
 class ShareExtensionController: NSViewController, NSTouchBarDelegate {
     
-    let un = UNUserNotificationCenter.current()
-    var touchButtonTag = 0
-    
     /// Each entry is ["id": "<deviceId>", "name": "<displayName>", "type": "<deviceType>"]
     var validDeviceEntries = AppDefaultsStore.ShareExtension.reachableDevices
-    var validDeviceNames: [String] {
-        return validDeviceEntries.map { $0["name"] ?? "Unknown Device" }
-    }
     
     // MARK: - NSTouchBar
     
-    @available(macOS 10.12.1, *)
     override func makeTouchBar() -> NSTouchBar? {
-        
-        let touchBarIdenitifier = NSTouchBar.CustomizationIdentifier("com.Soduto.TouchBar")
-        let touchBarButtonIdentifier = NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.cancelButton")
-        var touchBarAllowedIdentifiers = [touchBarButtonIdentifier]
-        if !(self.validDeviceEntries.isEmpty) {
-            var i = 0
-            for _ in validDeviceEntries {
-                touchBarAllowedIdentifiers.append(NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.device" + String(i)))
-                i += 1
-            }
-        }
         let touchBar = NSTouchBar()
         touchBar.delegate = self
-        touchBar.customizationIdentifier = touchBarIdenitifier
-        touchBar.defaultItemIdentifiers = touchBarAllowedIdentifiers
-        touchBar.customizationAllowedItemIdentifiers = touchBarAllowedIdentifiers
+        touchBar.customizationIdentifier = NSTouchBar.CustomizationIdentifier("com.Soduto.TouchBar")
+        
+        var identifiers = [NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.cancelButton")]
+        for i in 0..<validDeviceEntries.count {
+            identifiers.append(NSTouchBarItem.Identifier(rawValue: "com.Soduto.TouchBar.device\(i)"))
+        }
+        touchBar.defaultItemIdentifiers = identifiers
+        touchBar.customizationAllowedItemIdentifiers = identifiers
         
         return touchBar
     }
     
-    @available(macOS 10.12.1, *)
     func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
         if identifier.rawValue == "com.Soduto.TouchBar.cancelButton" {
-            let cancel = NSCustomTouchBarItem(identifier: identifier)
-            cancel.customizationLabel = "Cancel"
-            if #available(macOSApplicationExtension 11.0, *) {
-                let label = NSButton.init(title: "Cancel", image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)!, target: self, action: #selector(self.cancel(_:)))
-                cancel.view = label
-                return cancel
-            } else {
-                let label = NSButton.init(title: "Cancel", target: self, action: #selector(self.cancel(_:)))
-                cancel.view = label
-                return cancel
-            }
+            let item = NSCustomTouchBarItem(identifier: identifier)
+            item.customizationLabel = "Cancel"
+            item.view = NSButton(
+                title: "Cancel",
+                image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)!,
+                target: self,
+                action: #selector(cancel(_:))
+            )
+            return item
         }
-        if !(self.validDeviceEntries.isEmpty) {
-            let button = NSCustomTouchBarItem(identifier: identifier)
-            button.customizationLabel = self.validDeviceNames[self.touchButtonTag]
-            let label = NSButton.init(title: self.validDeviceNames[self.touchButtonTag], target: self, action: #selector(self.send(_:)))
-            label.tag = self.touchButtonTag
-            button.view = label
-            self.touchButtonTag += 1
-            return button
+        
+        let prefix = "com.Soduto.TouchBar.device"
+        if identifier.rawValue.hasPrefix(prefix),
+           let index = Int(identifier.rawValue.dropFirst(prefix.count)),
+           index < validDeviceEntries.count {
+            let name = validDeviceEntries[index]["name"] ?? "Unknown Device"
+            let item = NSCustomTouchBarItem(identifier: identifier)
+            item.customizationLabel = name
+            let button = NSButton(title: name, target: self, action: #selector(send(_:)))
+            button.tag = index
+            item.view = button
+            return item
         }
+        
         return nil
     }
     
-    @available(macOS 10.12.1, *)
     deinit {
         self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar)))
     }
     
     // MARK: - NSViewController
     
-    override func loadView() {
-        let rootView = ShareSheetView(deviceEntries: self.validDeviceEntries, onDeviceSelected: { [weak self] index in
-                self?.shareToDevice(at: index)
-            },
-            onCancel: { [weak self] in
-                self?.cancel(nil)
-            }
-        )
-        let hostingView = NSHostingView(rootView: rootView)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
+    /// Computes a sheet height that fits the content, capped at a maximum.
+    private var sheetHeight: CGFloat {
+        guard !validDeviceEntries.isEmpty else { return 240 }
         
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 410, height: 240))
+        let fixedHeight: CGFloat = 84  // title (~44) + 2 dividers (~2) + footer (~38)
+        let columnsPerRow = 4
+        let rowCount = Int(ceil(Double(validDeviceEntries.count) / Double(columnsPerRow)))
+        let gridHeight = CGFloat(rowCount) * 75        // 56 circle + 6 spacing + 13 text
+        + CGFloat(max(0, rowCount - 1)) * 16       // inter-row spacing
+        + 32                                        // grid padding (16 top + 16 bottom)
+        
+        return min(fixedHeight + gridHeight, 400)
+    }
+    
+    override func loadView() {
+        let rootView = ShareSheetView(deviceEntries: validDeviceEntries, onDeviceSelected: { [weak self] index in
+            self?.shareToDevice(at: index)
+        }, onCancel: { [weak self] in
+            self?.cancel(nil)
+        })
+        
+        let height = sheetHeight
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 410, height: height))
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.frame = container.bounds
+        hostingView.autoresizingMask = [.width, .height]
         container.addSubview(hostingView)
-        NSLayoutConstraint.activate([
-            hostingView.topAnchor.constraint(equalTo: container.topAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            hostingView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            hostingView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-        ])
         
         self.view = container
-        self.preferredContentSize = NSSize(width: 410, height: 240)
+        self.preferredContentSize = NSSize(width: 410, height: height)
     }
     
     override func viewDidLoad() {
@@ -117,13 +112,11 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate {
     
     override func viewDidAppear() {
         super.viewDidAppear()
-        if #available(OSX 10.12.1, *) {
-            self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar))) // unbind first
-            self.view.window?.bind(NSBindingName(rawValue: #keyPath(touchBar)), to: self, withKeyPath: #keyPath(touchBar), options: nil)
-        }
+        self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar)))
+        self.view.window?.bind(NSBindingName(rawValue: #keyPath(touchBar)), to: self, withKeyPath: #keyPath(touchBar), options: nil)
     }
     
-    // MARK: - Share Methods
+    // MARK: - Share Logic
     
     func shareToDevice(at index: Int) {
         guard let content = extensionContext!.inputItems[0] as? NSExtensionItem else {
