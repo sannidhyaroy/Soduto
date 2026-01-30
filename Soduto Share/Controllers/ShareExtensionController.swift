@@ -16,33 +16,33 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
     var validDeviceEntries: [[String: String]] = AppDefaultsStore.ShareExtension.reachableDevices
     
     private static let scrubberItemId = NSUserInterfaceItemIdentifier("DeviceItem")
+    private static let cancelItemId = NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.cancel")
+    private static let devicesItemId = NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.devices")
     
     // MARK: - NSTouchBar
     
     override func makeTouchBar() -> NSTouchBar? {
         let touchBar = NSTouchBar()
         touchBar.delegate = self
-        touchBar.customizationIdentifier = NSTouchBar.CustomizationIdentifier("com.soduto.Soduto.share.touchbar")
-        touchBar.defaultItemIdentifiers = [
-            NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.cancel"),
-            NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.devices"),
-        ]
+        touchBar.defaultItemIdentifiers = [Self.cancelItemId, Self.devicesItemId]
         return touchBar
     }
     
     func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
-        switch identifier.rawValue {
-        case "com.soduto.Soduto.share.touchbar.cancel":
+        switch identifier {
+        case Self.cancelItemId:
             let item = NSCustomTouchBarItem(identifier: identifier)
             item.customizationLabel = "Cancel"
-            item.view = NSButton(
+            let button = NSButton(
                 image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Cancel")!,
                 target: self,
                 action: #selector(cancel(_:))
             )
+            button.bezelStyle = .inline
+            item.view = button
             return item
             
-        case "com.soduto.Soduto.share.touchbar.devices":
+        case Self.devicesItemId:
             guard !validDeviceEntries.isEmpty else { return nil }
             
             let scrubber = NSScrubber()
@@ -51,10 +51,9 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
             scrubber.delegate = self
             scrubber.mode = .free
             scrubber.showsAdditionalContentIndicators = true
-            scrubber.selectionBackgroundStyle = .roundedBackground
             
             let layout = NSScrubberFlowLayout()
-            layout.itemSpacing = 4
+            layout.itemSpacing = 8
             scrubber.scrubberLayout = layout
             
             let item = NSCustomTouchBarItem(identifier: identifier)
@@ -85,8 +84,10 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
     // MARK: - NSScrubberDelegate
     
     func scrubber(_ scrubber: NSScrubber, didSelectItemAt index: Int) {
-        scrubber.selectedIndex = -1 // clear selection immediately
         shareToDevice(at: index)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            scrubber.selectedIndex = -1
+        }
     }
     
     // MARK: - NSScrubberFlowLayoutDelegate
@@ -96,10 +97,6 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
         let textWidth = (name as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width
         let itemWidth = min(max(textWidth + 42, 80), 160)
         return NSSize(width: itemWidth, height: 30)
-    }
-    
-    deinit {
-        self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar)))
     }
     
     // MARK: - NSViewController
@@ -151,6 +148,10 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
         super.viewDidAppear()
         self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar)))
         self.view.window?.bind(NSBindingName(rawValue: #keyPath(touchBar)), to: self, withKeyPath: #keyPath(touchBar), options: nil)
+    }
+    
+    deinit {
+        self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar)))
     }
     
     // MARK: - Share Logic
@@ -245,14 +246,22 @@ private class DeviceScrubberItemView: NSScrubberItemView {
     private let iconView = NSImageView()
     private let nameLabel = NSTextField(labelWithString: "")
     
+    override var isSelected: Bool {
+        didSet { alphaValue = isSelected ? 0.85 : 1.0 }
+    }
+    
     override init(frame: NSRect) {
         super.init(frame: frame)
+        
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
         
         iconView.imageScaling = .scaleProportionallyDown
         iconView.translatesAutoresizingMaskIntoConstraints = false
         
         nameLabel.font = .systemFont(ofSize: 12)
-        nameLabel.textColor = .white
+        nameLabel.textColor = .labelColor
         nameLabel.backgroundColor = .clear
         nameLabel.isBordered = false
         nameLabel.isEditable = false
@@ -279,11 +288,6 @@ private class DeviceScrubberItemView: NSScrubberItemView {
     func configure(name: String, symbolName: String) {
         nameLabel.stringValue = name
         iconView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-        iconView.contentTintColor = .white
-        
-        // Size to fit: icon (14) + spacing (4) + text width + padding (16)
-        let textWidth = (name as NSString).size(withAttributes: [.font: nameLabel.font!]).width
-        let itemWidth = min(max(textWidth + 42, 80), 160)
-        frame.size = NSSize(width: itemWidth, height: 30)
+        iconView.contentTintColor = .labelColor
     }
 }
