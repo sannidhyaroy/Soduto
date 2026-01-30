@@ -178,28 +178,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             return
         }
         
-        guard let data = AppDefaultsStore.ShareExtension.fileBookmarkData else {
+        guard let bookmarks = AppDefaultsStore.ShareExtension.fileBookmarkData, !bookmarks.isEmpty else {
             UserNotificationHelper.show(title: "Soduto Share", body: "Could not read the file bookmark. Please try sharing again.", sound: true, id: "NoBookmarkData")
             return
         }
         
-        do {
-            var isStale = false
-            let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-            
-            guard let shareService = self.serviceManager.service(ofType: ShareService.self) else {
-                UserNotificationHelper.show(title: "Soduto Share", body: "Share service is not available. Please restart Soduto.", sound: true, id: "ShareServiceUnavailable")
-                return
+        guard let shareService = self.serviceManager.service(ofType: ShareService.self) else {
+            UserNotificationHelper.show(title: "Soduto Share", body: "Share service is not available. Please restart Soduto.", sound: true, id: "ShareServiceUnavailable")
+            return
+        }
+        
+        guard let device = self.deviceManager.device(withId: deviceId) else {
+            UserNotificationHelper.show(title: "Soduto Share", body: "The selected device is no longer reachable.", sound: true, id: "DeviceUnreachable")
+            return
+        }
+        
+        var failedCount = 0
+        for data in bookmarks {
+            do {
+                var isStale = false
+                let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
+                shareService.uploadFileFromExtension(url: url, to: device)
+            } catch {
+                failedCount += 1
+                NSLog("Failed to resolve bookmark: \(error)")
             }
-            
-            guard let device = self.deviceManager.device(withId: deviceId) else {
-                UserNotificationHelper.show(title: "Soduto Share", body: "The selected device is no longer reachable.", sound: true, id: "DeviceUnreachable")
-                return
-            }
-            
-            shareService.uploadFileFromExtension(url: url, to: device)
-        } catch {
-            UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
+        }
+        
+        if failedCount > 0 {
+            let message = failedCount == bookmarks.count
+            ? "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!"
+            : "\(failedCount) of \(bookmarks.count) files could not be shared due to permission issues."
+            UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: message, sound: true, id: "FileAccessDenied")
         }
     }
 }

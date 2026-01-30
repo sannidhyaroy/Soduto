@@ -95,6 +95,8 @@ class ShareExtensionController: NSViewController {
         // Use a DispatchGroup to wait for all async loadItem calls to complete before dismissing the extension
         let group = DispatchGroup()
         var didProcessAnyAttachment = false
+        let lock = NSLock()
+        var collectedBookmarks: [Data] = []
         
         for attachment in contents {
             if attachment.hasItemConformingToTypeIdentifier(contentType) {
@@ -102,7 +104,7 @@ class ShareExtensionController: NSViewController {
                 didProcessAnyAttachment = true
                 attachment.loadItem(forTypeIdentifier: contentType, options: nil) { [weak self] (data, error) in
                     defer { group.leave() }
-                    guard let self = self else { return }
+                    guard self != nil else { return }
                     
                     if let error = error {
                         NSLog("Failed to load shared item: \(error)")
@@ -112,8 +114,11 @@ class ShareExtensionController: NSViewController {
                         NSLog("Failed to create URL from shared data")
                         return
                     }
-                    self.saveBookmark(url: url)
-                    self.uploadFile()
+                    if let bookmark = Self.createBookmark(for: url) {
+                        lock.lock()
+                        collectedBookmarks.append(bookmark)
+                        lock.unlock()
+                    }
                 }
             } else {
                 UserNotificationHelper.show(title: "Soduto Share", body: "Invalid content type selected to share", sound: true, id: "InvalidContent", urgency: .active)
@@ -125,8 +130,12 @@ class ShareExtensionController: NSViewController {
             return
         }
         
-        // Complete the extension request only after all async operations finish
+        // Store all bookmarks and notify the main app once all async operations finish
         group.notify(queue: .main) {
+            if !collectedBookmarks.isEmpty {
+                AppDefaultsStore.ShareExtension.fileBookmarkData = collectedBookmarks
+                self.notifyMainApp()
+            }
             self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
         }
     }
@@ -136,22 +145,22 @@ class ShareExtensionController: NSViewController {
         self.extensionContext!.cancelRequest(withError: cancelError)
     }
     
-    private func uploadFile() {
+    private func notifyMainApp() {
         let notificationName = CFNotificationName("com.Soduto.Share" as CFString)
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
         CFNotificationCenterPostNotification(notificationCenter, notificationName, nil, nil, false)
     }
     
-    private func saveBookmark(url: URL) {
+    private static func createBookmark(for url: URL) -> Data? {
         do {
-            let bookmarkData = try url.bookmarkData(
+            return try url.bookmarkData(
                 options: .minimalBookmark,
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            AppDefaultsStore.ShareExtension.fileBookmarkData = bookmarkData
         } catch {
-            print("Failed to save bookmark data for \(url)", error)
+            print("Failed to create bookmark data for \(url)", error)
+            return nil
         }
     }
 }
