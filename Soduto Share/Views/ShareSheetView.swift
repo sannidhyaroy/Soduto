@@ -19,7 +19,7 @@ struct ShareSheetView: View {
         VStack(spacing: 0) {
             // Title bar
             HStack(spacing: 8) {
-                Image(nsImage: NSImage(named: "AppIcon") ?? NSImage())
+                Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSImage())
                     .resizable()
                     .frame(width: 24, height: 24)
                 Text("Soduto Share")
@@ -115,10 +115,10 @@ struct DeviceBubble: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: 72)
-                    .help(name)
             }
         }
         .buttonStyle(.plain)
+        .help(name)
         .onHover { hovering in
             isHovering = hovering
         }
