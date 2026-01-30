@@ -22,17 +22,17 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
     override func makeTouchBar() -> NSTouchBar? {
         let touchBar = NSTouchBar()
         touchBar.delegate = self
-        touchBar.customizationIdentifier = NSTouchBar.CustomizationIdentifier("com.Soduto.TouchBar")
+        touchBar.customizationIdentifier = NSTouchBar.CustomizationIdentifier("com.soduto.Soduto.share.touchbar")
         touchBar.defaultItemIdentifiers = [
-            NSTouchBarItem.Identifier("com.Soduto.TouchBar.cancel"),
-            NSTouchBarItem.Identifier("com.Soduto.TouchBar.devices"),
+            NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.cancel"),
+            NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.devices"),
         ]
         return touchBar
     }
     
     func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
         switch identifier.rawValue {
-        case "com.Soduto.TouchBar.cancel":
+        case "com.soduto.Soduto.share.touchbar.cancel":
             let item = NSCustomTouchBarItem(identifier: identifier)
             item.customizationLabel = "Cancel"
             item.view = NSButton(
@@ -42,7 +42,7 @@ class ShareExtensionController: NSViewController, NSTouchBarDelegate, NSScrubber
             )
             return item
             
-        case "com.Soduto.TouchBar.devices":
+        case "com.soduto.Soduto.share.touchbar.devices":
             guard !validDeviceEntries.isEmpty else { return nil }
             
             let scrubber = NSScrubber()
