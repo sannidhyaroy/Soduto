@@ -327,13 +327,13 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     
     // MARK: Share Extension methods
     
-    /// Called by AppDelegate's upload observer when the Share extension signals a file to share.
-    public func uploadFileFromExtension(url: URL, to device: Device) {
+    /// Called by AppDelegate's upload observer when the Share extension signals a file or URL to share.
+    public func shareFromExtension(url: URL, to device: Device) {
         guard device.isReachable && device.pairingStatus == .Paired else {
             UserNotificationHelper.show(title: device.name, subtitle: "Outbound Transfer Failed", body: "\(device.name) is no longer reachable.", sound: true, id: "DeviceUnreachableUpload", urgency: .timeSensitive)
             return
         }
-
+        
         if let dataPacket = self.dataPacket(forFileUrl: url) {
             device.send(dataPacket)
             self.showUploadStartNotification(to: device)
@@ -341,6 +341,16 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
             let dataPacket = self.dataPacket(forUrl: url)
             device.send(dataPacket)
         }
+    }
+    
+    /// Called by AppDelegate's upload observer when the Share extension signals text to share.
+    public func shareFromExtension(text: String, to device: Device) {
+        guard device.isReachable && device.pairingStatus == .Paired else {
+            UserNotificationHelper.show(title: device.name, subtitle: "Outbound Transfer Failed", body: "\(device.name) is no longer reachable.", sound: true, id: "DeviceUnreachableUpload", urgency: .timeSensitive)
+            return
+        }
+        let dataPacket = self.dataPacket(forText: text)
+        device.send(dataPacket)
     }
     
     

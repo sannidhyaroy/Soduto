@@ -52,7 +52,7 @@ class ShareExtensionController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        let item = self.extensionContext!.inputItems[0] as! NSExtensionItem
+        guard let item = self.extensionContext?.inputItems.first as? NSExtensionItem else { return }
         if let attachments = item.attachments {
             NSLog("Attachments = %@", attachments as NSArray)
         } else {
@@ -73,17 +73,11 @@ class ShareExtensionController: NSViewController {
     // MARK: - Share Logic
     
     func shareToDevice(at index: Int) {
-        guard let content = extensionContext!.inputItems[0] as? NSExtensionItem else {
+        guard let content = extensionContext?.inputItems.first as? NSExtensionItem else {
             self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
             return
         }
         
-        guard let contents = content.attachments else {
-            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
-            return
-        }
-        
-        let contentType: String = UTType.url.identifier
         guard index < self.validDeviceEntries.count else {
             UserNotificationHelper.show(title: "Soduto Share", body: "Selected device is no longer available.", sound: true, id: "DeviceUnavailable", urgency: .active)
             self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
@@ -94,15 +88,22 @@ class ShareExtensionController: NSViewController {
         
         // Use a DispatchGroup to wait for all async loadItem calls to complete before dismissing the extension
         let group = DispatchGroup()
-        var didProcessAnyAttachment = false
         let lock = NSLock()
         var collectedBookmarks: [Data] = []
+        var collectedTexts: [String] = []
         
-        for attachment in contents {
-            if attachment.hasItemConformingToTypeIdentifier(contentType) {
+        // macOS share sheet provides shared text via attributedContentText on NSExtensionItem.
+        if let attributedText = content.attributedContentText {
+            let text = attributedText.string
+            if !text.isEmpty {
+                collectedTexts.append(text)
+            }
+        }
+        
+        for attachment in content.attachments ?? [] {
+            if attachment.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
                 group.enter()
-                didProcessAnyAttachment = true
-                attachment.loadItem(forTypeIdentifier: contentType, options: nil) { [weak self] (data, error) in
+                attachment.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] (data, error) in
                     defer { group.leave() }
                     guard self != nil else { return }
                     
@@ -120,20 +121,37 @@ class ShareExtensionController: NSViewController {
                         lock.unlock()
                     }
                 }
-            } else {
-                UserNotificationHelper.show(title: "Soduto Share", body: "Invalid content type selected to share", sound: true, id: "InvalidContent", urgency: .active)
+            } else if collectedTexts.isEmpty && attachment.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
+                // Safety net: in case an app vends text via NSItemProvider instead of attributedContentText
+                group.enter()
+                attachment.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] (data, error) in
+                    defer { group.leave() }
+                    guard self != nil else { return }
+                    
+                    if let error = error {
+                        NSLog("Failed to load shared text: \(error)")
+                        return
+                    }
+                    guard let text = data as? String else {
+                        NSLog("Failed to read shared text")
+                        return
+                    }
+                    lock.lock()
+                    collectedTexts.append(text)
+                    lock.unlock()
+                }
             }
         }
         
-        if !didProcessAnyAttachment {
-            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
-            return
-        }
-        
-        // Store all bookmarks and notify the main app once all async operations finish
+        // Wait for all async attachment loads, then store results and notify the main app
         group.notify(queue: .main) {
             if !collectedBookmarks.isEmpty {
                 AppDefaultsStore.ShareExtension.fileBookmarkData = collectedBookmarks
+            }
+            if !collectedTexts.isEmpty {
+                AppDefaultsStore.ShareExtension.sharedTexts = collectedTexts
+            }
+            if !collectedBookmarks.isEmpty || !collectedTexts.isEmpty {
                 self.notifyMainApp()
             }
             self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
@@ -153,11 +171,7 @@ class ShareExtensionController: NSViewController {
     
     private static func createBookmark(for url: URL) -> Data? {
         do {
-            return try url.bookmarkData(
-                options: .minimalBookmark,
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            )
+            return try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
         } catch {
             print("Failed to create bookmark data for \(url)", error)
             return nil

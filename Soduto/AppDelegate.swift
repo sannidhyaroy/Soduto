@@ -178,8 +178,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             return
         }
         
-        guard let bookmarks = AppDefaultsStore.ShareExtension.fileBookmarkData, !bookmarks.isEmpty else {
-            UserNotificationHelper.show(title: "Soduto Share", body: "Could not read the file bookmark. Please try sharing again.", sound: true, id: "NoBookmarkData")
+        let bookmarks = AppDefaultsStore.ShareExtension.fileBookmarkData ?? []
+        let texts = AppDefaultsStore.ShareExtension.sharedTexts ?? []
+        
+        guard !bookmarks.isEmpty || !texts.isEmpty else {
+            UserNotificationHelper.show(title: "Soduto Share", body: "Nothing to share. Please try again.", sound: true, id: "NoShareData")
             return
         }
         
@@ -193,12 +196,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             return
         }
         
+        // Process file/URL bookmarks
         var failedCount = 0
         for data in bookmarks {
             do {
                 var isStale = false
                 let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-                shareService.uploadFileFromExtension(url: url, to: device)
+                shareService.shareFromExtension(url: url, to: device)
             } catch {
                 failedCount += 1
                 NSLog("Failed to resolve bookmark: \(error)")
@@ -211,5 +215,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             : "\(failedCount) of \(bookmarks.count) files could not be shared due to permission issues."
             UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: message, sound: true, id: "FileAccessDenied")
         }
+        
+        // Process shared texts
+        for text in texts {
+            shareService.shareFromExtension(text: text, to: device)
+        }
+        
+        // Clear consumed data
+        AppDefaultsStore.ShareExtension.fileBookmarkData = nil
+        AppDefaultsStore.ShareExtension.sharedTexts = nil
     }
 }

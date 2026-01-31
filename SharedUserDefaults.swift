@@ -34,6 +34,11 @@ enum AppDefaultsStore {
             get { appGroupDefaults?.array(forKey: "com.soduto.share.fileBookmarkData") as? [Data] }
             set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.fileBookmarkData") }
         }
+        
+        static var sharedTexts: [String]? {
+            get { appGroupDefaults?.stringArray(forKey: "com.soduto.share.sharedTexts") }
+            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.sharedTexts") }
+        }
     }
     
     

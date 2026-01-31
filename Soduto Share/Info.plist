@@ -9,7 +9,7 @@
             <key>NSExtensionAttributes</key>
             <dict>
                 <key>NSExtensionActivationRule</key>
-                <string>SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $att, ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO &quot;public.item&quot;).@count &gt;= 1).@count &gt;= 1</string>
+                <string>SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $att, ((ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.data" AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.folder" AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.package") OR ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url" OR ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.text")).@count >= 1).@count >= 1</string>
             </dict>
             <key>NSExtensionPointIdentifier</key>
             <string>com.apple.share-services</string>
