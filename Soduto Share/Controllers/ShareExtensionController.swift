@@ -15,8 +15,13 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.sodu
 
 class ShareExtensionController: NSViewController {
     
-    /// Each entry is ["id": "<deviceId>", "name": "<displayName>", "type": "<deviceType>"]
-    var validDeviceEntries: [[String: String]] = AppDefaultsStore.ShareExtension.reachableDevices
+    /// Each entry is ["id": "<deviceId>", "name": "<displayName>", "type": "<deviceType>"].
+    /// Returns an empty list if the main app's heartbeat is stale (app not running or crashed).
+    var validDeviceEntries: [[String: String]] = {
+        let heartbeat = AppDefaultsStore.ShareExtension.appLastHeartbeat
+        guard Date().timeIntervalSince1970 - heartbeat < 60 else { return [] }
+        return AppDefaultsStore.ShareExtension.reachableDevices
+    }()
     
     lazy var viewModel = ShareViewModel(deviceCount: validDeviceEntries.count)
     

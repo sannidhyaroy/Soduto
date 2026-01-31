@@ -20,6 +20,13 @@ enum AppDefaultsStore {
     // MARK: - Share Extension Communication
     
     enum ShareExtension {
+        /// Timestamp (timeIntervalSince1970) of the last heartbeat from the main app.
+        /// Written periodically by the main app; read by the extension to detect crashes.
+        static var appLastHeartbeat: TimeInterval {
+            get { appGroupDefaults?.double(forKey: "com.soduto.share.appLastHeartbeat") ?? 0 }
+            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.appLastHeartbeat") }
+        }
+        
         static var reachableDevices: [[String: String]] {
             get { appGroupDefaults?.object(forKey: "com.soduto.share.reachableDevices") as? [[String: String]] ?? [] }
             set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.reachableDevices") }
@@ -39,7 +46,7 @@ enum AppDefaultsStore {
             get { appGroupDefaults?.stringArray(forKey: "com.soduto.share.sharedTexts") }
             set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.sharedTexts") }
         }
-
+        
         /// Transfer status per device for the current share session.
         /// Maps device ID -> status: "success", "failed". Written by main app, read by extension.
         static var transferStatuses: [String: String]? {

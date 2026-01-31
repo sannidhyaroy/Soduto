@@ -27,6 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     let serviceManager = ServiceManager()
     private(set) var userNotificationManager: UserNotificationManager!
     let updaterController: SPUStandardUpdaterController
+    private var heartbeatTimer: Timer?
     
     static let logLevelConfigurationKey = "com.soduto.logLevel"
     
@@ -83,6 +84,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: MPRISService())
         
         self.updateValidDevices()
+        self.startHeartbeat()
         let notificationName = "com.soduto.share.handoff" as CFString
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
         registerShareExtensionObserver(notificationCenter, notificationName)
@@ -95,7 +97,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
-        // Insert code here to tear down your application
+        heartbeatTimer?.invalidate()
+        AppDefaultsStore.ShareExtension.appLastHeartbeat = 0
+        AppDefaultsStore.ShareExtension.reachableDevices = []
     }
     
     
@@ -149,6 +153,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     }
     
     // MARK: Extension Support
+    
+    private func startHeartbeat() {
+        AppDefaultsStore.ShareExtension.appLastHeartbeat = Date().timeIntervalSince1970
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+            AppDefaultsStore.ShareExtension.appLastHeartbeat = Date().timeIntervalSince1970
+        }
+    }
     
     public func updateValidDevices() {
         self.validDevices = deviceManager.pairedRechableDevices
