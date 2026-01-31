@@ -182,38 +182,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         let texts = AppDefaultsStore.ShareExtension.sharedTexts ?? []
         
         guard !bookmarks.isEmpty || !texts.isEmpty else {
+            updateTransferStatus(deviceId: deviceId, status: "failed")
+            notifyExtensionOfStatus()
             UserNotificationHelper.show(title: "Soduto Share", body: "Nothing to share. Please try again.", sound: true, id: "NoShareData")
             return
         }
         
         guard let shareService = self.serviceManager.service(ofType: ShareService.self) else {
+            updateTransferStatus(deviceId: deviceId, status: "failed")
+            notifyExtensionOfStatus()
             UserNotificationHelper.show(title: "Soduto Share", body: "Share service is not available. Please restart Soduto.", sound: true, id: "ShareServiceUnavailable")
             return
         }
         
         guard let device = self.deviceManager.device(withId: deviceId) else {
+            updateTransferStatus(deviceId: deviceId, status: "failed")
+            notifyExtensionOfStatus()
             UserNotificationHelper.show(title: "Soduto Share", body: "The selected device is no longer reachable.", sound: true, id: "DeviceUnreachable")
             return
         }
         
         // Process file/URL bookmarks
         var failedCount = 0
+        var fileUploadCount = 0
         for data in bookmarks {
             do {
                 var isStale = false
                 let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-                shareService.shareFromExtension(url: url, to: device)
+                if shareService.shareFromExtension(url: url, to: device) {
+                    fileUploadCount += 1
+                }
             } catch {
                 failedCount += 1
                 Log.error?.message("Failed to resolve bookmark: \(error)")
             }
-        }
-        
-        if failedCount > 0 {
-            let message = failedCount == bookmarks.count
-            ? "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!"
-            : "\(failedCount) of \(bookmarks.count) files could not be shared due to permission issues."
-            UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: message, sound: true, id: "FileAccessDenied")
         }
         
         // Process shared texts
@@ -221,8 +223,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             shareService.shareFromExtension(text: text, to: device)
         }
         
-        // Clear consumed data
+        /// Report transfer status back to the extension.
+        /// File uploads (with payloads) are tracked by ShareService — it reports the real completion status via Darwin notification when all uploads finish.
+        /// Non-file transfers (URLs, text) complete immediately.
+        if fileUploadCount > 0 {
+            shareService.beginTrackingExtensionUploads(deviceId: deviceId, fileCount: fileUploadCount)
+            // Don't report status yet — ShareService will when uploads actually complete
+        } else if failedCount == bookmarks.count && !bookmarks.isEmpty && texts.isEmpty {
+            // Everything failed, nothing was sent
+            let message = failedCount == bookmarks.count
+            ? "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!"
+            : "\(failedCount) of \(bookmarks.count) files could not be shared due to permission issues."
+            UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: message, sound: true, id: "FileAccessDenied")
+            updateTransferStatus(deviceId: deviceId, status: "failed")
+            notifyExtensionOfStatus()
+        } else {
+            // Only URLs/texts were shared (no file payloads) — they complete immediately
+            updateTransferStatus(deviceId: deviceId, status: "success")
+            notifyExtensionOfStatus()
+        }
+        
+        // Clear consumed data (NOT transferStatuses — extension needs them)
         AppDefaultsStore.ShareExtension.fileBookmarkData = nil
         AppDefaultsStore.ShareExtension.sharedTexts = nil
+    }
+    
+    private func updateTransferStatus(deviceId: String, status: String) {
+        var statuses = AppDefaultsStore.ShareExtension.transferStatuses ?? [:]
+        statuses[deviceId] = status
+        AppDefaultsStore.ShareExtension.transferStatuses = statuses
+    }
+    
+    private func notifyExtensionOfStatus() {
+        let name = CFNotificationName("com.soduto.share.status" as CFString)
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), name, nil, nil, false)
     }
 }

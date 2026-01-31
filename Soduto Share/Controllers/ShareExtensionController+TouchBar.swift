@@ -79,6 +79,10 @@ extension ShareExtensionController: NSTouchBarDelegate, NSScrubberDataSource, NS
     // MARK: - NSScrubberDelegate
     
     func scrubber(_ scrubber: NSScrubber, didSelectItemAt index: Int) {
+        guard viewModel.isInteractive(index) else {
+            scrubber.selectedIndex = -1
+            return
+        }
         shareToDevice(at: index)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             scrubber.selectedIndex = -1

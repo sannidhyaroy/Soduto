@@ -39,6 +39,13 @@ enum AppDefaultsStore {
             get { appGroupDefaults?.stringArray(forKey: "com.soduto.share.sharedTexts") }
             set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.sharedTexts") }
         }
+
+        /// Transfer status per device for the current share session.
+        /// Maps device ID -> status: "success", "failed". Written by main app, read by extension.
+        static var transferStatuses: [String: String]? {
+            get { appGroupDefaults?.dictionary(forKey: "com.soduto.share.transferStatuses") as? [String: String] }
+            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.transferStatuses") }
+        }
     }
     
     
