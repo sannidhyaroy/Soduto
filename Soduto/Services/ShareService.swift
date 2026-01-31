@@ -39,6 +39,12 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     
     // MARK: Types
     
+    public enum ExtensionShareResult {
+        case fileUploadQueued    // file with payload, tracked via ConnectionDelegate
+        case sentWithoutPayload  // URL shared, completes immediately
+        case skipped             // unshareable (directory, unreadable, etc.)
+    }
+    
     private enum ShareError: Error {
         case partFileRenameFailed
     }
@@ -349,22 +355,25 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     // MARK: Share Extension methods
     
     /// Called by AppDelegate's upload observer when the Share extension signals a file or URL to share.
-    /// - Returns: `true` if a file upload (with payload) was queued; `false` for URL/text-only packets or errors.
     @discardableResult
-    public func shareFromExtension(url: URL, to device: Device) -> Bool {
+    public func shareFromExtension(url: URL, to device: Device) -> ExtensionShareResult {
         guard device.isReachable && device.pairingStatus == .Paired else {
             UserNotificationHelper.show(title: device.name, subtitle: "Outbound Transfer Failed", body: "\(device.name) is no longer reachable.", sound: true, id: "DeviceUnreachableUpload", urgency: .timeSensitive)
-            return false
+            return .skipped
         }
         
         if let dataPacket = self.dataPacket(forFileUrl: url) {
             device.send(dataPacket)
             self.showUploadStartNotification(to: device)
-            return true
+            return .fileUploadQueued
+        } else if url.isFileURL {
+            // Directory, unreadable file, etc. — nothing to send
+            Log.error?.message("Cannot share file URL (unsupported content type): \(url)")
+            return .skipped
         } else {
             let dataPacket = self.dataPacket(forUrl: url)
             device.send(dataPacket)
-            return false
+            return .sentWithoutPayload
         }
     }
     

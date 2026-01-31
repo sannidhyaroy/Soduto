@@ -220,13 +220,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             do {
                 var isStale = false
                 let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-                if shareService.shareFromExtension(url: url, to: device) {
-                    fileUploadCount += 1
+                switch shareService.shareFromExtension(url: url, to: device) {
+                case .fileUploadQueued:    fileUploadCount += 1
+                case .sentWithoutPayload:  break
+                case .skipped:             failedCount += 1
                 }
             } catch {
                 failedCount += 1
                 Log.error?.message("Failed to resolve bookmark: \(error)")
             }
+        }
+        
+        if failedCount > 0 {
+            let message = failedCount == bookmarks.count
+            ? "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!"
+            : "\(failedCount) of \(bookmarks.count) items could not be shared."
+            UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: message, sound: true, id: "FileAccessDenied")
         }
         
         // Process shared texts
@@ -242,10 +251,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             // Don't report status yet — ShareService will when uploads actually complete
         } else if failedCount == bookmarks.count && !bookmarks.isEmpty && texts.isEmpty {
             // Everything failed, nothing was sent
-            let message = failedCount == bookmarks.count
-            ? "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!"
-            : "\(failedCount) of \(bookmarks.count) files could not be shared due to permission issues."
-            UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: message, sound: true, id: "FileAccessDenied")
             updateTransferStatus(deviceId: deviceId, status: "failed")
             notifyExtensionOfStatus()
         } else {
