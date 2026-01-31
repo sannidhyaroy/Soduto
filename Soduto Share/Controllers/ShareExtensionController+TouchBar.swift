@@ -11,8 +11,8 @@ import Cocoa
 extension ShareExtensionController: NSTouchBarDelegate, NSScrubberDataSource, NSScrubberDelegate, NSScrubberFlowLayoutDelegate {
     
     static let scrubberItemId = NSUserInterfaceItemIdentifier("DeviceItem")
-    static let cancelItemId = NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.cancel")
-    static let devicesItemId = NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.devices")
+    static let cancelItemId = NSTouchBarItem.Identifier("com.soduto.soduto.share.touchbar.cancel")
+    static let devicesItemId = NSTouchBarItem.Identifier("com.soduto.soduto.share.touchbar.devices")
     
     // MARK: - NSTouchBar
     

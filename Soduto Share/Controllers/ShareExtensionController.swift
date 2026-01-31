@@ -73,7 +73,7 @@ class ShareExtensionController: NSViewController {
         }
         
         // Register for reverse Darwin notifications from main app (transfer status updates)
-        let statusNotificationName = "com.Soduto.Share.Status" as CFString
+        let statusNotificationName = "com.soduto.share.status" as CFString
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(self).toOpaque(), { _, observer, _, _, _ in
             guard let observer = observer else { return }
             let controller = Unmanaged<ShareExtensionController>.fromOpaque(observer).takeUnretainedValue()
@@ -252,7 +252,7 @@ class ShareExtensionController: NSViewController {
     // MARK: - Private Helpers
     
     private func notifyMainApp() {
-        let notificationName = CFNotificationName("com.Soduto.Share" as CFString)
+        let notificationName = CFNotificationName("com.soduto.share.handoff" as CFString)
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
         CFNotificationCenterPostNotification(notificationCenter, notificationName, nil, nil, false)
     }

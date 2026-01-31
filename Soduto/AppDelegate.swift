@@ -83,7 +83,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: MPRISService())
         
         self.updateValidDevices()
-        let notificationName = "com.Soduto.Share" as CFString
+        let notificationName = "com.soduto.share.handoff" as CFString
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
         registerShareExtensionObserver(notificationCenter, notificationName)
         
