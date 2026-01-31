@@ -205,7 +205,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
                 shareService.shareFromExtension(url: url, to: device)
             } catch {
                 failedCount += 1
-                NSLog("Failed to resolve bookmark: \(error)")
+                Log.error?.message("Failed to resolve bookmark: \(error)")
             }
         }
         

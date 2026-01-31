@@ -9,6 +9,9 @@
 import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers
+import os.log
+
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.soduto.Soduto.Soduto-Share", category: "ShareExtension")
 
 class ShareExtensionController: NSViewController {
     
@@ -54,9 +57,9 @@ class ShareExtensionController: NSViewController {
         
         guard let item = self.extensionContext?.inputItems.first as? NSExtensionItem else { return }
         if let attachments = item.attachments {
-            NSLog("Attachments = %@", attachments as NSArray)
+            logger.debug("Attachments = \(attachments)")
         } else {
-            NSLog("No Attachments")
+            logger.debug("No Attachments")
         }
     }
     
@@ -108,11 +111,11 @@ class ShareExtensionController: NSViewController {
                     guard self != nil else { return }
                     
                     if let error = error {
-                        NSLog("Failed to load shared item: \(error)")
+                        logger.error("Failed to load shared item: \(error.localizedDescription)")
                         return
                     }
                     guard let data = data as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) else {
-                        NSLog("Failed to create URL from shared data")
+                        logger.error("Failed to create URL from shared data")
                         return
                     }
                     if let bookmark = Self.createBookmark(for: url) {
@@ -129,11 +132,11 @@ class ShareExtensionController: NSViewController {
                     guard self != nil else { return }
                     
                     if let error = error {
-                        NSLog("Failed to load shared text: \(error)")
+                        logger.error("Failed to load shared text: \(error.localizedDescription)")
                         return
                     }
                     guard let text = data as? String else {
-                        NSLog("Failed to read shared text")
+                        logger.error("Failed to read shared text")
                         return
                     }
                     lock.lock()
@@ -173,7 +176,7 @@ class ShareExtensionController: NSViewController {
         do {
             return try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
         } catch {
-            print("Failed to create bookmark data for \(url)", error)
+            logger.error("Failed to create bookmark for \(url): \(error.localizedDescription)")
             return nil
         }
     }
