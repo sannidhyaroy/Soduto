@@ -275,7 +275,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
     }
     
     public var hostDeviceType: DeviceType {
-        switch deviceTypeInt {
+        switch AppDefaultsStore.Preferences.deviceType {
         case 0:
             return .Desktop
         case 1:

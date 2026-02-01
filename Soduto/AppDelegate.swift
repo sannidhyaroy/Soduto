@@ -13,13 +13,10 @@ import UserNotifications
 import Sparkle
 import MediaPlayer
 
-let sharedUserDefaults = UserDefaults(suiteName: SharedUserDefaults.suiteName)
-
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     var validDevices: [Device] = []
-    var validDeviceNames = [String]()
     @IBOutlet weak var statusBarMenuController: StatusBarMenuController!
     @IBOutlet weak var checkForUpdatesMenuItem: NSMenuItem!
     var welcomeWindowController: WelcomeWindowController?
@@ -30,6 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     let serviceManager = ServiceManager()
     private(set) var userNotificationManager: UserNotificationManager!
     let updaterController: SPUStandardUpdaterController
+    private var heartbeatTimer: Timer?
     
     static let logLevelConfigurationKey = "com.soduto.logLevel"
     
@@ -84,11 +82,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: RunCommandService())
         self.serviceManager.add(service: MacToRemoteInputService())
         self.serviceManager.add(service: MPRISService())
-        // Note: UserNotificationManager sets itself as the UNUserNotificationCenter delegate
+        
         self.updateValidDevices()
-        let notificationName = "com.Soduto.Share" as CFString
+        self.startHeartbeat()
+        let notificationName = "com.soduto.share.handoff" as CFString
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
-        uploadObserver(notificationCenter, notificationName)
+        registerShareExtensionObserver(notificationCenter, notificationName)
         
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wakeUpListener(_:)), name: NSWorkspace.didWakeNotification, object: nil)
         
@@ -98,7 +97,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
-        // Insert code here to tear down your application
+        heartbeatTimer?.invalidate()
+        AppDefaultsStore.ShareExtension.appLastHeartbeat = 0
+        AppDefaultsStore.ShareExtension.reachableDevices = []
     }
     
     
@@ -130,14 +131,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         }
     }
     
-    private static var isInExtension: Bool
-    {
-        if Bundle.main.bundleIdentifier?.hasSuffix("Soduto-Share") ?? false {
-            return true
-        }
-        return false
-    }
-    
     private func showWelcomeWindow() {
         guard self.config.knownDeviceConfigs().filter({ $0.isPaired }).isEmpty else { return }
         
@@ -161,31 +154,110 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     // MARK: Extension Support
     
-    public func updateValidDevices() {
-        self.validDevices = deviceManager.pairedDevices
-        validDeviceNames.removeAll(keepingCapacity: false)
-        for device in self.validDevices {
-            self.validDeviceNames.append(device.name)
+    private func startHeartbeat() {
+        AppDefaultsStore.ShareExtension.appLastHeartbeat = Date().timeIntervalSince1970
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+            AppDefaultsStore.ShareExtension.appLastHeartbeat = Date().timeIntervalSince1970
         }
-        sharedUserDefaults?.set(self.validDeviceNames, forKey: SharedUserDefaults.Keys.devicesToShow)
+    }
+    
+    public func updateValidDevices() {
+        self.validDevices = deviceManager.pairedRechableDevices
+        let deviceEntries: [[String: String]] = self.validDevices.map { [
+            "id": $0.id,
+            "name": $0.name,
+            "type": $0.type.rawValue
+        ] }
+        AppDefaultsStore.ShareExtension.reachableDevices = deviceEntries
     }
     
     static func shared() -> AppDelegate {
-        return NSApplication.shared.delegate as! AppDelegate
+        guard let delegate = NSApplication.shared.delegate as? AppDelegate else { fatalError("AppDelegate not configured") }
+        return delegate
     }
     
-    fileprivate func uploadObserver(_ notificationCenter: CFNotificationCenter?, _ notificationName: CFString) {
-        CFNotificationCenterAddObserver(notificationCenter, nil, { (center: CFNotificationCenter?, observer: UnsafeMutableRawPointer?, name: CFNotificationName?, object: UnsafeRawPointer?, userInfo: CFDictionary? ) in
-            
-            guard let buttonTag = sharedUserDefaults?.integer(forKey: SharedUserDefaults.Keys.buttonTag) else { return }
-            guard let data = sharedUserDefaults?.data(forKey: SharedUserDefaults.Keys.kSandboxKey) else { return }
+    /// Darwin Notification Center Observer to observe notifications from Share Extension
+    fileprivate func registerShareExtensionObserver(_ notificationCenter: CFNotificationCenter?, _ notificationName: CFString) {
+        CFNotificationCenterAddObserver(notificationCenter, nil, { _, _, _, _, _ in
+            AppDelegate.shared().handleShareExtensionTrigger()
+        }, notificationName, nil, .deliverImmediately)
+    }
+    
+    private func handleShareExtensionTrigger() {
+        guard let deviceId = AppDefaultsStore.ShareExtension.selectedDevice, !deviceId.isEmpty else {
+            UserNotificationHelper.show(title: "Soduto Share", body: "No target device was specified. Please try sharing again.", sound: true, id: "NoDeviceSelected")
+            return
+        }
+        
+        let bookmarks = AppDefaultsStore.ShareExtension.fileBookmarkData ?? []
+        let texts = AppDefaultsStore.ShareExtension.sharedTexts ?? []
+        
+        guard !bookmarks.isEmpty || !texts.isEmpty else {
+            ShareService.reportExtensionTransferStatus(deviceId: deviceId, status: "failed")
+            UserNotificationHelper.show(title: "Soduto Share", body: "Nothing to share. Please try again.", sound: true, id: "NoShareData")
+            return
+        }
+        
+        guard let shareService = self.serviceManager.service(ofType: ShareService.self) else {
+            ShareService.reportExtensionTransferStatus(deviceId: deviceId, status: "failed")
+            UserNotificationHelper.show(title: "Soduto Share", body: "Share service is not available. Please restart Soduto.", sound: true, id: "ShareServiceUnavailable")
+            return
+        }
+        
+        guard let device = self.deviceManager.device(withId: deviceId) else {
+            ShareService.reportExtensionTransferStatus(deviceId: deviceId, status: "failed")
+            UserNotificationHelper.show(title: "Soduto Share", body: "The selected device is no longer reachable.", sound: true, id: "DeviceUnreachable")
+            return
+        }
+        
+        // Process file/URL bookmarks
+        var failedCount = 0
+        var fileUploadCount = 0
+        for data in bookmarks {
             do {
                 var isStale = false
                 let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-                ShareService().shareFile(url: url, to: buttonTag)
+                switch shareService.shareFromExtension(url: url, to: device) {
+                case .fileUploadQueued:    fileUploadCount += 1
+                case .sentWithoutPayload:  break
+                case .skipped:             failedCount += 1
+                }
             } catch {
-                UserNotificationHelper.show(title: "Oops! We got lost!", body: "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!", sound: true, id: "FileAccessDenied")
+                failedCount += 1
+                Log.error?.message("Failed to resolve bookmark: \(error)")
             }
-        }, notificationName, nil, CFNotificationSuspensionBehavior.deliverImmediately)
+        }
+        
+        if failedCount > 0 {
+            let message = failedCount == bookmarks.count
+            ? "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!"
+            : "\(failedCount) of \(bookmarks.count) items could not be shared."
+            UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: message, sound: true, id: "FileAccessDenied")
+        }
+        
+        // Process shared texts
+        for text in texts {
+            shareService.shareFromExtension(text: text, to: device)
+        }
+        
+        /// Report transfer status back to the extension.
+        /// File uploads (with payloads) are tracked by ShareService — it reports the real completion status via Darwin notification when all uploads finish.
+        /// Non-file transfers (URLs, text) complete immediately.
+        if fileUploadCount > 0 {
+            shareService.beginTrackingExtensionUploads(deviceId: deviceId, fileCount: fileUploadCount)
+            // Don't report status yet — ShareService will when uploads actually complete
+        } else if failedCount == bookmarks.count && !bookmarks.isEmpty && texts.isEmpty {
+            // Everything failed, nothing was sent
+            ShareService.reportExtensionTransferStatus(deviceId: deviceId, status: "failed")
+        } else {
+            // Only URLs/texts were shared (no file payloads) — they complete immediately
+            ShareService.reportExtensionTransferStatus(deviceId: deviceId, status: "success")
+        }
+        
+        // Clear consumed data (NOT transferStatuses — extension needs them)
+        // Each device reads only its own transferStatus entry by ID. Old entries are inert and cleared on extension deinit
+        AppDefaultsStore.ShareExtension.fileBookmarkData = nil
+        AppDefaultsStore.ShareExtension.sharedTexts = nil
+        AppDefaultsStore.ShareExtension.selectedDevice = nil
     }
 }
