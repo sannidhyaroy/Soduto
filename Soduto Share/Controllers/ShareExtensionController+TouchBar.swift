@@ -51,6 +51,8 @@ extension ShareExtensionController: NSTouchBarDelegate, NSScrubberDataSource, NS
             layout.itemSpacing = 8
             scrubber.scrubberLayout = layout
             
+            self.touchBarScrubber = scrubber
+            
             let item = NSCustomTouchBarItem(identifier: identifier)
             item.view = scrubber
             return item
@@ -73,6 +75,7 @@ extension ShareExtensionController: NSTouchBarDelegate, NSScrubberDataSource, NS
             name: entry["name"] ?? "Unknown Device",
             symbolName: sfSymbolName(for: entry["type"] ?? "unknown")
         )
+        view.isDisabledVisually = !viewModel.isInteractive(index)
         return view
     }
     

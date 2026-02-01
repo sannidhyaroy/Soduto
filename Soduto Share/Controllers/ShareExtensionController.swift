@@ -7,6 +7,7 @@
 //
 
 import Cocoa
+import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 import os.log
@@ -24,6 +25,8 @@ class ShareExtensionController: NSViewController {
     }()
     
     lazy var viewModel = ShareViewModel(deviceCount: validDeviceEntries.count)
+    weak var touchBarScrubber: NSScrubber?
+    private var touchBarStatusCancellable: AnyCancellable?
     
     // MARK: - NSViewController
     
@@ -76,6 +79,13 @@ class ShareExtensionController: NSViewController {
         } else {
             logger.debug("No Attachments")
         }
+        
+        // Refresh TouchBar scrubber when device statuses change
+        touchBarStatusCancellable = viewModel.$deviceStatuses
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.touchBarScrubber?.reloadData()
+            }
         
         // Register for reverse Darwin notifications from main app (transfer status updates)
         let statusNotificationName = "com.soduto.share.status" as CFString

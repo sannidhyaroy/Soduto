@@ -12,6 +12,10 @@ class DeviceScrubberItemView: NSScrubberItemView {
     private let iconView = NSImageView()
     private let nameLabel = NSTextField(labelWithString: "")
     
+    var isDisabledVisually: Bool = false {
+        didSet { updateAppearance() }
+    }
+    
     override var isSelected: Bool {
         didSet { updateAppearance() }
     }
@@ -21,12 +25,18 @@ class DeviceScrubberItemView: NSScrubberItemView {
     }
     
     private func updateAppearance() {
-        if isHighlighted {
+        if isDisabledVisually {
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+            alphaValue = 0.4
+        } else if isHighlighted {
             layer?.backgroundColor = NSColor.white.withAlphaComponent(0.35).cgColor
+            alphaValue = 1.0
         } else if isSelected {
             layer?.backgroundColor = NSColor.white.withAlphaComponent(0.25).cgColor
+            alphaValue = 1.0
         } else {
             layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
+            alphaValue = 1.0
         }
     }
     
