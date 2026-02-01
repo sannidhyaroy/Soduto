@@ -39,6 +39,12 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     
     // MARK: Types
     
+    public enum ExtensionShareResult {
+        case fileUploadQueued    // file with payload, tracked via ConnectionDelegate
+        case sentWithoutPayload  // URL shared, completes immediately
+        case skipped             // unshareable (directory, unreadable, etc.)
+    }
+    
     private enum ShareError: Error {
         case partFileRenameFailed
     }
@@ -100,6 +106,10 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     private var downloadInfos: [DownloadInfo] = []
     private var devices: [Device.Id:Device] = [:]
     private var validDevices: [Device] { return self.devices.values.filter { $0.isReachable && $0.pairingStatus == .Paired } }
+    
+    /// Tracks pending file uploads initiated by the Share Extension, per device.
+    /// When all tracked uploads for a device complete, the final status is reported back to the extension.
+    private var pendingExtensionUploads: [Device.Id: (total: Int, succeeded: Int, failed: Int)] = [:]
     
     
     // MARK: Service methods
@@ -207,6 +217,23 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         guard packet.hasPayload(), packet.type == DataPacket.sharePacketType else { return }
         
         self.showUploadFinishNotification(connection: connection, succeeded: uploadedPayload)
+        
+        // Track extension-initiated uploads and report final status when all complete
+        guard let deviceId = try? connection.identity?.getDeviceId(), var tracking = pendingExtensionUploads[deviceId] else { return }
+        
+        if uploadedPayload {
+            tracking.succeeded += 1
+        } else {
+            tracking.failed += 1
+        }
+        
+        if tracking.succeeded + tracking.failed >= tracking.total {
+            pendingExtensionUploads.removeValue(forKey: deviceId)
+            let status = tracking.failed > 0 ? "failed" : "success"
+            Self.reportExtensionTransferStatus(deviceId: deviceId, status: status)
+        } else {
+            pendingExtensionUploads[deviceId] = tracking
+        }
     }
     
     
@@ -328,18 +355,25 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     // MARK: Share Extension methods
     
     /// Called by AppDelegate's upload observer when the Share extension signals a file or URL to share.
-    public func shareFromExtension(url: URL, to device: Device) {
+    @discardableResult
+    public func shareFromExtension(url: URL, to device: Device) -> ExtensionShareResult {
         guard device.isReachable && device.pairingStatus == .Paired else {
             UserNotificationHelper.show(title: device.name, subtitle: "Outbound Transfer Failed", body: "\(device.name) is no longer reachable.", sound: true, id: "DeviceUnreachableUpload", urgency: .timeSensitive)
-            return
+            return .skipped
         }
         
         if let dataPacket = self.dataPacket(forFileUrl: url) {
             device.send(dataPacket)
             self.showUploadStartNotification(to: device)
+            return .fileUploadQueued
+        } else if url.isFileURL {
+            // Directory, unreadable file, etc. — nothing to send
+            Log.error?.message("Cannot share file URL (unsupported content type): \(url)")
+            return .skipped
         } else {
             let dataPacket = self.dataPacket(forUrl: url)
             device.send(dataPacket)
+            return .sentWithoutPayload
         }
     }
     
@@ -351,6 +385,23 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         }
         let dataPacket = self.dataPacket(forText: text)
         device.send(dataPacket)
+    }
+    
+    /// Begin tracking file uploads initiated by the Share Extension.
+    /// When all tracked uploads for this device complete, the final status is reported back to the extension, via the `com.soduto.share.status` Darwin notification.
+    public func beginTrackingExtensionUploads(deviceId: String, fileCount: Int) {
+        guard fileCount > 0 else { return }
+        pendingExtensionUploads[deviceId] = (total: fileCount, succeeded: 0, failed: 0)
+    }
+    
+    /// Reports transfer status back to the Share Extension via App Group UserDefaults + Darwin notification.
+    public static func reportExtensionTransferStatus(deviceId: String, status: String) {
+        var statuses = AppDefaultsStore.ShareExtension.transferStatuses ?? [:]
+        statuses[deviceId] = status
+        AppDefaultsStore.ShareExtension.transferStatuses = statuses
+        
+        let name = CFNotificationName("com.soduto.share.status" as CFString)
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), name, nil, nil, false)
     }
     
     

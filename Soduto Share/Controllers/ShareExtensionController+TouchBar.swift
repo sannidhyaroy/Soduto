@@ -11,8 +11,8 @@ import Cocoa
 extension ShareExtensionController: NSTouchBarDelegate, NSScrubberDataSource, NSScrubberDelegate, NSScrubberFlowLayoutDelegate {
     
     static let scrubberItemId = NSUserInterfaceItemIdentifier("DeviceItem")
-    static let cancelItemId = NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.cancel")
-    static let devicesItemId = NSTouchBarItem.Identifier("com.soduto.Soduto.share.touchbar.devices")
+    static let cancelItemId = NSTouchBarItem.Identifier("com.soduto.soduto.share.touchbar.cancel")
+    static let devicesItemId = NSTouchBarItem.Identifier("com.soduto.soduto.share.touchbar.devices")
     
     // MARK: - NSTouchBar
     
@@ -51,6 +51,8 @@ extension ShareExtensionController: NSTouchBarDelegate, NSScrubberDataSource, NS
             layout.itemSpacing = 8
             scrubber.scrubberLayout = layout
             
+            self.touchBarScrubber = scrubber
+            
             let item = NSCustomTouchBarItem(identifier: identifier)
             item.view = scrubber
             return item
@@ -73,12 +75,17 @@ extension ShareExtensionController: NSTouchBarDelegate, NSScrubberDataSource, NS
             name: entry["name"] ?? "Unknown Device",
             symbolName: sfSymbolName(for: entry["type"] ?? "unknown")
         )
+        view.isDisabledVisually = !viewModel.isInteractive(index)
         return view
     }
     
     // MARK: - NSScrubberDelegate
     
     func scrubber(_ scrubber: NSScrubber, didSelectItemAt index: Int) {
+        guard viewModel.isInteractive(index) else {
+            scrubber.selectedIndex = -1
+            return
+        }
         shareToDevice(at: index)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             scrubber.selectedIndex = -1

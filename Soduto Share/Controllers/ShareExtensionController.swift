@@ -7,6 +7,7 @@
 //
 
 import Cocoa
+import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 import os.log
@@ -15,8 +16,17 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.sodu
 
 class ShareExtensionController: NSViewController {
     
-    /// Each entry is ["id": "<deviceId>", "name": "<displayName>", "type": "<deviceType>"]
-    var validDeviceEntries: [[String: String]] = AppDefaultsStore.ShareExtension.reachableDevices
+    /// Each entry is ["id": "<deviceId>", "name": "<displayName>", "type": "<deviceType>"].
+    /// Returns an empty list if the main app's heartbeat is stale (app not running or crashed).
+    var validDeviceEntries: [[String: String]] = {
+        let heartbeat = AppDefaultsStore.ShareExtension.appLastHeartbeat
+        guard Date().timeIntervalSince1970 - heartbeat < 60 else { return [] }
+        return AppDefaultsStore.ShareExtension.reachableDevices
+    }()
+    
+    lazy var viewModel = ShareViewModel(deviceCount: validDeviceEntries.count)
+    weak var touchBarScrubber: NSScrubber?
+    private var touchBarStatusCancellable: AnyCancellable?
     
     // MARK: - NSViewController
     
@@ -35,10 +45,18 @@ class ShareExtensionController: NSViewController {
     }
     
     override func loadView() {
-        let rootView = ShareSheetView(deviceEntries: validDeviceEntries, onDeviceSelected: { [weak self] index in
+        // Clear any stale transfer statuses from a previous session
+        AppDefaultsStore.ShareExtension.transferStatuses = nil
+        
+        let rootView = ShareSheetView(viewModel: viewModel, deviceEntries: validDeviceEntries, onDeviceSelected: { [weak self] index in
             self?.shareToDevice(at: index)
-        }, onCancel: { [weak self] in
-            self?.cancel(nil)
+        }, onDismiss: { [weak self] in
+            guard let self = self else { return }
+            if self.viewModel.hasInitiatedAnyShare {
+                self.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+            } else {
+                self.cancel(nil)
+            }
         })
         
         let height = sheetHeight
@@ -61,6 +79,23 @@ class ShareExtensionController: NSViewController {
         } else {
             logger.debug("No Attachments")
         }
+        
+        // Refresh TouchBar scrubber when device statuses change
+        touchBarStatusCancellable = viewModel.$deviceStatuses
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.touchBarScrubber?.reloadData()
+            }
+        
+        // Register for reverse Darwin notifications from main app (transfer status updates)
+        let statusNotificationName = "com.soduto.share.status" as CFString
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(self).toOpaque(), { _, observer, _, _, _ in
+            guard let observer = observer else { return }
+            let controller = Unmanaged<ShareExtensionController>.fromOpaque(observer).takeUnretainedValue()
+            DispatchQueue.main.async {
+                controller.handleStatusUpdate()
+            }
+        }, statusNotificationName, nil, .deliverImmediately)
     }
     
     override func viewDidAppear() {
@@ -71,25 +106,49 @@ class ShareExtensionController: NSViewController {
     
     deinit {
         self.view.window?.unbind(NSBindingName(rawValue: #keyPath(touchBar)))
+        CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(self).toOpaque(), nil, nil)
+        AppDefaultsStore.ShareExtension.transferStatuses = nil
     }
     
     // MARK: - Share Logic
     
     func shareToDevice(at index: Int) {
-        guard let content = extensionContext?.inputItems.first as? NSExtensionItem else {
-            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
-            return
-        }
+        // Guard: device must be interactive
+        guard viewModel.isInteractive(index) else { return }
         
-        guard index < self.validDeviceEntries.count else {
+        // Guard: valid index
+        guard index < validDeviceEntries.count else {
             UserNotificationHelper.show(title: "Soduto Share", body: "Selected device is no longer available.", sound: true, id: "DeviceUnavailable", urgency: .active)
-            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
             return
         }
-        let selectedDevice = self.validDeviceEntries[index]["id"] ?? ""
-        AppDefaultsStore.ShareExtension.selectedDevice = selectedDevice
         
-        // Use a DispatchGroup to wait for all async loadItem calls to complete before dismissing the extension
+        // Guard: not currently collecting attachments (prevents race on first tap)
+        guard !viewModel.isCollectingAttachments else { return }
+        
+        // Set transferring state (breathing ring appears)
+        viewModel.deviceStatuses[index] = .transferring
+        
+        if viewModel.cachedBookmarks != nil {
+            // Attachments already cached — hand off immediately
+            handOffToMainApp(deviceIndex: index)
+        } else {
+            // First tap — collect attachments, then hand off
+            collectAttachmentsThenHandOff(deviceIndex: index)
+        }
+    }
+    
+    @objc func cancel(_ sender: AnyObject?) {
+        let cancelError = NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError, userInfo: nil)
+        self.extensionContext!.cancelRequest(withError: cancelError)
+    }
+    
+    // MARK: - Attachment Collection
+    
+    private func collectAttachmentsThenHandOff(deviceIndex: Int) {
+        guard let content = extensionContext?.inputItems.first as? NSExtensionItem else { return }
+        
+        viewModel.isCollectingAttachments = true
+        
         let group = DispatchGroup()
         let lock = NSLock()
         var collectedBookmarks: [Data] = []
@@ -146,28 +205,69 @@ class ShareExtensionController: NSViewController {
             }
         }
         
-        // Wait for all async attachment loads, then store results and notify the main app
-        group.notify(queue: .main) {
-            if !collectedBookmarks.isEmpty {
-                AppDefaultsStore.ShareExtension.fileBookmarkData = collectedBookmarks
-            }
-            if !collectedTexts.isEmpty {
-                AppDefaultsStore.ShareExtension.sharedTexts = collectedTexts
-            }
-            if !collectedBookmarks.isEmpty || !collectedTexts.isEmpty {
-                self.notifyMainApp()
-            }
-            self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+        group.notify(queue: .main) { [weak self] in
+            guard let self = self else { return }
+            
+            // Cache for reuse on subsequent device taps
+            self.viewModel.cachedBookmarks = collectedBookmarks
+            self.viewModel.cachedTexts = collectedTexts
+            self.viewModel.isCollectingAttachments = false
+            
+            self.handOffToMainApp(deviceIndex: deviceIndex)
         }
     }
     
-    @objc func cancel(_ sender: AnyObject?) {
-        let cancelError = NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError, userInfo: nil)
-        self.extensionContext!.cancelRequest(withError: cancelError)
+    // MARK: - Handoff to Main App
+    
+    private func handOffToMainApp(deviceIndex: Int) {
+        let selectedDevice = validDeviceEntries[deviceIndex]["id"] ?? ""
+        
+        // Clear any previous status for this device (important for retries)
+        var statuses = AppDefaultsStore.ShareExtension.transferStatuses ?? [:]
+        statuses.removeValue(forKey: selectedDevice)
+        AppDefaultsStore.ShareExtension.transferStatuses = statuses
+        
+        // Write device ID
+        AppDefaultsStore.ShareExtension.selectedDevice = selectedDevice
+        
+        // Write cached attachment data
+        let bookmarks = viewModel.cachedBookmarks ?? []
+        let texts = viewModel.cachedTexts ?? []
+        
+        if !bookmarks.isEmpty {
+            AppDefaultsStore.ShareExtension.fileBookmarkData = bookmarks
+        }
+        if !texts.isEmpty {
+            AppDefaultsStore.ShareExtension.sharedTexts = texts
+        }
+        
+        // Notify the main app only if there is data to share
+        if !bookmarks.isEmpty || !texts.isEmpty {
+            notifyMainApp()
+        }
     }
     
+    // MARK: - Status Updates from Main App
+    
+    func handleStatusUpdate() {
+        guard let statuses = AppDefaultsStore.ShareExtension.transferStatuses else { return }
+        for (index, entry) in validDeviceEntries.enumerated() {
+            guard let deviceId = entry["id"], let status = statuses[deviceId] else { continue }
+            switch status {
+            case "success":
+                viewModel.deviceStatuses[index] = .sent
+            case "failed":
+                viewModel.deviceStatuses[index] = .failed
+            default:
+                break
+            }
+        }
+    }
+    
+    // MARK: - Private Helpers
+    
     private func notifyMainApp() {
-        let notificationName = CFNotificationName("com.Soduto.Share" as CFString)
+        let notificationName = CFNotificationName("com.soduto.share.handoff" as CFString)
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
         CFNotificationCenterPostNotification(notificationCenter, notificationName, nil, nil, false)
     }
