@@ -262,6 +262,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         // Clear consumed data (NOT transferStatuses — extension needs them)
         AppDefaultsStore.ShareExtension.fileBookmarkData = nil
         AppDefaultsStore.ShareExtension.sharedTexts = nil
+        AppDefaultsStore.ShareExtension.selectedDevice = nil
     }
     
     private func updateTransferStatus(deviceId: String, status: String) {
