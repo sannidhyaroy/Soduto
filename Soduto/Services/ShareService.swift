@@ -230,7 +230,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         if tracking.succeeded + tracking.failed >= tracking.total {
             pendingExtensionUploads.removeValue(forKey: deviceId)
             let status = tracking.failed > 0 ? "failed" : "success"
-            reportExtensionTransferStatus(deviceId: deviceId, status: status)
+            Self.reportExtensionTransferStatus(deviceId: deviceId, status: status)
         } else {
             pendingExtensionUploads[deviceId] = tracking
         }
@@ -395,7 +395,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     }
     
     /// Reports transfer status back to the Share Extension via App Group UserDefaults + Darwin notification.
-    private func reportExtensionTransferStatus(deviceId: String, status: String) {
+    public static func reportExtensionTransferStatus(deviceId: String, status: String) {
         var statuses = AppDefaultsStore.ShareExtension.transferStatuses ?? [:]
         statuses[deviceId] = status
         AppDefaultsStore.ShareExtension.transferStatuses = statuses
