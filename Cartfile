@@ -1,5 +1,4 @@
 github "sannidhyaroy/CleanroomLogger" "master"
 github "sannidhyaroy/CocoaAsyncSocket" "master"
 github "sannidhyaroy/NMSSH" "soduto"
-github "sannidhyaroy/Reachability.swift" "master"
 binary "https://sparkle-project.org/Carthage/Sparkle.json"
