@@ -9,7 +9,6 @@
 import Foundation
 import CocoaAsyncSocket
 import CleanroomLogger
-import Reachability
 
 public enum ConnectionError: Error {
     case InitializationAlreadyFinished
@@ -128,7 +127,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
         self.socket = GCDAsyncSocket(delegate: nil, delegateQueue: DispatchQueue.main)
         self.sslCertificates = [ hostIdentity ]
         self.state = .Initializing
-
+        
         super.init()
         
         self.socket.delegate = self
@@ -213,7 +212,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     // MARK: Public API
     
     /// Try sending a packed with completion handler. Returns false if sending is declined because of capacity exceeded.
-    /// In such case the sender may try resending the packet when connection capacity changes. In other cases 
+    /// In such case the sender may try resending the packet when connection capacity changes. In other cases
     /// true is returned even if sending does not succeed - sending failure is reported through completion handler.
     public func send(_ dataPacket: DataPacket, whenCompleted: SendingCompletionHandler? = nil) -> Bool {
         if dataPacket.hasPayload() {
@@ -238,7 +237,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
         self.readNextPacket()
     }
     
-    /// Discard and return unsent packets, so that they can be resent with other connection. This can be done only when 
+    /// Discard and return unsent packets, so that they can be resent with other connection. This can be done only when
     /// connection is already closed, otherwise behaviour is undefined
     public func reclaimUnsentPackets() -> [(dataPacket: DataPacket, completionHandler: SendingCompletionHandler?)] {
         assert(self.state == .Closed)
@@ -329,7 +328,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
                 Log.error?.message("Could not deserialize received data packet")
             }
         }
-    
+        
         if self.packetsExpected != 0 {
             self.readNextPacket()
         }
@@ -345,7 +344,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     
     public func socketDidDisconnect(_ sock: GCDAsyncSocket, withError err: Error?) {
         Log.debug?.message("socketDidDisconnect(<\(sock)> withError:<\(String(describing: err))>)")
-    
+        
         // Execute state change before packets dicarding, so that delegate could reclaim unsent packets
         self.state = .Closed
         
@@ -430,7 +429,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
         assert(self.state == .Open, "Connection expected to be open")
         self.pairingHandler!.updatePairingStatus(globalStatus: globalStatus)
     }
-
+    
     
     // MARK: CustomStringConvertible
     
@@ -601,10 +600,8 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
                 strongSelf.delegate?.connectionCapacityChanged(strongSelf)
             }
         }
-        NotificationCenter.default.addObserver(forName: Notification.Name.reachabilityChanged, object: nil, queue: nil) { [weak self] notification in
-            if let reachability = notification.object as? Reachability, reachability.connection != .none {
-                self?.sendKeepAlivePacket()
-            }
+        NotificationCenter.default.addObserver(forName: ConnectionProvider.networkBecameReachableNotification, object: nil, queue: nil) { [weak self] _ in
+            self?.sendKeepAlivePacket()
         }
     }
     
@@ -638,5 +635,5 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
             return DispatchQueue(label: label, qos: DispatchQoS.background)
         }
     }
-
+    
 }

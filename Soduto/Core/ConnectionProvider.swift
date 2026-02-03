@@ -10,7 +10,7 @@ import Foundation
 import Cocoa
 import CocoaAsyncSocket
 import CleanroomLogger
-import Reachability
+import Network
 
 enum ConnectionProviderError: Error {
     case IdentityAbsent
@@ -29,11 +29,13 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     static public let minVersionWithSSLSupport: UInt = 6
     static public let minAnnouncementInterval: TimeInterval = 30.0
     static public let broadcastAnnouncementNotification: Notification.Name = Notification.Name(rawValue: "com.soduto.ConnectionProvider.broadcastAnnouncement")
+    static public let networkBecameReachableNotification: Notification.Name = Notification.Name(rawValue: "com.soduto.ConnectionProvider.networkBecameReachable")
     
     public weak var delegate: ConnectionProviderDelegate? = nil
     
     private let config: ConnectionConfiguration
-    private let reachability: Reachability? = Reachability()
+    private let pathMonitor: NWPathMonitor = NWPathMonitor()
+    private let pathMonitorQueue: DispatchQueue = DispatchQueue(label: "com.soduto.NetworkMonitor")
     private let udpSocket: GCDAsyncUdpSocket = GCDAsyncUdpSocket(delegate: nil, delegateQueue: DispatchQueue.main)
     private let tcpSocket: GCDAsyncSocket = GCDAsyncSocket(delegate: nil, delegateQueue: DispatchQueue.main)
     private var pendingConnections: Set<Connection> = Set<Connection>()
@@ -48,14 +50,16 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
         
         super.init()
         
-        self.reachability?.whenReachable =  { [unowned self] _ in self.becameReachable() }
-        self.reachability?.whenUnreachable =  { [unowned self] _ in self.becameUnreachable() }
-        do {
-            try self.reachability?.startNotifier()
+        self.pathMonitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                if path.status == .satisfied {
+                    self?.becameReachable()
+                } else {
+                    self?.becameUnreachable()
+                }
+            }
         }
-        catch {
-            Log.error?.message("Failed to start monitoring network reachability: \(error)")
-        }
+        self.pathMonitor.start(queue: self.pathMonitorQueue)
         self.udpSocket.setDelegate(self)
         self.tcpSocket.delegate = self
         
@@ -63,6 +67,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     }
     
     deinit {
+        self.pathMonitor.cancel()
         NotificationCenter.default.removeObserver(self)
     }
     
@@ -292,6 +297,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     
     private func becameReachable() {
         Log.debug?.message("Became reachable")
+        NotificationCenter.default.post(name: ConnectionProvider.networkBecameReachableNotification, object: self)
         self.restart()
     }
     
