@@ -33,6 +33,8 @@
 		312674C92F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312674C82F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift */; };
 		312674CD2F2CE5C700D68B2C /* DeviceScrubberItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
+		3152C3F32F353AFA005152CB /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Log.swift */; };
+		3152C3F52F353B1E005152CB /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Log.swift */; };
 		31711BA82F17435000E3B9FE /* MPRISService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BA72F17435000E3B9FE /* MPRISService.swift */; };
 		31711BAC2F17638000E3B9FE /* ImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BAB2F17638000E3B9FE /* ImageLoader.swift */; };
 		31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
@@ -266,6 +268,8 @@
 		312674C82F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShareExtensionController+TouchBar.swift"; sourceTree = "<group>"; };
 		312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceScrubberItemView.swift; sourceTree = "<group>"; };
 		312E76FD2938A93F00F29BFA /* Messages.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messages.png; sourceTree = "<group>"; };
+		3152C3F22F353AFA005152CB /* Log.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
+		3152C3F42F353B1E005152CB /* Log.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
 		31711BA72F17435000E3B9FE /* MPRISService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MPRISService.swift; sourceTree = "<group>"; };
 		31711BAB2F17638000E3B9FE /* ImageLoader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImageLoader.swift; sourceTree = "<group>"; };
 		31864DCE293C3CE100334902 /* SharedUserDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUserDefaults.swift; sourceTree = SOURCE_ROOT; };
@@ -594,6 +598,7 @@
 				84FA45E51DDDE87F00EF3992 /* AppDelegate.swift */,
 				8438A9251E45145F00922155 /* StatusBarApplication.swift */,
 				31864DCE293C3CE100334902 /* SharedUserDefaults.swift */,
+				3152C3F22F353AFA005152CB /* Log.swift */,
 				843301651D2D8CB8008934BB /* Assets.xcassets */,
 				312E770B2938AB7400F29BFA /* App Icons */,
 				8456F4A41D7DE31A006EFE19 /* Core */,
@@ -674,6 +679,7 @@
 				31711BAB2F17638000E3B9FE /* ImageLoader.swift */,
 				845BC7131E69F00E00DC9B81 /* Info.plist */,
 				8440FD061E6CA6CA00E5BFA9 /* LocalFileSystem.swift */,
+				3152C3F42F353B1E005152CB /* Log.swift */,
 				845BC7101E69F00E00DC9B81 /* MainMenu.xib */,
 				84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */,
 				84C545F71EABECDE005A8107 /* Soduto-Files-Bridging-Header.h */,
@@ -1120,6 +1126,7 @@
 				843B670C1DF3087800289EC9 /* URL.swift in Sources */,
 				8492379D1DE1C55900D95BBA /* DeviceMenu.swift in Sources */,
 				0223974F1F0908FB00B0C70A /* TextFieldWithLinks.swift in Sources */,
+				3152C3F32F353AFA005152CB /* Log.swift in Sources */,
 				8499620E1D5728EE002B893A /* Test_Assertions.m in Sources */,
 				8421A8E71D761409008AC833 /* PreferencesWindowController.swift in Sources */,
 				849237991DE06EBC00D95BBA /* ServiceAction.swift in Sources */,
@@ -1162,6 +1169,7 @@
 				84C545E01EABC14E005A8107 /* SftpFileSystem.swift in Sources */,
 				849927831E6C5CD600AF8CF4 /* FileItem.swift in Sources */,
 				84A16BE01E9EBADD00DE2C0B /* Sequence.swift in Sources */,
+				3152C3F52F353B1E005152CB /* Log.swift in Sources */,
 				845BE2E91EC2626E00F3BD62 /* CollectionView.swift in Sources */,
 				0236B63D1F9936C80020DA9F /* AboutWindowController.swift in Sources */,
 				845BC72A1E6A0CF100DC9B81 /* IconItemView.swift in Sources */,
