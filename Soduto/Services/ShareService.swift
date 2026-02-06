@@ -126,9 +126,19 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
                 self.downloadFile(fileName, usingTask: downloadTask, from: device)
             }
             else if let text = try dataPacket.getText() {
-                let directory = NSTemporaryDirectory()
+                let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
                 let fileName = try dataPacket.getFilename() ?? "\(UUID().uuidString).txt"
-                let fullURL = URL(fileURLWithPath: fileName, relativeTo: URL(fileURLWithPath: directory, isDirectory: true))
+                
+                // Sanitize filename by extracting only the last path component to prevent path traversal attacks
+                let sanitizedFileName = URL(fileURLWithPath: "").appendingPathComponent(fileName, isDirectory: false).lastPathComponent
+                let fullURL = directory.appendingPathComponent(sanitizedFileName, isDirectory: false)
+                
+                // Verify the resolved path is still within the temp directory
+                guard fullURL.path.hasPrefix(directory.path) else {
+                    Logger.services.error("Rejected text file with suspicious filename: \(fileName, privacy: .public)")
+                    return false
+                }
+                
                 try text.write(to: fullURL, atomically: true, encoding: .utf8)
                 NSWorkspace.shared.open(fullURL)
             }
