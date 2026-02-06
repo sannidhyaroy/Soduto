@@ -7,7 +7,7 @@
 //
 
 import Foundation
-import CleanroomLogger
+import os
 
 public class CertificateUtils {
     
@@ -104,7 +104,7 @@ public class CertificateUtils {
             throw CertificateError.addCertificateFailure(error: NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: nil))
         }
         else if status == errSecDuplicateItem {
-            Log.error?.message("Could not add the certificate because that item is already added")
+            Logger.config.error("Could not add the certificate because that item is already added")
         }
         
         status = SecCertificateSetPreferred(certificate, name as CFString, nil)
@@ -114,7 +114,7 @@ public class CertificateUtils {
             throw CertificateError.addCertificateFailure(error: NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: nil))
         }
         else if status == errSecDuplicateItem {
-            Log.error?.message("Could not set certificate preference because it is already set")
+            Logger.config.error("Could not set certificate preference because it is already set")
         }
     }
     
@@ -179,7 +179,7 @@ public class CertificateUtils {
         ]
         let values = SecCertificateCopyValues(certificate, oids as CFArray?, nil) as? [String:[String:AnyObject]]
         return relativeTime(forOID: kSecOIDX509V1ValidityNotAfter, values: values) >= 0.0
-            && relativeTime(forOID: kSecOIDX509V1ValidityNotBefore, values: values) <= 0.0
+        && relativeTime(forOID: kSecOIDX509V1ValidityNotBefore, values: values) <= 0.0
     }
     
     
@@ -257,26 +257,26 @@ public class CertificateUtils {
     }
     
     private class func generateRSAKeyPair(sizeInBits: Int, permanent: Bool, label: String) throws -> (SecKey, SecKey) {
-        #if os(iOS)
-            let keyAttrs: [String: AnyObject] = [
-                kSecAttrIsPermanent as String: permanent as AnyObject,
-                kSecAttrLabel as String: label as AnyObject
-            ]
-            let pairAttrs: [String: AnyObject] = [
-                kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-                kSecAttrKeySizeInBits as String: sizeInBits as AnyObject,
-                kSecAttrLabel as String: label as AnyObject,
-                kSecPublicKeyAttrs as String: keyAttrs as AnyObject,
-                kSecPrivateKeyAttrs as String: keyAttrs as AnyObject
-            ]
-        #else
-            let pairAttrs: [String: AnyObject] = [
-                kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-                kSecAttrKeySizeInBits as String: sizeInBits as AnyObject,
-                kSecAttrLabel as String: label as AnyObject,
-                kSecAttrIsPermanent as String: permanent as AnyObject
-            ]
-        #endif
+#if os(iOS)
+        let keyAttrs: [String: AnyObject] = [
+            kSecAttrIsPermanent as String: permanent as AnyObject,
+            kSecAttrLabel as String: label as AnyObject
+        ]
+        let pairAttrs: [String: AnyObject] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeySizeInBits as String: sizeInBits as AnyObject,
+            kSecAttrLabel as String: label as AnyObject,
+            kSecPublicKeyAttrs as String: keyAttrs as AnyObject,
+            kSecPrivateKeyAttrs as String: keyAttrs as AnyObject
+        ]
+#else
+        let pairAttrs: [String: AnyObject] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeySizeInBits as String: sizeInBits as AnyObject,
+            kSecAttrLabel as String: label as AnyObject,
+            kSecAttrIsPermanent as String: permanent as AnyObject
+        ]
+#endif
         var publicKey: SecKey? = nil
         var privateKey: SecKey? = nil
         let status = SecKeyGeneratePair(pairAttrs as CFDictionary, &publicKey, &privateKey)
@@ -332,7 +332,7 @@ public class CertificateUtils {
             throw error
         }
     }
-
+    
 }
 
 extension SecIdentity {

@@ -8,7 +8,7 @@
 
 import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 import UserNotifications
 
 /// Service providing capability to send end receive files, links, etc
@@ -118,7 +118,11 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         
         guard dataPacket.isSharePacket else { return false }
         
-        Log.debug?.message("handleDataPacket(<\(dataPacket)> fromDevice:<\(device)> onConnection:<\(connection)>)");
+#if DEBUG
+        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)")
+#else
+        Logger.services.debug("handleDataPacket(type: \(dataPacket.type, privacy: .public), id: \(dataPacket.id, privacy: .public)) from device: \(device.id, privacy: .public)")
+#endif
         
         do {
             if let downloadTask = dataPacket.downloadTask {
@@ -126,9 +130,19 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
                 self.downloadFile(fileName, usingTask: downloadTask, from: device)
             }
             else if let text = try dataPacket.getText() {
-                let directory = NSTemporaryDirectory()
+                let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
                 let fileName = try dataPacket.getFilename() ?? "\(UUID().uuidString).txt"
-                let fullURL = URL(fileURLWithPath: fileName, relativeTo: URL(fileURLWithPath: directory, isDirectory: true))
+                
+                // Sanitize filename by extracting only the last path component to prevent path traversal attacks
+                let sanitizedFileName = URL(fileURLWithPath: "").appendingPathComponent(fileName, isDirectory: false).lastPathComponent
+                let fullURL = directory.appendingPathComponent(sanitizedFileName, isDirectory: false)
+                
+                // Verify the resolved path is still within the temp directory
+                guard fullURL.path.hasPrefix(directory.path) else {
+                    Logger.services.error("Rejected text file with suspicious filename: \(fileName, privacy: .public)")
+                    return false
+                }
+                
                 try text.write(to: fullURL, atomically: true, encoding: .utf8)
                 NSWorkspace.shared.open(fullURL)
             }
@@ -136,11 +150,11 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
                 NSWorkspace.shared.open(url)
             }
             else {
-                Log.error?.message("Unknown shared content")
+                Logger.services.error("Unknown shared content")
             }
         }
         catch {
-            Log.error?.message("Error while handling share packet: \(error)")
+            Logger.services.error("Error while handling share packet: \(error, privacy: .public)")
         }
         
         return true
@@ -240,7 +254,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     // MARK: DownloadTaskDelegate
     
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
-        Log.debug?.message("downloadTask(<\(task)> finishedWithSuccess:<\(success)>)")
+        Logger.services.debug("downloadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         guard let index = self.downloadInfos.firstIndex(where: { $0.task === task }) else { return }
         let info = self.downloadInfos.remove(at: index)
@@ -368,7 +382,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
             return .fileUploadQueued
         } else if url.isFileURL {
             // Directory, unreadable file, etc. — nothing to send
-            Log.error?.message("Cannot share file URL (unsupported content type): \(url)")
+            Logger.services.error("Cannot share file URL (unsupported content type): \(url, privacy: .public)")
             return .skipped
         } else {
             let dataPacket = self.dataPacket(forUrl: url)
@@ -414,7 +428,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
             let attr = try FileManager.default.attributesOfItem(atPath: path)
             fileSize = attr[FileAttributeKey.size] as? Int64
         } catch {
-            Log.error?.message("Failed to get file information: \(error)")
+            Logger.services.error("Failed to get file information: \(error, privacy: .public)")
         }
         
         return fileSize

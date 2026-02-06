@@ -8,7 +8,7 @@
 
 import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 
 /// RunCommand service data packet utilities
 fileprivate extension DataPacket {
@@ -96,9 +96,9 @@ public class RunCommandService: Service {
                 // Handle received command list
                 if let commandList = try dataPacket.getCommandList() {
                     self.remoteCommands[device.id] = commandList
-                    Log.debug?.message("Received command list from \(device.name)")
+                    Logger.services.debug("Received command list from \(device.name, privacy: .public)")
                 }
-            } 
+            }
             else if dataPacket.isRunCommandRequestPacket {
                 // Handle command execution request
                 if let key = try dataPacket.getRequestKey() {
@@ -111,7 +111,7 @@ public class RunCommandService: Service {
             }
         }
         catch {
-            Log.error?.message("Error handling run command packet: \(error)")
+            Logger.services.error("Error handling run command packet: \(error, privacy: .public)")
         }
         
         return true
@@ -147,7 +147,7 @@ public class RunCommandService: Service {
         var actions: [ServiceAction] = []
         
         guard device.incomingCapabilities.contains(DataPacket.runCommandRequestPacketType) else { return actions }
-
+        
         actions.append(ServiceAction(
             id: ActionId.runCommand.rawValue,
             title: "Run Command",
@@ -172,15 +172,15 @@ public class RunCommandService: Service {
                 hasCommands = true
                 for (uuid, commandInfo) in deviceCommands {
                     guard let name = commandInfo["name"] else { continue }
-
+                    
                     let item = NSMenuItem(title: name, action: #selector(runCommandMenuItemClicked(_:)), keyEquivalent: "")
                     item.target = self
                     item.representedObject = (uuid: uuid, device: device)
                     menu.addItem(item)
                 }
             }
-        } 
-
+        }
+        
         if !hasCommands {
             let item = NSMenuItem(title: "No commands configured", action: nil, keyEquivalent: "")
             item.isEnabled = false
@@ -202,7 +202,7 @@ public class RunCommandService: Service {
         guard let commands = getLocalCommands() else { return }
         
         if let commandData = commands.first(where: { $0.uuid == key }) {
-            Log.debug?.message("Executing command: \(commandData.name)")
+            Logger.services.debug("Executing command: \(commandData.name, privacy: .public)")
             
             let task = Process()
             task.launchPath = "/bin/sh"
@@ -216,10 +216,10 @@ public class RunCommandService: Service {
                 try task.run()
                 task.waitUntilExit()
             } catch {
-                Log.error?.message("Error executing command: \(error)")
+                Logger.services.error("Error executing command: \(error, privacy: .public)")
             }
         } else {
-            Log.error?.message("Command with key \(key) not found")
+            Logger.services.error("Command with key \(key, privacy: .public) not found")
         }
     }
     

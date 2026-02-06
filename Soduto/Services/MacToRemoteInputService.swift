@@ -8,7 +8,7 @@
 
 import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 
 public class MacToRemoteInputService: Service {
     
@@ -98,7 +98,7 @@ public class MacToRemoteInputService: Service {
         case ActionId.stopInputCapturing.rawValue:
             stopCapturing()
         default:
-            Log.warning?.message("Unknown action id: \(id)")
+            Logger.services.notice("Unknown action id: \(id, privacy: .public)")
         }
     }
     
@@ -108,7 +108,7 @@ public class MacToRemoteInputService: Service {
         guard !isCapturing else { return }
         guard device.pairingStatus == .Paired else { return }
         
-        Log.info?.message("Starting input capture for device: \(device.name)")
+        Logger.services.info("Starting input capture for device: \(device.name, privacy: .public)")
         
         targetDevice = device
         isCapturing = true
@@ -145,7 +145,7 @@ public class MacToRemoteInputService: Service {
         // Check if we're already stopped to avoid double-cleanup
         guard isCapturing else { return }
         
-        Log.info?.message("Stopping input capture")
+        Logger.services.info("Stopping input capture")
         
         // Set isCapturing to false first to prevent any further events from being processed
         isCapturing = false
@@ -178,7 +178,7 @@ public class MacToRemoteInputService: Service {
         // Hide HUD last, after all other cleanup is done
         hideHUD()
         
-        Log.info?.message("Input capture stopped successfully")
+        Logger.services.info("Input capture stopped successfully")
     }
     
     // MARK: - Cursor Management
@@ -230,7 +230,7 @@ public class MacToRemoteInputService: Service {
         let eventMask = createEventMask()
         
         guard let tap = createTap(withEventMask: eventMask) else {
-            Log.error?.message("Failed to create event tap")
+            Logger.services.error("Failed to create event tap")
             return
         }
         
@@ -272,7 +272,7 @@ public class MacToRemoteInputService: Service {
             place: .headInsertEventTap,      // Insert at the beginning of the event chain
             options: .defaultTap,            // Allow us to modify and block events
             eventsOfInterest: eventMask,     // Use kCGEventMaskForAllEvents from createEventMask()
-            callback: eventTapCallback, 
+            callback: eventTapCallback,
             userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         )
     }
@@ -360,7 +360,7 @@ public class MacToRemoteInputService: Service {
         let accessEnabled = AXIsProcessTrustedWithOptions(options)
         
         if !accessEnabled {
-            Log.warning?.message("Accessibility permissions not granted. Prompting user.")
+            Logger.services.notice("Accessibility permissions not granted. Prompting user.")
             
             // Show an alert explaining why we need accessibility permissions
             DispatchQueue.main.async {
@@ -382,7 +382,7 @@ public class MacToRemoteInputService: Service {
                 completion(false)
             }
         } else {
-            Log.info?.message("Accessibility permissions already granted.")
+            Logger.services.info("Accessibility permissions already granted.")
             completion(true)
         }
     }
@@ -408,14 +408,14 @@ public class MacToRemoteInputService: Service {
                 // For Escape key events, check if Option is pressed or was recently pressed
                 if event.type == .keyDown {
                     if event.modifierFlags.contains(.option) || self.optionKeyPressed {
-                        Log.debug?.message("Global Option+Escape detected, stopping capture")
+                        Logger.services.debug("Global Option+Escape detected, stopping capture")
                         DispatchQueue.main.async {
                             self.stopCapturing()
                         }
                     }
                 } else if event.type == .keyUp {
                     if event.modifierFlags.contains(.option) || self.optionKeyPressed {
-                        Log.debug?.message("Global Option+Escape key-up detected")
+                        Logger.services.debug("Global Option+Escape key-up detected")
                     }
                 }
             }
@@ -435,14 +435,14 @@ public class MacToRemoteInputService: Service {
             
             if isCurrentlyPressed && !wasPreviouslyPressed {
                 self.optionKeyPressed = true
-                Log.debug?.message("Option key pressed (global monitor)")
+                Logger.services.debug("Option key pressed (global monitor)")
                 
                 // Record the timestamp of the Option press for time-based detection
                 self.lastOptionKeyTime = Date().timeIntervalSince1970
-            } 
+            }
             else if !isCurrentlyPressed && wasPreviouslyPressed {
                 self.optionKeyPressed = false
-                Log.debug?.message("Option key released (global monitor)")
+                Logger.services.debug("Option key released (global monitor)")
             }
             
             // Note: Global monitors can't block events, they're observation only
@@ -464,10 +464,10 @@ public class MacToRemoteInputService: Service {
                 
                 if self.optionKeyPressed && !wasOptionPressed {
                     // Option key was just pressed
-                    Log.debug?.message("Option key pressed (high priority monitor)")
+                    Logger.services.debug("Option key pressed (high priority monitor)")
                 } else if !self.optionKeyPressed && wasOptionPressed {
                     // Option key was just released
-                    Log.debug?.message("Option key released (high priority monitor)")
+                    Logger.services.debug("Option key released (high priority monitor)")
                 }
                 
                 // CRITICAL: Always block ALL flagsChanged during capture to prevent modifiers
@@ -480,14 +480,14 @@ public class MacToRemoteInputService: Service {
                 // Check for direct Option+Escape or Option followed by Escape
                 if event.modifierFlags.contains(.option) || self.optionKeyPressed {
                     if event.type == .keyDown {
-                        Log.debug?.message("Option+Escape detected by high priority monitor, stopping capture")
+                        Logger.services.debug("Option+Escape detected by high priority monitor, stopping capture")
                         
                         // Schedule stop on main thread
                         DispatchQueue.main.async {
                             self.stopCapturing()
                         }
                     } else {
-                        Log.debug?.message("Option+Escape key-up detected and blocked")
+                        Logger.services.debug("Option+Escape key-up detected and blocked")
                     }
                     
                     // CRITICAL: Never allow Option+Escape to pass through
@@ -502,9 +502,9 @@ public class MacToRemoteInputService: Service {
         // 5. Finally set up the standard event monitor for all other input events
         // This is registered last, so it runs before the escape monitors above
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [
-            .keyDown, .keyUp, .flagsChanged, 
-            .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, 
-            .otherMouseDown, .otherMouseUp
+            .keyDown, .keyUp, .flagsChanged,
+                .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+                .otherMouseDown, .otherMouseUp
         ]) { [weak self] event in
             guard let self = self, self.isCapturing else { return event }
             
@@ -513,7 +513,7 @@ public class MacToRemoteInputService: Service {
             
             // First check if this is an Option+Escape event using our dedicated helper
             if self.isOptionEscapeCombo(event) {
-                Log.debug?.message("Option+Escape caught by fallback monitor - CRITICAL SAFETY NET")
+                Logger.services.debug("Option+Escape caught by fallback monitor - CRITICAL SAFETY NET")
                 
                 // Only trigger stop on key down
                 if event.type == .keyDown {
@@ -530,18 +530,18 @@ public class MacToRemoteInputService: Service {
             if event.type == .flagsChanged {
                 // Track option key state as backup
                 self.optionKeyPressed = event.modifierFlags.contains(.option)
-                Log.debug?.message("Option key state: \(self.optionKeyPressed ? "pressed" : "released") (fallback)")
+                Logger.services.debug("Option key state: \(self.optionKeyPressed ? "pressed" : "released", privacy: .public) (fallback)")
                 
                 // Prevent ALL modifier key events from reaching applications during capture
                 // This is critical to ensure modifiers don't affect background applications
                 return nil
-            } 
+            }
             
             // Extra check specifically for Escape key
             if event.keyCode == 53 {
                 // If we already know Option is pressed, this is definitely Option+Escape
                 if self.optionKeyPressed {
-                    Log.debug?.message("Option+Escape intercepted via separate key events (fallback)")
+                    Logger.services.debug("Option+Escape intercepted via separate key events (fallback)")
                     
                     if event.type == .keyDown {
                         DispatchQueue.main.async {
@@ -713,13 +713,13 @@ public class MacToRemoteInputService: Service {
         
         // Strategy 1: Direct detection - Escape key with Option modifier flag
         if event.keyCode == 53 && event.modifierFlags.contains(.option) {
-            Log.debug?.message("Option+Escape combo detected (direct modifier flags)")
+            Logger.services.debug("Option+Escape combo detected (direct modifier flags)")
             return true
         }
         
         // Strategy 2: State-based detection - Escape key press while Option is being tracked as pressed
         if event.keyCode == 53 && optionKeyPressed {
-            Log.debug?.message("Option+Escape combo detected (tracked option state)")
+            Logger.services.debug("Option+Escape combo detected (tracked option state)")
             return true
         }
         
@@ -727,7 +727,7 @@ public class MacToRemoteInputService: Service {
         if event.keyCode == 53 && lastOptionKeyTime > 0 {
             let timeSinceOption = currentTime - lastOptionKeyTime
             if timeSinceOption < optionEscapeTimeWindow {
-                Log.debug?.message("Option+Escape combo detected (time-based: \(timeSinceOption)s)")
+                Logger.services.debug("Option+Escape combo detected (time-based: \(timeSinceOption, privacy: .public)s)")
                 return true
             }
         }
@@ -750,7 +750,7 @@ public class MacToRemoteInputService: Service {
     
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
         guard isCapturing, let device = targetDevice else { return false }
-
+        
         let shift = event.modifierFlags.contains(.shift)
         let ctrl = event.modifierFlags.contains(.control)
         let alt = event.modifierFlags.contains(.option)
@@ -758,7 +758,7 @@ public class MacToRemoteInputService: Service {
         // Always check for Option+Escape combination as highest priority
         // This is our final line of defense against the combo reaching apps
         if isOptionEscapeCombo(event) {
-            Log.debug?.message("Option+Escape intercepted in handleKeyEvent, stopping capture")
+            Logger.services.debug("Option+Escape intercepted in handleKeyEvent, stopping capture")
             
             // We only want to trigger stopCapturing on keyDown events, not keyUp
             if event.type == .keyDown {
@@ -794,12 +794,12 @@ public class MacToRemoteInputService: Service {
                 // Record the time and state of the option key press
                 lastOptionKeyTime = Date().timeIntervalSince1970
                 optionKeyPressed = true
-                Log.debug?.message("Option key detected (keyEvent handler)")
+                Logger.services.debug("Option key detected (keyEvent handler)")
             } else if optionKeyPressed {
                 // Option key was released
                 lastOptionKeyTime = 0
                 optionKeyPressed = false
-                Log.debug?.message("Option key released (keyEvent handler)")
+                Logger.services.debug("Option key released (keyEvent handler)")
             }
             
             // Always consume flagsChanged events while capturing is active
@@ -1074,7 +1074,7 @@ public class MacToRemoteInputService: Service {
             // Clear our reference - the window should be deallocated if no other references exist
             self.hudWindow = nil
             
-            Log.info?.message("HUD window safely hidden and reference cleared")
+            Logger.services.info("HUD window safely hidden and reference cleared")
         }
     }
     
@@ -1087,8 +1087,8 @@ public class MacToRemoteInputService: Service {
         let service = Unmanaged<MacToRemoteInputService>.fromOpaque(refcon).takeUnretainedValue()
         
         // Only process events if we're capturing input
-        guard service.isCapturing, let device = service.targetDevice else { 
-            return Unmanaged.passUnretained(event) 
+        guard service.isCapturing, let device = service.targetDevice else {
+            return Unmanaged.passUnretained(event)
         }
         
         // Make sure our event tap stays enabled
@@ -1188,7 +1188,7 @@ public class MacToRemoteInputService: Service {
         case .tabletPointer, .tabletProximity:
             // Handle tablet/touchpad events
             // Block these tablet/touch events which could be gesture-related
-            Log.debug?.message("Blocked tablet event: \(eventType.rawValue)")
+            Logger.services.debug("Blocked tablet event: \(eventType.rawValue, privacy: .public)")
             return nil
             
         case .keyDown, .keyUp:
@@ -1205,7 +1205,7 @@ public class MacToRemoteInputService: Service {
                 if optionPressed || service.optionKeyPressed {
                     // If key down event, trigger stop capturing
                     if type == .keyDown {
-                        Log.debug?.message("Option+Escape caught by event tap, stopping capture")
+                        Logger.services.debug("Option+Escape caught by event tap, stopping capture")
                         DispatchQueue.main.async {
                             service.stopCapturing()
                         }
@@ -1220,7 +1220,7 @@ public class MacToRemoteInputService: Service {
             return nil
             
         case .flagsChanged:
-            // Track Option key state at a low level 
+            // Track Option key state at a low level
             let flags = event.flags
             let optionPressed = (flags.rawValue & CGEventFlags.maskAlternate.rawValue) != 0
             service.optionKeyPressed = optionPressed
@@ -1231,7 +1231,7 @@ public class MacToRemoteInputService: Service {
         default:
             // Since we're using a mask that captures all event types, block anything else
             // This ensures we block all events we don't explicitly handle from reaching macOS
-            Log.debug?.message("Blocked unhandled event type: \(eventType.rawValue)")
+            Logger.services.debug("Blocked unhandled event type: \(eventType.rawValue, privacy: .public)")
             return nil
         }
     }

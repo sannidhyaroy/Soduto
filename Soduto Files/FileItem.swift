@@ -8,7 +8,7 @@
 
 import Foundation
 import AppKit
-import CleanroomLogger
+import os
 
 public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
     
@@ -24,7 +24,7 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
         public static let isBusy = Flags(rawValue: 1 << 4)    // Indicates, that there is pending operation on the item
         public static let isDeleted = Flags(rawValue: 1 << 5) // Indicates that item is already deleted and this is just a placeholder
     }
-
+    
     
     public let url: URL
     @objc public let name: String
@@ -34,7 +34,7 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
     public var dynamicFlags: Flags = []
     @objc dynamic public let modate: Date?
     @objc dynamic public var ext: String {
-      return self.url.pathExtension
+        return self.url.pathExtension
     }
     
     public var flags: Flags { return self.staticFlags.union(self.dynamicFlags) }
@@ -73,7 +73,7 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
                 self.init(url: url, name: name, icon: icon, flags: flags, fileSize: fileSize, modate: modate)
             }
             catch {
-                Log.error?.message("Failed retrieving file resource information for url [\(url)]: \(error)")
+                Logger.filesystem.error("Failed retrieving file resource information for url [\(url, privacy: .public)]: \(error, privacy: .public)")
                 let name = url.lastPathComponent
                 var flags: Flags = []
                 if url.hasDirectoryPath { flags.insert(.isDirectory) }
@@ -91,10 +91,10 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
             let fileType: String = flags.contains(.isDirectory) ? String(kUTTypeDirectory) : url.pathExtension
             let icon = flags.contains(.isDirectory) ? NSWorkspace.shared.icon(forFileType: kUTTypeFolder as String) : NSWorkspace.shared.icon(forFileType: fileType)
             self.init(url: url, name: name, icon: icon, flags: flags, fileSize: 0, modate: nil)
-
+            
         }
     }
-
+    
     
     // MARK: NSPasteboardWriting
     
@@ -143,7 +143,7 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
         }
     }
     
-
+    
     // MARK: NSPasteboardReading
     
     public static func readableTypes(for pasteboard: NSPasteboard) -> [NSPasteboard.PasteboardType] {

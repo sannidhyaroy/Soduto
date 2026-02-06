@@ -8,7 +8,7 @@
 
 import Foundation
 import CocoaAsyncSocket
-import CleanroomLogger
+import os
 
 public protocol DownloadTaskDelegate: AnyObject {
     func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool)
@@ -122,7 +122,7 @@ public class DownloadTask: NSObject, GCDAsyncSocketDelegate {
             }
             
             if let error = err, !finished {
-                Log.error?.message("Download socket disconnected with error: \(error)")
+                Logger.network.error("Download socket disconnected with error: \(error, privacy: .public)")
             }
             
             self.downloadFinished(success: finished)
@@ -174,7 +174,7 @@ public class DownloadTask: NSObject, GCDAsyncSocketDelegate {
                 bytesToWrite = data.count - batchBytesWritten
             }
             guard bytesToWrite > 0 else { break }
-
+            
             let written = data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) -> Int in
                 guard let baseAddress = buffer.baseAddress else { return 0 }
                 let ptr = baseAddress.advanced(by: batchBytesWritten)

@@ -10,9 +10,7 @@ import Cocoa
 import Combine
 import SwiftUI
 import UniformTypeIdentifiers
-import os.log
-
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.soduto.Soduto.Soduto-Share", category: "ShareExtension")
+import os
 
 class ShareExtensionController: NSViewController {
     
@@ -75,9 +73,13 @@ class ShareExtensionController: NSViewController {
         
         guard let item = self.extensionContext?.inputItems.first as? NSExtensionItem else { return }
         if let attachments = item.attachments {
-            logger.debug("Attachments = \(attachments)")
+#if DEBUG
+            Logger.sharing.debug("Attachments = \(attachments, privacy: .public)")
+#else
+            Logger.sharing.debug("Attachments count: \(attachments.count, privacy: .public)")
+#endif
         } else {
-            logger.debug("No Attachments")
+            Logger.sharing.debug("No Attachments")
         }
         
         // Refresh TouchBar scrubber when device statuses change
@@ -170,11 +172,11 @@ class ShareExtensionController: NSViewController {
                     guard self != nil else { return }
                     
                     if let error = error {
-                        logger.error("Failed to load shared item: \(error.localizedDescription)")
+                        Logger.sharing.error("Failed to load shared item: \(error.localizedDescription, privacy: .public)")
                         return
                     }
                     guard let data = data as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) else {
-                        logger.error("Failed to create URL from shared data")
+                        Logger.sharing.error("Failed to create URL from shared data")
                         return
                     }
                     if let bookmark = Self.createBookmark(for: url) {
@@ -191,11 +193,11 @@ class ShareExtensionController: NSViewController {
                     guard self != nil else { return }
                     
                     if let error = error {
-                        logger.error("Failed to load shared text: \(error.localizedDescription)")
+                        Logger.sharing.error("Failed to load shared text: \(error.localizedDescription, privacy: .public)")
                         return
                     }
                     guard let text = data as? String else {
-                        logger.error("Failed to read shared text")
+                        Logger.sharing.error("Failed to read shared text")
                         return
                     }
                     lock.lock()
@@ -276,7 +278,11 @@ class ShareExtensionController: NSViewController {
         do {
             return try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
         } catch {
-            logger.error("Failed to create bookmark for \(url): \(error.localizedDescription)")
+#if DEBUG
+            Logger.sharing.error("Failed to create bookmark for \(url, privacy: .public): \(error.localizedDescription, privacy: .public)")
+#else
+            Logger.sharing.error("Failed to create bookmark for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+#endif
             return nil
         }
     }

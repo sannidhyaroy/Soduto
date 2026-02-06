@@ -73,7 +73,7 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 >  [!NOTE]
 >  If there are errors similar to the following:
 >  ```
->  *** Skipped downloading CleanroomLogger binary due to the error:
+>  *** Skipped downloading CocoaAsyncSocket binary due to the error:
 >      "Bad credentials"
 >  *** Downloading binary-only framework Sparkle at "https://sparkle-project.org/Carthage/Sparkle.json"
 >  *** Skipped downloading CocoaAsyncSocket binary due to the error:
@@ -117,16 +117,75 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 ---
 ## Debugging
 
-* To see logged messages of Release build of Soduto:
-    * Open `Console.app`
-    * On Action menu select "Include Debug Messages"
-    * In Search field enter "process:Soduto category:CleanroomLogger"
+Soduto uses Apple's Unified Logging system (`os.Logger`). Logs are organized by subsystem and categories:
 
-* To switch logging level in `Terminal.app` run command (with `<level>` being an integer between 1 and 5, 1 being the most verbose and 5 - the least):
+| Target | Subsystem | Categories |
+|--------|-----------|------------|
+| **Soduto** | `com.soduto.Soduto` | `general`, `network`, `device`, `config`, `services`, `ui` |
+| **Soduto Files** | `com.soduto.Soduto-Files` | `general`, `filesystem`, `ui` |
+| **Soduto Share** | `com.soduto.Soduto.Soduto-Share` | `general`, `sharing`, `ui` |
 
-    `defaults write com.soduto.Soduto com.soduto.logLevel -int <level>`
-    
-    It is highly recommended to enable verbose logging levels only during debugging as sensitive data may be logged in plain text (like passwords copied into a clipboard).
+### View logs in real-time:
+```bash
+# Show all messages (debug, info, notice, error) for Soduto
+log stream --predicate 'subsystem == "com.soduto.Soduto"' --level debug
+
+# Show all messages for Soduto Files
+log stream --predicate 'subsystem == "com.soduto.Soduto-Files"' --level debug
+
+# Show all messages for Soduto Share
+log stream --predicate 'subsystem == "com.soduto.Soduto.Soduto-Share"' --level debug
+
+# Show all messages from ALL Soduto components
+log stream --predicate 'subsystem BEGINSWITH "com.soduto.Soduto"' --level debug
+
+# Show only info and above (excludes debug logs) for Soduto
+log stream --predicate 'subsystem == "com.soduto.Soduto"' --level info
+```
+
+The `--level debug` flag shows messages at debug level **and above** (info, notice, error, fault).
+
+### Enable debug message persistence:
+By default, debug messages are only kept in memory and not saved to disk. To persist them:
+
+```bash
+# Enable debug persistence for main app
+sudo log config --subsystem com.soduto.Soduto --mode level:debug
+
+# Enable debug persistence for file browser
+sudo log config --subsystem com.soduto.Soduto-Files --mode level:debug
+
+# Enable debug persistence for share extension
+sudo log config --subsystem com.soduto.Soduto.Soduto-Share --mode level:debug
+```
+
+This allows you to view debug messages in Console.app after they occur. To revert to default behavior:
+
+```bash
+# Revert main app
+sudo log config --subsystem com.soduto.Soduto --mode level:default
+
+# Revert file browser
+sudo log config --subsystem com.soduto.Soduto-Files --mode level:default
+
+# Revert share extension
+sudo log config --subsystem com.soduto.Soduto.Soduto-Share --mode level:default
+```
+
+### View logs in the Console:
+- Open `Console.app`
+- In the search field, enter the subsystem for the target you want to view:
+  - `subsystem:com.soduto.Soduto` - Main app
+  - `subsystem:com.soduto.Soduto-Files` - File browser
+  - `subsystem:com.soduto.Soduto.Soduto-Share` - Share extension
+  - `subsystem BEGINSWITH com.soduto.Soduto` - All components
+- Filter by category for targeted debugging:
+  - `category:network`, `category:services`, `category:device` (main app)
+  - `category:filesystem` (file browser)
+  - `category:sharing` (share extension)
+- Enable "Include Debug Messages" in the Action menu to see debug-level logs
+
+**Warning:** Debug logging may include sensitive data (clipboard contents, passwords). Only enable its persistence during debugging and revert to default when done.
 
 ---
 ## Verifying Downloads

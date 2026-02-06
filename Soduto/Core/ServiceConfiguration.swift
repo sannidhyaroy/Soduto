@@ -47,7 +47,7 @@ public class ServiceConfiguration {
         let devicePart: String = deviceId?.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) ?? "default"
         return self.configKeyPrefix + devicePart
     }
-
+    
     private func configDictionary(forDevice deviceId: Device.Id?) -> [String:Any] {
         let key = configKey(forDevice: deviceId)
         return self.userDefaults.dictionary(forKey: key) ?? [:]

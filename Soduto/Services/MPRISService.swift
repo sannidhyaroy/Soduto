@@ -8,15 +8,15 @@
 
 import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 import MediaPlayer
 import UserNotifications
 import CommonCrypto
 
 /// MPRIS (Media Player Remote Interfacing Specification) Service
-/// 
+///
 /// This service allows for remote control of media players on connected devices.
-/// 
+///
 /// It receives packets with type "kdeconnect.mpris" containing:
 /// - playerList (array): list of available media players on the remote device
 /// - player (string): the player that sent the update
@@ -27,7 +27,7 @@ import CommonCrypto
 /// - length (int): track length in seconds
 /// - artist, title, album (string): track metadata
 /// - volume (int): player volume percentage (0-100)
-/// 
+///
 /// It sends packets with type "kdeconnect.mpris.request" containing:
 /// - requestPlayerList (boolean): request a list of players
 /// - player (string): the player to control
@@ -122,7 +122,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         
         guard dataPacket.isMprisPacket else { return false }
         
-        Log.debug?.message("MPRIS::handleDataPacket(<\(dataPacket)> fromDevice:<\(device)> onConnection:<\(connection)>)")
+        Logger.services.debug("MPRIS::handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)")
         
         do {
             if let playerList = try dataPacket.getPlayerList() {
@@ -140,7 +140,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 }
             }
         } catch {
-            Log.error?.message("MPRIS::Error handling MPRIS packet: \(error)")
+            Logger.services.error("MPRIS::Error handling MPRIS packet: \(error, privacy: .public)")
         }
         
         return true
@@ -161,7 +161,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         // Cancel any ongoing album art downloads for this device
         let downloadsToCancel = albumArtDownloadInfos.filter { $0.device.id == device.id }
         for downloadInfo in downloadsToCancel {
-            Log.debug?.message("MPRIS::Cancelling album art download for device \(device.name)")
+            Logger.services.debug("MPRIS::Cancelling album art download for device \(device.name, privacy: .public)")
             downloadInfo.task.cancel()
         }
         
@@ -197,11 +197,11 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     // MARK: DownloadTaskDelegate
     
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
-        Log.debug?.message("MPRIS::downloadTask(<\(task)> finishedWithSuccess:<\(success)>)")
+        Logger.services.debug("MPRIS::downloadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
-        guard let index = self.albumArtDownloadInfos.firstIndex(where: { $0.task === task }) else { 
-            Log.error?.message("MPRIS::Download task not found in tracking list")
-            return 
+        guard let index = self.albumArtDownloadInfos.firstIndex(where: { $0.task === task }) else {
+            Logger.services.error("MPRIS::Download task not found in tracking list")
+            return
         }
         let info = self.albumArtDownloadInfos.remove(at: index)
         
@@ -220,7 +220,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 let fileName = "\(info.playerIdentity)-albumart-\(Int(Date().timeIntervalSince1970)).\(fileExtension)"
                 
                 let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: fileName)
-                Log.debug?.message("MPRIS::Album art downloaded to: \(finalFileURL.path)")
+                Logger.services.debug("MPRIS::Album art downloaded to: \(finalFileURL.path, privacy: .public)")
                 
                 self.downloadedAlbumArtFileURLByPlayerIdentity[info.playerIdentity] = finalFileURL
                 
@@ -229,9 +229,9 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                     do {
                         let cachedFileURL = try self.copyFileToCache(url: finalFileURL, hash: fileHash)
                         self.cachedDownloadedAlbumArtFileURLByHash[fileHash] = cachedFileURL
-                        Log.debug?.message("MPRIS::Album art cached with hash \(fileHash) at \(cachedFileURL.path)")
+                        Logger.services.debug("MPRIS::Album art cached with hash \(fileHash, privacy: .public) at \(cachedFileURL.path, privacy: .public)")
                     } catch {
-                        Log.error?.message("MPRIS::Failed to cache album art: \(error)")
+                        Logger.services.error("MPRIS::Failed to cache album art: \(error, privacy: .public)")
                         // Continue even if caching fails
                     }
                 }
@@ -240,7 +240,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 if let devicePlayers = players[info.device.id] {
                     for player in devicePlayers {
                         if player.identity == info.playerIdentity {
-                            Log.debug?.message("MPRIS::Updating player \(player.identity) with downloaded album art")
+                            Logger.services.debug("MPRIS::Updating player \(player.identity, privacy: .public) with downloaded album art")
                             player.updateAlbumArt(finalFileURL)
                             break
                         }
@@ -248,10 +248,10 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 }
                 
             } catch {
-                Log.error?.message("MPRIS::Error processing downloaded album art: \(error)")
+                Logger.services.error("MPRIS::Error processing downloaded album art: \(error, privacy: .public)")
             }
         } else {
-            Log.error?.message("MPRIS::Album art download failed for player \(info.playerIdentity)")
+            Logger.services.error("MPRIS::Album art download failed for player \(info.playerIdentity, privacy: .public)")
             
             // Clean up the partial file
             do {
@@ -259,7 +259,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                     try FileManager.default.removeItem(at: info.partFileURL)
                 }
             } catch {
-                Log.error?.message("MPRIS::Failed to clean up partial file: \(error)")
+                Logger.services.error("MPRIS::Failed to clean up partial file: \(error, privacy: .public)")
             }
         }
     }
@@ -267,7 +267,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     // MARK: Private methods - Packet Handlers
     
     private func handlePlayerList(_ playerList: [String], from device: Device) {
-        Log.debug?.message("MPRIS::Handle player list \(playerList) from device \(device.name)")
+        Logger.services.debug("MPRIS::Handle player list \(playerList, privacy: .public) from device \(device.name, privacy: .public)")
         
         // Remove any players that are no longer available
         if var devicePlayers = players[device.id] {
@@ -305,12 +305,12 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     }
     
     private func handleAlbumArtTransfer(player: String, albumArtUrl: String, downloadTask: DownloadTask, from device: Device) {
-        Log.debug?.message("MPRIS::Handle album art transfer for player \(player) from device \(device.name)")
+        Logger.services.debug("MPRIS::Handle album art transfer for player \(player, privacy: .public) from device \(device.name, privacy: .public)")
         startAlbumArtDownload(player: player, albumArtUrl: albumArtUrl, downloadTask: downloadTask, from: device)
     }
     
     private func handlePlayerUpdate(player: String, packet: DataPacket, from device: Device) {
-        Log.debug?.message("MPRIS::Handle player update for \(player) from device \(device.name)")
+        Logger.services.debug("MPRIS::Handle player update for \(player, privacy: .public) from device \(device.name, privacy: .public)")
         
         guard let devicePlayers = players[device.id] else { return }
         guard let playerToUpdate = devicePlayers.first(where: { $0.identity == player }) else { return }
@@ -339,13 +339,13 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 volume: volume,
                 canPause: canPause,
                 canPlay: canPlay,
-                canGoNext: canGoNext, 
+                canGoNext: canGoNext,
                 canGoPrevious: canGoPrevious
             )
             
             // If this player is playing, set it as the last active player
             if isPlaying {
-                Log.debug?.message("MPRIS::handlePlayerUpdate - setting lastActivePlayer to: \(player)")
+                Logger.services.debug("MPRIS::handlePlayerUpdate - setting lastActivePlayer to: \(player, privacy: .public)")
                 self.lastActivePlayer = playerToUpdate
             }
             
@@ -353,19 +353,19 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
             if let albumArtUrl = albumArtUrl {
                 // Only request new album art if the URL has actually changed
                 if playerToUpdate.albumArtUrl != albumArtUrl {
-                    Log.debug?.message("MPRIS::Album art URL changed for \(player): \(albumArtUrl)")
+                    Logger.services.debug("MPRIS::Album art URL changed for \(player, privacy: .public): \(albumArtUrl, privacy: .public)")
                     playerToUpdate.albumArtUrl = albumArtUrl
                     
                     // Check if we already have this album art in cache before requesting
                     if let hash = getHashForAlbumArt(player: player, albumArtUrl: albumArtUrl),
                        let cachedFileURL = getCachedAlbumArt(hash: hash) {
-                        Log.debug?.message("MPRIS::Using cached album art for \(player)")
+                        Logger.services.debug("MPRIS::Using cached album art for \(player, privacy: .public)")
                         do {
                             let copiedFileURL = try copyFileFromCache(url: cachedFileURL, playerIdentity: player)
                             downloadedAlbumArtFileURLByPlayerIdentity[player] = copiedFileURL
                             playerToUpdate.updateAlbumArt(copiedFileURL)
                         } catch {
-                            Log.error?.message("MPRIS::Failed to use cached album art: \(error)")
+                            Logger.services.error("MPRIS::Failed to use cached album art: \(error, privacy: .public)")
                             requestAlbumArt(player: player, albumArtUrl: albumArtUrl, from: device)
                         }
                     } else {
@@ -374,7 +374,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 }
             } else if playerToUpdate.albumArtUrl != nil {
                 // Album art URL was cleared
-                Log.debug?.message("MPRIS::Album art cleared for \(player)")
+                Logger.services.debug("MPRIS::Album art cleared for \(player, privacy: .public)")
                 playerToUpdate.albumArtUrl = nil
                 playerToUpdate.albumArtImage = nil
                 playerToUpdate.updateNowPlayingInfo()
@@ -389,7 +389,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                     if let devicePlayers = players[deviceID] {
                         for otherPlayer in devicePlayers {
                             if otherPlayer !== playerToUpdate && otherPlayer.isPlaying {
-                                Log.debug?.message("MPRIS::handlePlayerUpdate - marking \(otherPlayer.identity) as not playing")
+                                Logger.services.debug("MPRIS::handlePlayerUpdate - marking \(otherPlayer.identity, privacy: .public) as not playing")
                                 otherPlayer.isPlaying = false
                             }
                         }
@@ -398,7 +398,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
             }
             
         } catch {
-            Log.error?.message("MPRIS::Error parsing player update: \(error)")
+            Logger.services.error("MPRIS::Error parsing player update: \(error, privacy: .public)")
         }
     }
     
@@ -448,34 +448,34 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         }
         
         commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
-            Log.debug?.message("MPRIS::changePlaybackPositionCommand triggered")
-            guard let activePlayer = self?.findActivePlayer() else { 
-                Log.debug?.message("MPRIS::changePlaybackPositionCommand - no active player found")
-                return .commandFailed 
+            Logger.services.debug("MPRIS::changePlaybackPositionCommand triggered")
+            guard let activePlayer = self?.findActivePlayer() else {
+                Logger.services.debug("MPRIS::changePlaybackPositionCommand - no active player found")
+                return .commandFailed
             }
             if let event = event as? MPChangePlaybackPositionCommandEvent {
                 let position = Int(event.positionTime)
-                Log.debug?.message("MPRIS::changePlaybackPositionCommand - activePlayer: \(activePlayer.identity), position: \(position)")
+                Logger.services.debug("MPRIS::changePlaybackPositionCommand - activePlayer: \(activePlayer.identity, privacy: .public), position: \(position, privacy: .public)")
                 self?.sendSetPositionCommand(to: activePlayer, position: position)
                 return .success
             }
-            Log.debug?.message("MPRIS::changePlaybackPositionCommand - invalid event type")
+            Logger.services.debug("MPRIS::changePlaybackPositionCommand - invalid event type")
             return .commandFailed
         }
     }
     
     private func findActivePlayer() -> PlayerRemote? {
-        Log.debug?.message("MPRIS::findActivePlayer() called")
+        Logger.services.debug("MPRIS::findActivePlayer() called")
         
         // First, check if we have a last active player and it's still valid (exists in players dictionary)
         if let lastPlayer = lastActivePlayer {
-            Log.debug?.message("MPRIS::findActivePlayer() - checking lastActivePlayer: \(lastPlayer.identity)")
+            Logger.services.debug("MPRIS::findActivePlayer() - checking lastActivePlayer: \(lastPlayer.identity, privacy: .public)")
             // Make sure this player still exists in the dictionary
             if let devicePlayers = players[lastPlayer.device.id], devicePlayers.contains(where: { $0 === lastPlayer }) {
-                Log.debug?.message("MPRIS::findActivePlayer() - returning lastActivePlayer: \(lastPlayer.identity)")
+                Logger.services.debug("MPRIS::findActivePlayer() - returning lastActivePlayer: \(lastPlayer.identity, privacy: .public)")
                 return lastPlayer
             } else {
-                Log.debug?.message("MPRIS::findActivePlayer() - lastActivePlayer no longer exists, clearing it")
+                Logger.services.debug("MPRIS::findActivePlayer() - lastActivePlayer no longer exists, clearing it")
                 self.lastActivePlayer = nil
             }
         }
@@ -484,9 +484,9 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         for deviceID in players.keys {
             if let devicePlayers = players[deviceID] {
                 for player in devicePlayers {
-                    Log.debug?.message("MPRIS::findActivePlayer() - checking player: \(player.identity), isPlaying: \(player.isPlaying)")
+                    Logger.services.debug("MPRIS::findActivePlayer() - checking player: \(player.identity, privacy: .public), isPlaying: \(player.isPlaying, privacy: .public)")
                     if player.isPlaying {
-                        Log.debug?.message("MPRIS::findActivePlayer() - found playing player: \(player.identity)")
+                        Logger.services.debug("MPRIS::findActivePlayer() - found playing player: \(player.identity, privacy: .public)")
                         self.lastActivePlayer = player  // Update lastActivePlayer
                         return player
                     }
@@ -497,12 +497,12 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         // If no player is playing, return the first player
         for deviceID in players.keys {
             if let devicePlayers = players[deviceID], let player = devicePlayers.first {
-                Log.debug?.message("MPRIS::findActivePlayer() - no playing player found, returning first player: \(player.identity)")
+                Logger.services.debug("MPRIS::findActivePlayer() - no playing player found, returning first player: \(player.identity, privacy: .public)")
                 return player
             }
         }
         
-        Log.debug?.message("MPRIS::findActivePlayer() - no players found, returning nil")
+        Logger.services.debug("MPRIS::findActivePlayer() - no players found, returning nil")
         return nil
     }
     
@@ -552,7 +552,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     
     private func sendSetPositionCommand(to player: PlayerRemote, position: Int) {
         let positionInMs = position * 1000
-        Log.debug?.message("MPRIS::sendSetPositionCommand() - player: \(player.identity), position: \(position)s -> \(positionInMs)ms")
+        Logger.services.debug("MPRIS::sendSetPositionCommand() - player: \(player.identity, privacy: .public), position: \(position, privacy: .public)s -> \(positionInMs, privacy: .public)ms")
         player.device.send(DataPacket.mprisSetPositionPacket(player: player.identity, position: positionInMs))
     }
     
@@ -573,13 +573,13 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     // MARK: Private methods - Album Art Download
     
     private func startAlbumArtDownload(player: String, albumArtUrl: String, downloadTask: DownloadTask, from device: Device) {
-        Log.debug?.message("MPRIS::Starting album art download for player \(player) from \(albumArtUrl)")
+        Logger.services.debug("MPRIS::Starting album art download for player \(player, privacy: .public) from \(albumArtUrl, privacy: .public)")
         
         let downloadFileHash = getHashForAlbumArt(player: player, albumArtUrl: albumArtUrl)
         
         // Check if we already have this album art cached
         if let hash = downloadFileHash, let cachedFileURL = getCachedAlbumArt(hash: hash) {
-            Log.debug?.message("MPRIS::Found cached album art for hash \(hash) at \(cachedFileURL)")
+            Logger.services.debug("MPRIS::Found cached album art for hash \(hash, privacy: .public) at \(cachedFileURL, privacy: .public)")
             do {
                 let copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedFileURL, playerIdentity: player)
                 self.downloadedAlbumArtFileURLByPlayerIdentity[player] = copiedFromCacheFileURL
@@ -595,14 +595,14 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 }
                 return
             } catch {
-                Log.error?.message("MPRIS::Failed to copy from cache: \(error)")
+                Logger.services.error("MPRIS::Failed to copy from cache: \(error, privacy: .public)")
                 // Continue with download if cache copy fails
             }
         }
         
         // Check if we already have a download in progress for this album art
         if albumArtDownloadInfos.contains(where: { $0.albumArtUrl == albumArtUrl && $0.playerIdentity == player }) {
-            Log.debug?.message("MPRIS::Album art download already in progress for \(albumArtUrl)")
+            Logger.services.debug("MPRIS::Album art download already in progress for \(albumArtUrl, privacy: .public)")
             return
         }
         
@@ -619,9 +619,9 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
             self.albumArtDownloadInfos.append(downloadInfo)
             downloadTask.delegate = self
             downloadTask.start(withStream: tempStream.transfer())
-            Log.debug?.message("MPRIS::Started download task for album art")
+            Logger.services.debug("MPRIS::Started download task for album art")
         } else {
-            Log.error?.message("MPRIS::Failed to create download stream for album art")
+            Logger.services.error("MPRIS::Failed to create download stream for album art")
         }
     }
     
@@ -651,27 +651,27 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         for attempt in 1...10000 {
             let partFileURL = URL(fileURLWithPath: temporaryDirectory).appendingPathComponent("\(UUID().uuidString).part")
             
-            Log.debug?.message("MPRIS::Attempt \(attempt): creating temp album art file at \(partFileURL.path)")
+            Logger.services.debug("MPRIS::Attempt \(attempt, privacy: .public): creating temp album art file at \(partFileURL.path, privacy: .public)")
             if FileManager.default.fileExists(atPath: partFileURL.path) {
-                Log.debug?.message("MPRIS::Temp file already exists, retrying")
+                Logger.services.debug("MPRIS::Temp file already exists, retrying")
                 continue
             }
             guard let stream = OutputStream(url: partFileURL, append: false) else {
-                Log.debug?.message("MPRIS::Failed to create OutputStream for \(partFileURL.path)")
+                Logger.services.debug("MPRIS::Failed to create OutputStream for \(partFileURL.path, privacy: .public)")
                 continue
             }
             stream.open()
             if stream.hasSpaceAvailable {
-                Log.debug?.message("MPRIS::Successfully opened writable stream at \(partFileURL.path)")
+                Logger.services.debug("MPRIS::Successfully opened writable stream at \(partFileURL.path, privacy: .public)")
                 return (TempDownloadStream(stream: stream), partFileURL)
             }
-            Log.debug?.message("MPRIS::Stream opened but not writable (status=\(stream.streamStatus.rawValue)), retrying")
+            Logger.services.debug("MPRIS::Stream opened but not writable (status=\(stream.streamStatus.rawValue, privacy: .public)), retrying")
             stream.close()
         }
-        Log.error?.message("MPRIS::Failed to create writable temp album art stream after 10000 attempts")
+        Logger.services.error("MPRIS::Failed to create writable temp album art stream after 10000 attempts")
         return nil
     }
-
+    
     private func renamePartFile(url partFileURL: URL, to fileName: String) throws -> URL {
         // Try rename file from temporary *.part name to final path based on original file name
         var finalFileURL = partFileURL.deletingLastPathComponent().appendingPathComponent(fileName)
@@ -688,7 +688,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         
         throw DataPacket.MprisError.partFileRenameFailed
     }
-
+    
     private func copyFileToCache(url fileURL: URL, hash fileHash: String) throws -> URL {
         let cacheDirURL = getCacheDirectory()
         
@@ -702,7 +702,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         
         return cacheFileURL
     }
-
+    
     private func copyFileFromCache(url fileURL: URL, playerIdentity: String) throws -> URL {
         let temporaryDirectory = NSTemporaryDirectory()
         let fileName = "\(playerIdentity)-\(UUID().uuidString).png"
@@ -725,9 +725,9 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         let cacheDirectory = getCacheDirectory()
         
         do {
-            let contents = try FileManager.default.contentsOfDirectory(at: cacheDirectory, 
-                                                                      includingPropertiesForKeys: [.contentModificationDateKey], 
-                                                                      options: [])
+            let contents = try FileManager.default.contentsOfDirectory(at: cacheDirectory,
+                                                                       includingPropertiesForKeys: [.contentModificationDateKey],
+                                                                       options: [])
             
             let cutoffDate = Date().addingTimeInterval(-7 * 24 * 60 * 60) // 7 days ago
             
@@ -735,11 +735,11 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 if let modificationDate = try fileURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
                    modificationDate < cutoffDate {
                     try FileManager.default.removeItem(at: fileURL)
-                    Log.debug?.message("MPRIS::Cleaned up old cache file: \(fileURL.lastPathComponent)")
+                    Logger.services.debug("MPRIS::Cleaned up old cache file: \(fileURL.lastPathComponent, privacy: .public)")
                 }
             }
         } catch {
-            Log.error?.message("MPRIS::Failed to cleanup old cache files: \(error)")
+            Logger.services.error("MPRIS::Failed to cleanup old cache files: \(error, privacy: .public)")
         }
     }
     
@@ -747,9 +747,9 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         let cacheDirectory = getCacheDirectory()
         
         do {
-            let contents = try FileManager.default.contentsOfDirectory(at: cacheDirectory, 
-                                                                      includingPropertiesForKeys: [.fileSizeKey], 
-                                                                      options: [])
+            let contents = try FileManager.default.contentsOfDirectory(at: cacheDirectory,
+                                                                       includingPropertiesForKeys: [.fileSizeKey],
+                                                                       options: [])
             
             let totalSize = contents.compactMap { url -> Int? in
                 guard let resourceValues = try? url.resourceValues(forKeys: [.fileSizeKey]),
@@ -759,9 +759,9 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 return fileSize
             }.reduce(0, +)
             
-            Log.debug?.message("MPRIS::Cache stats - Files: \(contents.count), Total size: \(totalSize) bytes")
+            Logger.services.debug("MPRIS::Cache stats - Files: \(contents.count, privacy: .public), Total size: \(totalSize, privacy: .public) bytes")
         } catch {
-            Log.debug?.message("MPRIS::Could not get cache stats: \(error)")
+            Logger.services.debug("MPRIS::Could not get cache stats: \(error, privacy: .public)")
         }
     }
 }
@@ -857,13 +857,13 @@ class PlayerRemote: NSObject {
     }
     
     func updateAlbumArt(_ fileURL: URL) {
-        Log.debug?.message("MPRIS::PlayerRemote updating album art for \(identity) from \(fileURL.path)")
+        Logger.services.debug("MPRIS::PlayerRemote updating album art for \(self.identity, privacy: .public) from \(fileURL.path, privacy: .public)")
         
         if let image = NSImage(contentsOf: fileURL) {
             self.albumArtImage = image
-            Log.debug?.message("MPRIS::PlayerRemote successfully loaded album art image (\(image.size.width)x\(image.size.height))")
+            Logger.services.debug("MPRIS::PlayerRemote successfully loaded album art image (\(image.size.width, privacy: .public)x\(image.size.height, privacy: .public))")
         } else {
-            Log.error?.message("MPRIS::PlayerRemote failed to load album art image from \(fileURL.path)")
+            Logger.services.error("MPRIS::PlayerRemote failed to load album art image from \(fileURL.path, privacy: .public)")
             self.albumArtImage = nil
         }
         
@@ -911,7 +911,7 @@ class PlayerRemote: NSObject {
                 return image
             }
             nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
-            Log.debug?.message("MPRIS::PlayerRemote set artwork for \(identity)")
+            Logger.services.debug("MPRIS::PlayerRemote set artwork for \(self.identity, privacy: .public)")
         } else {
             nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyArtwork)
         }
@@ -921,7 +921,7 @@ class PlayerRemote: NSObject {
         nowPlayingInfo["playerName"] = identity
         
         nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo
-        Log.debug?.message("MPRIS::PlayerRemote updated now playing info for \(identity)")
+        Logger.services.debug("MPRIS::PlayerRemote updated now playing info for \(self.identity, privacy: .public)")
     }
     
     func cleanup() {
@@ -1151,8 +1151,8 @@ fileprivate extension DataPacket {
     func getTransferringAlbumArt() throws -> Bool? {
         try validateMprisType()
         guard body.keys.contains(MprisProperty.transferringAlbumArt.rawValue) else { return nil }
-        guard let value = body[MprisProperty.transferringAlbumArt.rawValue] as? Bool else { 
-            throw MprisError.invalidTransferringAlbumArt 
+        guard let value = body[MprisProperty.transferringAlbumArt.rawValue] as? Bool else {
+            throw MprisError.invalidTransferringAlbumArt
         }
         return value
     }

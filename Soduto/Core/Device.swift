@@ -7,7 +7,7 @@
 //
 
 import Foundation
-import CleanroomLogger
+import os
 
 /// Supported device types.
 ///
@@ -45,7 +45,7 @@ public protocol DeviceDataPacketHandler: AnyObject {
 }
 
 
-/// Device class represents a remote device. Multiple connections to the device may be used, 
+/// Device class represents a remote device. Multiple connections to the device may be used,
 /// but only one of the same kind (LAN, Bluetooth, etc.)
 public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStringConvertible {
     
@@ -95,7 +95,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     
     // MARK: Initialization / Deinitialization
     
-    /// Initialize Device with connection object. Device properties are initialized with connection 
+    /// Initialize Device with connection object. Device properties are initialized with connection
     /// identity property values.
     ///
     /// - parameters:
@@ -124,7 +124,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         config.type = self.type
     }
     
-    /// Initialize Device only with configuration. This is mostly useful to create device instances for 
+    /// Initialize Device only with configuration. This is mostly useful to create device instances for
     /// unavailable devices
     ///
     /// - parameters:
@@ -146,7 +146,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     
     // MARK Public API
     
-    /// Add additional connection to the device. If the device has already contained a connection 
+    /// Add additional connection to the device. If the device has already contained a connection
     /// of the same kind, the old one is removed.
     ///
     /// - Parameter connection: Fully initialized (i.e. in Open state) connection to the device.
@@ -183,7 +183,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         }
     }
     
-    /// Unregister data packet handler which was registered with such methods as 
+    /// Unregister data packet handler which was registered with such methods as
     /// `addDataPacketHandler(_:)` or `addDataPacketHandlers(_:)`
     public func removeDataPacketHandler(_ handler: DeviceDataPacketHandler) {
         let index = self.packetHandlers.firstIndex { $0 === handler }
@@ -227,7 +227,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     // MARK: ConnectionDelegate
     
     public func connection(_ connection: Connection, didSwitchToState state: Connection.State) {
-        Log.debug?.message("connection(<\(connection)> didSwitchToState:<\(state)>)")
+        Logger.device.debug("connection(<\(String(describing: connection), privacy: .public)> didSwitchToState:<\(String(describing: state), privacy: .public)>)")
         switch state {
         case .Closed:
             // Remove closed connection from containing list and reclaim its unsent packets
@@ -278,7 +278,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     }
     
     public func pairable(_ pairable:Pairable, failedWithError error:Error) {
-        Log.debug?.message("pairable(<\(pairable)> failedWithError:<\(error)>)")
+        Logger.device.debug("pairable(<\(String(describing: pairable), privacy: .public)> failedWithError:<\(error, privacy: .public)>)")
     }
     
     public func pairable(_ pairable:Pairable, statusChanged status:PairingStatus) {
@@ -416,7 +416,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         return bestConnection
     }
     
-    /// Choose a connection most appropriate for sending packets. Connection may be chosen 
+    /// Choose a connection most appropriate for sending packets. Connection may be chosen
     /// according its availability, reliability, speed, etc.
     private func connectionForSending() -> Connection? {
         for connection in self.connections {
@@ -453,13 +453,13 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     /// Take unsent packets from a closed connection, put them into pendingPackets list and try resend them if possible.
     private func reclaimUnsentPackets(from connection: Connection) {
         assert(connection.state == .Closed, "Connection needs to be closed in order to reclaim its packets: \(connection)")
-
+        
         let unsentPackets = connection.reclaimUnsentPackets()
         for unsentPacket in unsentPackets {
             let pendingPacket = PendingDataPacket(packet: unsentPacket.dataPacket, completionHandler: unsentPacket.completionHandler)
             self.pendingPackets.append(pendingPacket)
         }
-
+        
         self.sendPendingPackets()
     }
 }

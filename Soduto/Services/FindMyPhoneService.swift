@@ -8,7 +8,6 @@
 
 import Foundation
 import AppKit
-import CleanroomLogger
 
 /// Find my phone service data packet utilities
 fileprivate extension DataPacket {
@@ -200,9 +199,9 @@ public class FindMyPhoneService: NSObject, Service {
         // Draw screen (edge to edge, no bezels)
         let screenInset: CGFloat = 1.0
         let screenRect = NSRect(
-            x: phoneX + screenInset, 
-            y: phoneY + screenInset, 
-            width: phoneWidth - (screenInset * 2), 
+            x: phoneX + screenInset,
+            y: phoneY + screenInset,
+            width: phoneWidth - (screenInset * 2),
             height: phoneHeight - (screenInset * 2)
         )
         let screenPath = NSBezierPath(roundedRect: screenRect, xRadius: cornerRadius - screenInset, yRadius: cornerRadius - screenInset)
@@ -224,7 +223,7 @@ public class FindMyPhoneService: NSObject, Service {
                 radius: waveSize/2,
                 startAngle: -30,  // Start from top-right
                 endAngle: 30)     // End at bottom-right
-                
+            
             NSColor.white.withAlphaComponent(0.6 - CGFloat(i) * 0.15).setStroke()
             wavePath.lineWidth = 2.0
             wavePath.stroke()
@@ -289,9 +288,9 @@ public class FindMyPhoneService: NSObject, Service {
         
         // Create a tracking area for the button to handle hover effects
         let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeInActiveApp]
-        self.hoverTrackingArea = NSTrackingArea(rect: button.bounds, 
-                                                options: options, 
-                                                owner: self, 
+        self.hoverTrackingArea = NSTrackingArea(rect: button.bounds,
+                                                options: options,
+                                                owner: self,
                                                 userInfo: nil)
         button.addTrackingArea(self.hoverTrackingArea!)
         
@@ -316,11 +315,11 @@ public class FindMyPhoneService: NSObject, Service {
         
         // Add observer for appearance changes using the effectiveAppearance property
         NotificationCenter.default.addObserver(
-            self, 
+            self,
             selector: #selector(updateUIForAppearanceChange(_:)),
-            name: NSNotification.Name("AppleColorPreferencesChangedNotification"), 
+            name: NSNotification.Name("AppleColorPreferencesChangedNotification"),
             object: nil)
-            
+        
         // Also set up a polling timer as a fallback
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
             if self?.deviceRinging == false {
@@ -396,9 +395,9 @@ public class FindMyPhoneService: NSObject, Service {
             
             let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeInActiveApp]
             self.hoverTrackingArea = NSTrackingArea(rect: button.bounds,
-                                                   options: options,
-                                                   owner: self,
-                                                   userInfo: ["isDark": isEffectivelyDarkMode])
+                                                    options: options,
+                                                    owner: self,
+                                                    userInfo: ["isDark": isEffectivelyDarkMode])
             button.addTrackingArea(self.hoverTrackingArea!)
         }
         
@@ -438,9 +437,9 @@ public class FindMyPhoneService: NSObject, Service {
         // Draw screen
         let screenInset: CGFloat = 1.0
         let screenRect = NSRect(
-            x: phoneX + screenInset, 
-            y: phoneY + screenInset, 
-            width: phoneWidth - (screenInset * 2), 
+            x: phoneX + screenInset,
+            y: phoneY + screenInset,
+            width: phoneWidth - (screenInset * 2),
             height: phoneHeight - (screenInset * 2)
         )
         let screenPath = NSBezierPath(roundedRect: screenRect, xRadius: cornerRadius - screenInset, yRadius: cornerRadius - screenInset)
@@ -471,7 +470,7 @@ public class FindMyPhoneService: NSObject, Service {
         // Update the image view with the new icon
         iconView.image = icon
     }
-
+    
     deinit {
         // Clean up notification observers
         NotificationCenter.default.removeObserver(self)
@@ -498,8 +497,8 @@ extension FindMyPhoneService: NSWindowDelegate {
 extension FindMyPhoneService {
     // Called when mouse enters the button area
     @objc public func mouseEntered(_ event: NSEvent) {
-        if let button = self.hoverButton, 
-           let userInfo = event.trackingArea?.userInfo as? [String: Any],
+        if let button = self.hoverButton,
+            let userInfo = event.trackingArea?.userInfo as? [String: Any],
            let isDark = userInfo["isDark"] as? Bool {
             
             NSAnimationContext.runAnimationGroup({ context in

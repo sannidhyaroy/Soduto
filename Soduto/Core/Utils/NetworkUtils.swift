@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import CleanroomLogger
 
 public struct NetworkUtils {
     
