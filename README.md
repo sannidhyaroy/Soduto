@@ -117,24 +117,30 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 ---
 ## Debugging
 
-Soduto uses Apple's Unified Logging system (`os.Logger`). Logs are organized by subsystem (`com.soduto.Soduto` → `Soduto` and `com.soduto.Soduto-Files` → `Soduto Files`) and categories (`general`, `network`, `services`, `device`, `config`, `filesystem`, `ui`).
+Soduto uses Apple's Unified Logging system (`os.Logger`). Logs are organized by subsystem and categories:
+
+| Target | Subsystem | Categories |
+|--------|-----------|------------|
+| **Soduto** | `com.soduto.Soduto` | `general`, `network`, `device`, `config`, `services`, `ui` |
+| **Soduto Files** | `com.soduto.Soduto-Files` | `general`, `filesystem`, `ui` |
+| **Soduto Share** | `com.soduto.Soduto.Soduto-Share` | `general`, `sharing`, `ui` |
 
 ### View logs in real-time:
 ```bash
 # Show all messages (debug, info, notice, error) for Soduto
 log stream --predicate 'subsystem == "com.soduto.Soduto"' --level debug
 
-# Show all messages (debug, info, notice, error) for Soduto Files
+# Show all messages for Soduto Files
 log stream --predicate 'subsystem == "com.soduto.Soduto-Files"' --level debug
+
+# Show all messages for Soduto Share
+log stream --predicate 'subsystem == "com.soduto.Soduto.Soduto-Share"' --level debug
+
+# Show all messages from ALL Soduto components
+log stream --predicate 'subsystem BEGINSWITH "com.soduto.Soduto"' --level debug
 
 # Show only info and above (excludes debug logs) for Soduto
 log stream --predicate 'subsystem == "com.soduto.Soduto"' --level info
-
-# Show only notice and above (excludes debug and info logs) for Soduto
-log stream --predicate 'subsystem == "com.soduto.Soduto"' --level notice
-
-# Show only error and above (excludes debug, info and notice logs) for Soduto
-log stream --predicate 'subsystem == "com.soduto.Soduto"' --level error
 ```
 
 The `--level debug` flag shows messages at debug level **and above** (info, notice, error, fault).
@@ -143,19 +149,40 @@ The `--level debug` flag shows messages at debug level **and above** (info, noti
 By default, debug messages are only kept in memory and not saved to disk. To persist them:
 
 ```bash
+# Enable debug persistence for main app
 sudo log config --subsystem com.soduto.Soduto --mode level:debug
+
+# Enable debug persistence for file browser
+sudo log config --subsystem com.soduto.Soduto-Files --mode level:debug
+
+# Enable debug persistence for share extension
+sudo log config --subsystem com.soduto.Soduto.Soduto-Share --mode level:debug
 ```
 
 This allows you to view debug messages in Console.app after they occur. To revert to default behavior:
 
 ```bash
+# Revert main app
 sudo log config --subsystem com.soduto.Soduto --mode level:default
+
+# Revert file browser
+sudo log config --subsystem com.soduto.Soduto-Files --mode level:default
+
+# Revert share extension
+sudo log config --subsystem com.soduto.Soduto.Soduto-Share --mode level:default
 ```
 
 ### View logs in the Console:
 - Open `Console.app`
-- In the search field, enter the subsystem of the target for which want to view logs. (`subsystem:com.soduto.Soduto` or `subsystem:com.soduto.Soduto-Files`)
-- Filter by category for targeted debugging: `category:network`, `category:services`, `category:device`, etc.
+- In the search field, enter the subsystem for the target you want to view:
+  - `subsystem:com.soduto.Soduto` - Main app
+  - `subsystem:com.soduto.Soduto-Files` - File browser
+  - `subsystem:com.soduto.Soduto.Soduto-Share` - Share extension
+  - `subsystem BEGINSWITH com.soduto.Soduto` - All components
+- Filter by category for targeted debugging:
+  - `category:network`, `category:services`, `category:device` (main app)
+  - `category:filesystem` (file browser)
+  - `category:sharing` (share extension)
 - Enable "Include Debug Messages" in the Action menu to see debug-level logs
 
 **Warning:** Debug logging may include sensitive data (clipboard contents, passwords). Only enable its persistence during debugging and revert to default when done.
