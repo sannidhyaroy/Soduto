@@ -52,7 +52,7 @@ public class RemoteKeyboardService: Service {
             }
         }
         catch {
-            Logger.services.error("Failed handling remote keyboard data packet: \(pub: error).")
+            Logger.services.error("Failed handling remote keyboard data packet: \(error, privacy: .public).")
         }
         
         return true

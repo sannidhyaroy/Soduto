@@ -81,7 +81,7 @@ public class DeviceConfiguration: NSObject {
                 }
             }
             catch {
-                Logger.config.error("Failed to update certificate: \(pub: error)")
+                Logger.config.error("Failed to update certificate: \(error, privacy: .public)")
             }
         }
     }
@@ -378,7 +378,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                 do {
                     return try JSONDecoder().decode([RunCommandService.Command].self, from: data)
                 } catch {
-                    Logger.config.error("Failed to decode run commands: \(pub: error)")
+                    Logger.config.error("Failed to decode run commands: \(error, privacy: .public)")
                     return []
                 }
             }
@@ -389,7 +389,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                 let data = try JSONEncoder().encode(newValue)
                 self.userDefaults.set(data, forKey: Property.runCommands.rawValue)
             } catch {
-                Logger.config.error("Failed to encode run commands: \(pub: error)")
+                Logger.config.error("Failed to encode run commands: \(error, privacy: .public)")
             }
         }
     }
@@ -419,7 +419,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
             return try CertificateUtils.getOrCreateIdentity(name, certCommonName: hostDeviceId, expirationInterval: expirationInterval)
         }
         catch {
-            Logger.config.error("Failed to get host identity for SSL: \(pub: error)")
+            Logger.config.error("Failed to get host identity for SSL: \(error, privacy: .public)")
             return nil
         }
         

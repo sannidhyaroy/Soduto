@@ -319,7 +319,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         guard dataPacket.isNotificationPacket else { return false }
         
         // Log the raw packet (enable only when debugging, as logs may leak sensitive info)
-        //Logger.services.debug("NotificationsService received packet: \(pub: dataPacket.body)")
+        //Logger.services.debug("NotificationsService received packet: \(dataPacket.body, privacy: .public)")
         
         Task {
             if (try? dataPacket.getRequestFlag()) ?? false {
@@ -341,20 +341,20 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                             // First, try by payload hash (if the packet includes it)
                             if let payloadHash = try? dataPacket.getPayloadHash(),
                                let cachedIconURL = await self.iconState.getCachedIconURL(for: payloadHash) {
-                                Logger.services.debug("Using cached icon for notification \(pub: id) with hash \(pub: payloadHash)")
+                                Logger.services.debug("Using cached icon for notification \(id, privacy: .public) with hash \(payloadHash, privacy: .public)")
                                 do {
                                     let copiedFromCacheFileURL = try await self.iconState.copyFileFromCache(url: cachedIconURL, notificationId: id)
                                     await self.iconState.setDownloadedIconURL(copiedFromCacheFileURL, for: id)
                                 } catch {
-                                    Logger.services.error("Failed to copy cached icon: \(pub: error.localizedDescription)")
+                                    Logger.services.error("Failed to copy cached icon: \(error.localizedDescription, privacy: .public)")
                                 }
                             }
                             // Second, check if we already have a downloaded icon for this notification ID
                             else if await self.iconState.getDownloadedIconURL(for: id) != nil {
-                                Logger.services.debug("Icon already available for notification \(pub: id)")
+                                Logger.services.debug("Icon already available for notification \(id, privacy: .public)")
                             }
                             else {
-                                Logger.services.debug("No icon available for notification \(pub: id) - no downloadTask, no payloadHash match, no cached icon")
+                                Logger.services.debug("No icon available for notification \(id, privacy: .public) - no downloadTask, no payloadHash match, no cached icon")
                             }
                         }
                         
@@ -419,7 +419,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// with debounce or time-based synchronization logic, hence this method does not immediately remove notifications. Actual cleanup is
     /// performed only in response to authoritative remote cancel packets or post-reconnection reconciliation.
     public func cleanup(for device: Device) {
-        Logger.services.debug("Ignoring cleanup for \(pub: device.name); waiting for reconciliation and reconnection...")
+        Logger.services.debug("Ignoring cleanup for \(device.name, privacy: .public); waiting for reconciliation and reconnection...")
     }
     
     /// Defines service actions for notifications service (like: `Request Notifications`)
@@ -453,7 +453,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// Note: This is called on the Main Thread (default delegate queue for DownloadTask).
     /// We offload the processing to a Task to interact with the internal actors safely.
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("downloadTask(<\(pub: task)> finishedWithSuccess:<\(pub: success)>)")
+        Logger.services.debug("downloadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         Task {
             guard let info = await self.iconState.removeDownloadInfo(for: task) else { return }
@@ -462,19 +462,19 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     // Sanitize the notification ID for use in filename (remove |, :, etc.)
                     let safeFileName = sanitizeForFilename(info.notificationId) + ".png"
                     let finalFileURL = try await self.iconState.renamePartFile(url: info.partFileURL, to: safeFileName)
-                    Logger.services.debug("downloadTask saving icon to: \(pub: finalFileURL.path)")
-                    Logger.services.debug("Notification id: \(pub: info.notificationId)")
+                    Logger.services.debug("downloadTask saving icon to: \(finalFileURL.path, privacy: .public)")
+                    Logger.services.debug("Notification id: \(info.notificationId, privacy: .public)")
                     
                     await self.iconState.setDownloadedIconURL(finalFileURL, for: info.notificationId)
                     
                     if let fileHash = info.fileHash, await self.iconState.getCachedIconURL(for: fileHash) == nil {
                         let cachedFileURL = try await self.iconState.copyFileToCache(url: finalFileURL, hash: fileHash)
                         await self.iconState.setCachedIconURL(cachedFileURL, for: fileHash)
-                        Logger.services.debug("New icon found with hash \(pub: fileHash), saving to cached icons as \(pub: cachedFileURL)")
+                        Logger.services.debug("New icon found with hash \(fileHash, privacy: .public), saving to cached icons as \(cachedFileURL, privacy: .public)")
                     }
                 }
                 catch let error {
-                    Logger.services.error("Failed to process downloaded icon for \(pub: info.notificationId): \(pub: error)")
+                    Logger.services.error("Failed to process downloaded icon for \(info.notificationId, privacy: .public): \(error, privacy: .public)")
                 }
             }
             await self.showNotification(for: info.dataPacket, from: info.device)
@@ -536,7 +536,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 let message = textInputResponse.userText.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard let requestReplyId = userInfo[UserInfoProperty.requestReplyId.rawValue] as? String else { return }
                 guard !message.isEmpty else {
-                    Logger.services.debug("Empty reply message ignored for notification \(pub: notificationId)")
+                    Logger.services.debug("Empty reply message ignored for notification \(notificationId, privacy: .public)")
                     return
                 }
                 device.send(DataPacket.notificationReplyPacket(forId: requestReplyId, message: message))
@@ -612,12 +612,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     private func repopulateNotificationIds(for device: Device) async {
         // If we already have IDs for this device, skip repopulation
         if let ids = await state.notificationIds[device.id], !ids.isEmpty {
-            Logger.services.debug("Skipping repopulation for \(pub: device.name) - already have \(pub: ids.count) IDs")
+            Logger.services.debug("Skipping repopulation for \(device.name, privacy: .public) - already have \(ids.count, privacy: .public) IDs")
             return
         }
         
         guard let deviceIdEncoded = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
-            Logger.services.error("Failed to encode device ID for \(pub: device.name)")
+            Logger.services.error("Failed to encode device ID for \(device.name, privacy: .public)")
             return
         }
         
@@ -641,7 +641,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             if matchCount > 0 {
-                Logger.services.debug("Repopulated \(pub: matchCount) notification IDs for device \(pub: device.name)")
+                Logger.services.debug("Repopulated \(matchCount, privacy: .public) notification IDs for device \(device.name, privacy: .public)")
             }
         }
     }
@@ -676,7 +676,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             if removedCount > 0 {
-                Logger.services.debug("Reconciled notification state: removed \(pub: removedCount) stale entries")
+                Logger.services.debug("Reconciled notification state: removed \(removedCount, privacy: .public) stale entries")
             }
         }
     }
@@ -689,13 +689,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         catch {}
         
         if let hash = downloadFileHash, let cachedURL = await iconState.getCachedIconURL(for: hash) {
-            Logger.services.debug("Found cached icon for hash \(pub: hash) at \(pub: cachedURL)")
+            Logger.services.debug("Found cached icon for hash \(hash, privacy: .public) at \(cachedURL, privacy: .public)")
             do {
                 let copiedFromCacheFileURL = try await iconState.copyFileFromCache(url: cachedURL, notificationId: notificationId)
                 await iconState.setDownloadedIconURL(copiedFromCacheFileURL, for: notificationId)
             }
             catch let error {
-                Logger.services.error("Failed to copy cached icon for \(pub: notificationId): \(pub: error)")
+                Logger.services.error("Failed to copy cached icon for \(notificationId, privacy: .public): \(error, privacy: .public)")
             }
             await self.showNotification(for: dataPacket, from: device)
         } else {
@@ -748,10 +748,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             if cleanedCount > 0 {
-                Logger.services.debug("Cleaned up \(pub: cleanedCount) stale notification icon files from temp directory")
+                Logger.services.debug("Cleaned up \(cleanedCount, privacy: .public) stale notification icon files from temp directory")
             }
         } catch {
-            Logger.services.error("Failed to enumerate temp directory for icon cleanup: \(pub: error)")
+            Logger.services.error("Failed to enumerate temp directory for icon cleanup: \(error, privacy: .public)")
         }
     }
     
@@ -854,11 +854,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 return
             }
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else {
-                Logger.services.debug("Notification rejected: couldn't generate notificationId for packet \(pub: packetNotificationId)")
+                Logger.services.debug("Notification rejected: couldn't generate notificationId for packet \(packetNotificationId, privacy: .public)")
                 return
             }
             guard let appName = try dataPacket.getAppName() else {
-                Logger.services.debug("Notification rejected: missing appName for \(pub: packetNotificationId)")
+                Logger.services.debug("Notification rejected: missing appName for \(packetNotificationId, privacy: .public)")
                 return
             }
             guard appName != "KDE Connect" else {
@@ -867,7 +867,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             // Gather all data before hopping between threads
             guard let ticker = try dataPacket.getTicker() else {
-                Logger.services.debug("Notification rejected: missing ticker for \(pub: appName) - \(pub: packetNotificationId)")
+                Logger.services.debug("Notification rejected: missing ticker for \(appName, privacy: .public) - \(packetNotificationId, privacy: .public)")
                 return
             }
             
@@ -896,7 +896,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 self.recordReceivedNotificationId(notificationId, for: device)
                 
                 guard !isReconnectionDuplicate else {
-                    Logger.services.debug("Notification skipped (reconnection duplicate): \(pub: appName) - \(pub: packetNotificationId)")
+                    Logger.services.debug("Notification skipped (reconnection duplicate): \(appName, privacy: .public) - \(packetNotificationId, privacy: .public)")
                     return false
                 }
                 
@@ -944,7 +944,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     notification.attachments = [attachment]
                     // On success, tempCopyURL is moved by UNNotificationAttachment - no cleanup needed
                 } catch {
-                    Logger.services.error("Failed to create notification attachment: \(pub: error.localizedDescription)")
+                    Logger.services.error("Failed to create notification attachment: \(error.localizedDescription, privacy: .public)")
                     // Clean up the temporary file if it was created but attachment failed
                     if let tempURL = tempCopyURL, FileManager.default.fileExists(atPath: tempURL.path) {
                         try? FileManager.default.removeItem(at: tempURL)
@@ -964,11 +964,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 try await un.add(request)
                 await state.addNotificationId(notificationId, from: device)
             } catch {
-                Logger.services.error("Failed to add UNNotificationRequest: \(pub: error)")
+                Logger.services.error("Failed to add UNNotificationRequest: \(error, privacy: .public)")
             }
         }
         catch {
-            Logger.services.error("Error while showing notification: \(pub: error)")
+            Logger.services.error("Error while showing notification: \(error, privacy: .public)")
         }
     }
     
@@ -984,9 +984,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 // Delete the actual icon file from disk
                 do {
                     try FileManager.default.removeItem(at: iconURL)
-                    Logger.services.debug("Deleted icon file for notification \(pub: packetId) at \(pub: iconURL.path)")
+                    Logger.services.debug("Deleted icon file for notification \(packetId, privacy: .public) at \(iconURL.path, privacy: .public)")
                 } catch {
-                    Logger.services.error("Failed to delete icon file for notification \(pub: packetId): \(pub: error)")
+                    Logger.services.error("Failed to delete icon file for notification \(packetId, privacy: .public): \(error, privacy: .public)")
                 }
             }
         }
@@ -1041,7 +1041,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             await finishSyncWindow(for: device)
         }
         state.syncReconciliationTasks[device.id] = task
-        Logger.services.debug("Started sync window for device \(pub: device.name)")
+        Logger.services.debug("Started sync window for device \(device.name, privacy: .public)")
     }
     
     /// Called when a notification is received during a sync window. Adds the notification ID to the pending set.
@@ -1078,7 +1078,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         state.syncReconciliationTasks.removeValue(forKey: device.id)
         
         guard let localIds = state.notificationIds[device.id] else {
-            Logger.services.debug("Finished sync window for \(pub: device.name): no local notifications to reconcile")
+            Logger.services.debug("Finished sync window for \(device.name, privacy: .public): no local notifications to reconcile")
             return
         }
         
@@ -1086,11 +1086,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         let staleIds = localIds.subtracting(receivedIds)
         
         if staleIds.isEmpty {
-            Logger.services.debug("Finished sync window for \(pub: device.name): all local notifications still exist on remote")
+            Logger.services.debug("Finished sync window for \(device.name, privacy: .public): all local notifications still exist on remote")
             return
         }
         
-        Logger.services.debug("Finished sync window for \(pub: device.name): removing \(pub: staleIds.count) stale notifications")
+        Logger.services.debug("Finished sync window for \(device.name, privacy: .public): removing \(staleIds.count, privacy: .public) stale notifications")
         
         for staleId in staleIds {
             /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach and keep our icon caches

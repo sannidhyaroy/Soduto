@@ -68,7 +68,7 @@ class SendMessageWindowController: NSWindowController {
                     if granted {
                         Logger.ui.debug("Contacts access granted")
                     } else {
-                        Logger.ui.debug("Contacts access denied or error: \(pub: String(describing: error))")
+                        Logger.ui.debug("Contacts access denied or error: \(String(describing: error), privacy: .public)")
                     }
                     
                     NSApp.activate(ignoringOtherApps: true)
@@ -374,7 +374,7 @@ final class ContactPhoneNumber: NSObject {
             })
         }
         catch {
-            Logger.ui.error("Failed to fetch contacts: \(pub: error)")
+            Logger.ui.error("Failed to fetch contacts: \(error, privacy: .public)")
             return nil
         }
         
@@ -480,7 +480,7 @@ extension ContactPhoneNumber {
             })
         }
         catch {
-            Logger.ui.error("Failed to fetch contacts: \(pub: error)")
+            Logger.ui.error("Failed to fetch contacts: \(error, privacy: .public)")
         }
         
         results.sort { (c1, c2) in c1.displayString.compare(c2.displayString) == .orderedAscending }

@@ -118,7 +118,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         
         guard dataPacket.isSharePacket else { return false }
         
-        Logger.services.debug("handleDataPacket(<\(pub: dataPacket)> fromDevice:<\(pub: device)> onConnection:<\(pub: connection)>)");
+        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)");
         
         do {
             if let downloadTask = dataPacket.downloadTask {
@@ -140,7 +140,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
             }
         }
         catch {
-            Logger.services.error("Error while handling share packet: \(pub: error)")
+            Logger.services.error("Error while handling share packet: \(error, privacy: .public)")
         }
         
         return true
@@ -240,7 +240,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     // MARK: DownloadTaskDelegate
     
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("downloadTask(<\(pub: task)> finishedWithSuccess:<\(pub: success)>)")
+        Logger.services.debug("downloadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         guard let index = self.downloadInfos.firstIndex(where: { $0.task === task }) else { return }
         let info = self.downloadInfos.remove(at: index)
@@ -368,7 +368,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
             return .fileUploadQueued
         } else if url.isFileURL {
             // Directory, unreadable file, etc. — nothing to send
-            Logger.services.error("Cannot share file URL (unsupported content type): \(pub: url)")
+            Logger.services.error("Cannot share file URL (unsupported content type): \(url, privacy: .public)")
             return .skipped
         } else {
             let dataPacket = self.dataPacket(forUrl: url)
@@ -414,7 +414,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
             let attr = try FileManager.default.attributesOfItem(atPath: path)
             fileSize = attr[FileAttributeKey.size] as? Int64
         } catch {
-            Logger.services.error("Failed to get file information: \(pub: error)")
+            Logger.services.error("Failed to get file information: \(error, privacy: .public)")
         }
         
         return fileSize

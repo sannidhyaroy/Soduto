@@ -91,7 +91,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     }
     
     public func connectionProvider(_ provider: ConnectionProvider, didCreateConnection connection: Connection) {
-        Logger.device.debug("connectionProvider(<\(pub: provider)> didCreateConnection:<\(pub: connection)>)")
+        Logger.device.debug("connectionProvider(<\(provider, privacy: .public)> didCreateConnection:<\(connection, privacy: .public)>)")
         
         assert(connection.state == .Open, "Connection from connection provider expected to be in open state")
         assert(connection.identity != nil, "Connection identity expected to be not nil")
@@ -109,7 +109,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
             }
         }
         catch {
-            Logger.device.error("Error adding new connection: \(pub: error)")
+            Logger.device.error("Error adding new connection: \(error, privacy: .public)")
         }
     }
     
@@ -124,7 +124,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     // MARK: DeviceDelegate
     
     public func device(_ device: Device, didChangePairingStatus status: PairingStatus) {
-        Logger.device.debug("device(<\(pub: device)> didChangePairingStatus:<\(pub: status)>)")
+        Logger.device.debug("device(<\(String(describing: device), privacy: .public)> didChangePairingStatus:<\(String(describing: status), privacy: .public)>)")
         
         if device.isReachable {
             if status == .Paired {
@@ -143,7 +143,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     
     
     public func device(_ device: Device, didChangeReachabilityStatus isReachable: Bool) {
-        Logger.device.debug("device(<\(pub: device)> didChangeReachabilityStatus:<\(pub: isReachable)>)")
+        Logger.device.debug("device(<\(device, privacy: .public)> didChangeReachabilityStatus:<\(isReachable, privacy: .public)>)")
         
         if device.pairingStatus == .Paired {
             if isReachable {

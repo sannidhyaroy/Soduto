@@ -54,7 +54,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
             try self.reachability?.startNotifier()
         }
         catch {
-            Logger.network.error("Failed to start monitoring network reachability: \(pub: error)")
+            Logger.network.error("Failed to start monitoring network reachability: \(error, privacy: .public)")
         }
         self.udpSocket.setDelegate(self)
         self.tcpSocket.delegate = self
@@ -70,28 +70,28 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
         
         // Listen for device announcement broadcasts
         do { try self.udpSocket.enableBroadcast(true) }
-        catch { Logger.network.error("Could not enable brodcast for udp socket: \(pub: error)") }
+        catch { Logger.network.error("Could not enable brodcast for udp socket: \(error, privacy: .public)") }
         do { try self.udpSocket.enableReusePort(true) }
-        catch { Logger.network.error("Could not enable port reuse for udp socket: \(pub: error)") }
+        catch { Logger.network.error("Could not enable port reuse for udp socket: \(error, privacy: .public)") }
         do {
             try self.udpSocket.bind(toPort: ConnectionProvider.udpPort)
             try self.udpSocket.beginReceiving()
-            Logger.network.info("Listening for UDP broadcasts on port \(pub: self.udpSocket.localPort())")
+            Logger.network.info("Listening for UDP broadcasts on port \(self.udpSocket.localPort(), privacy: .public)")
         }
         catch {
-            Logger.network.error("Could not start listening for self-announcement broadcasts: \(pub: error)")
+            Logger.network.error("Could not start listening for self-announcement broadcasts: \(error, privacy: .public)")
         }
         
         // Listen for connections on TCP
         for port: UInt16 in ConnectionProvider.minTcpPort...ConnectionProvider.maxTcpPort {
             do {
                 try self.tcpSocket.accept(onPort: port)
-                Logger.network.info("Listening for TCP connections on port \(pub: self.tcpSocket.localPort)")
+                Logger.network.info("Listening for TCP connections on port \(self.tcpSocket.localPort, privacy: .public)")
             }
             catch {}
         }
         if self.tcpSocket.isDisconnected {
-            Logger.network.error("Failed to start listening TCP connections on ports in range \(pub: ConnectionProvider.minTcpPort)-\(pub: ConnectionProvider.maxTcpPort)")
+            Logger.network.error("Failed to start listening TCP connections on ports in range \(ConnectionProvider.minTcpPort, privacy: .public)-\(ConnectionProvider.maxTcpPort, privacy: .public)")
         }
         
         self.isStarted = true
@@ -173,11 +173,11 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     // MARK: GCDAsyncUdpSocketDelegate
     
     public func udpSocket(_ sock: GCDAsyncUdpSocket, didSendDataWithTag tag: Int) {
-        Logger.network.debug("udpSocket(<\(pub: sock)> didSendDataWithTag:<\(pub: tag)>)")
+        Logger.network.debug("udpSocket(<\(sock, privacy: .public)> didSendDataWithTag:<\(tag, privacy: .public)>)")
     }
     
     public func udpSocket(_ sock: GCDAsyncUdpSocket, didNotSendDataWithTag tag: Int, dueToError error: Error?) {
-        Logger.network.debug("udpSocket(<\(pub: sock)> didNotSendDataWithTag:<\(pub: tag)> dueToError:<\(pub: String(describing: error))>)")
+        Logger.network.debug("udpSocket(<\(sock, privacy: .public)> didNotSendDataWithTag:<\(tag, privacy: .public)> dueToError:<\(String(describing: error), privacy: .public)>)")
     }
     
     public func udpSocket(_ sock: GCDAsyncUdpSocket, didReceive data: Data, fromAddress address: Data, withFilterContext filterContext: Any?) {
@@ -187,7 +187,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
         guard let deviceId = try? packet.getDeviceId() else { return }
         guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else { return }
         
-        Logger.network.debug("udpSocket(<\(pub: sock)> didReceive:<<Data>> fromAddress:<\(pub: SocketAddress(data: address))> withFilterContext:<\(pub: packet)>)")
+        Logger.network.debug("udpSocket(<\(sock, privacy: .public)> didReceive:<<Data>> fromAddress:<\(SocketAddress(data: address), privacy: .public)> withFilterContext:<\(packet, privacy: .public)>)")
         
         // create a new address to connect - ip the same as source, port - from packet info
         var connectionAddress = SocketAddress(data: address)
@@ -214,7 +214,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     }
     
     public func socket(_ sock: GCDAsyncSocket, didAcceptNewSocket newSocket: GCDAsyncSocket) {
-        Logger.network.debug("socket(<\(pub: sock)> didAcceptNewSocket:<\(pub: newSocket)>)")
+        Logger.network.debug("socket(<\(sock, privacy: .public)> didAcceptNewSocket:<\(newSocket, privacy: .public)>)")
         
         if let connection = Connection(socket: newSocket, config: self.config) {
             connection.delegate = self
@@ -229,7 +229,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     // MARK: ConnectionDelegate
     
     public func connection(_ connection: Connection, didSwitchToState state: Connection.State) {
-        Logger.network.debug("connection(<\(pub: connection)> switchedToState:<\(pub: state)>)")
+        Logger.network.debug("connection(<\(String(describing: connection), privacy: .public)> switchedToState:<\(String(describing: state), privacy: .public)>)")
         switch state {
         case .Closed:
             self.pendingConnections.remove(connection)
@@ -249,7 +249,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     }
     
     public func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
-        Logger.network.debug("connection(<\(pub: connection)> didSendPacket:<\(pub: packet)>)")
+        Logger.network.debug("connection(<\(connection, privacy: .public)> didSendPacket:<\(packet, privacy: .public)>)")
         
         do {
             guard let identity = connection.identity else { throw ConnectionProviderError.IdentityAbsent }
@@ -261,13 +261,13 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
             connection.finishInitialization()
         }
         catch {
-            Logger.network.error("Failed to initialize connection: \(pub: error)")
+            Logger.network.error("Failed to initialize connection: \(error, privacy: .public)")
             connection.close()
         }
     }
     
     public func connection(_ connection: Connection, didReadPacket packet: DataPacket) {
-        Logger.network.debug("connection(<\(pub: connection)> didReadPacket:<\(pub: packet)>)")
+        Logger.network.debug("connection(<\(connection, privacy: .public)> didReadPacket:<\(packet, privacy: .public)>)")
         
         // The only packet we are waiting for is first identity packet to initialize connection with
         do {
@@ -280,7 +280,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
             connection.finishInitialization()
         }
         catch {
-            Logger.network.error("Failed to initialize connection: \(pub: error)")
+            Logger.network.error("Failed to initialize connection: \(error, privacy: .public)")
             connection.close()
         }
     }

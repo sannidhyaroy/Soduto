@@ -97,7 +97,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     }
     
     func deviceManager(_ manager: DeviceManager, didReceivePairingRequest request: PairingRequest, forDevice device: Device) {
-        Logger.general.debug("deviceManager(<\(pub: request)> didReceivePairingRequest:<\(pub: request)> forDevice:<\(pub: device)>)")
+        Logger.general.debug("deviceManager(<\(String(describing: request), privacy: .public)> didReceivePairingRequest:<\(String(describing: request), privacy: .public)> forDevice:<\(String(describing: device), privacy: .public)>)")
         PairingInterfaceController.showPairingNotification(for: device)
     }
     
@@ -209,7 +209,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
                 }
             } catch {
                 failedCount += 1
-                Logger.general.error("Failed to resolve bookmark: \(pub: error)")
+                Logger.general.error("Failed to resolve bookmark: \(error, privacy: .public)")
             }
         }
         

@@ -227,7 +227,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     // MARK: ConnectionDelegate
     
     public func connection(_ connection: Connection, didSwitchToState state: Connection.State) {
-        Logger.device.debug("connection(<\(pub: connection)> didSwitchToState:<\(pub: state)>)")
+        Logger.device.debug("connection(<\(String(describing: connection), privacy: .public)> didSwitchToState:<\(String(describing: state), privacy: .public)>)")
         switch state {
         case .Closed:
             // Remove closed connection from containing list and reclaim its unsent packets
@@ -278,7 +278,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     }
     
     public func pairable(_ pairable:Pairable, failedWithError error:Error) {
-        Logger.device.debug("pairable(<\(pub: pairable)> failedWithError:<\(pub: error)>)")
+        Logger.device.debug("pairable(<\(String(describing: pairable), privacy: .public)> failedWithError:<\(error, privacy: .public)>)")
     }
     
     public func pairable(_ pairable:Pairable, statusChanged status:PairingStatus) {

@@ -98,7 +98,7 @@ public class MacToRemoteInputService: Service {
         case ActionId.stopInputCapturing.rawValue:
             stopCapturing()
         default:
-            Logger.services.notice("Unknown action id: \(pub: id)")
+            Logger.services.notice("Unknown action id: \(id, privacy: .public)")
         }
     }
     
@@ -108,7 +108,7 @@ public class MacToRemoteInputService: Service {
         guard !isCapturing else { return }
         guard device.pairingStatus == .Paired else { return }
         
-        Logger.services.info("Starting input capture for device: \(pub: device.name)")
+        Logger.services.info("Starting input capture for device: \(device.name, privacy: .public)")
         
         targetDevice = device
         isCapturing = true
@@ -530,7 +530,7 @@ public class MacToRemoteInputService: Service {
             if event.type == .flagsChanged {
                 // Track option key state as backup
                 self.optionKeyPressed = event.modifierFlags.contains(.option)
-                Logger.services.debug("Option key state: \(pub: self.optionKeyPressed ? "pressed" : "released") (fallback)")
+                Logger.services.debug("Option key state: \(self.optionKeyPressed ? "pressed" : "released", privacy: .public) (fallback)")
                 
                 // Prevent ALL modifier key events from reaching applications during capture
                 // This is critical to ensure modifiers don't affect background applications
@@ -727,7 +727,7 @@ public class MacToRemoteInputService: Service {
         if event.keyCode == 53 && lastOptionKeyTime > 0 {
             let timeSinceOption = currentTime - lastOptionKeyTime
             if timeSinceOption < optionEscapeTimeWindow {
-                Logger.services.debug("Option+Escape combo detected (time-based: \(pub: timeSinceOption)s)")
+                Logger.services.debug("Option+Escape combo detected (time-based: \(timeSinceOption, privacy: .public)s)")
                 return true
             }
         }
@@ -1188,7 +1188,7 @@ public class MacToRemoteInputService: Service {
         case .tabletPointer, .tabletProximity:
             // Handle tablet/touchpad events
             // Block these tablet/touch events which could be gesture-related
-            Logger.services.debug("Blocked tablet event: \(pub: eventType.rawValue)")
+            Logger.services.debug("Blocked tablet event: \(eventType.rawValue, privacy: .public)")
             return nil
             
         case .keyDown, .keyUp:
@@ -1231,7 +1231,7 @@ public class MacToRemoteInputService: Service {
         default:
             // Since we're using a mask that captures all event types, block anything else
             // This ensures we block all events we don't explicitly handle from reaching macOS
-            Logger.services.debug("Blocked unhandled event type: \(pub: eventType.rawValue)")
+            Logger.services.debug("Blocked unhandled event type: \(eventType.rawValue, privacy: .public)")
             return nil
         }
     }

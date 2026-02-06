@@ -137,7 +137,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
             try self.socket.connect(toAddress: address.data)
         }
         catch {
-            Logger.network.error("Could not connect to address \(pub: address): \(pub: error)")
+            Logger.network.error("Could not connect to address \(address, privacy: .public): \(error, privacy: .public)")
             return nil
         }
         self.configureSocket()
@@ -293,11 +293,11 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     // MARK: GCDAsyncSocketDelegate
     
     public func socket(_ sock: GCDAsyncSocket, didConnectToHost host: String, port: UInt16) {
-        Logger.network.debug("socket(<\(pub: sock)> didConnectToHost:<\(pub: host)> port:<\(pub: port)>)")
+        Logger.network.debug("socket(<\(sock, privacy: .public)> didConnectToHost:<\(host, privacy: .public)> port:<\(port, privacy: .public)>)")
     }
     
     public func socket(_ sock: GCDAsyncSocket, didWriteDataWithTag tag: Int) {
-        Logger.network.debug("socket(<\(pub: sock)> didWriteDataWithTag:<\(pub: tag)>)")
+        Logger.network.debug("socket(<\(sock, privacy: .public)> didWriteDataWithTag:<\(tag, privacy: .public)>)")
         
         assert(self.packetsSending.firstIndex(where: { Int($0.dataPacket.id) == tag }) != nil, "Data packet is not in the packetsSending list.")
         guard let index = self.packetsSending.firstIndex(where: { Int($0.dataPacket.id) == tag }) else { return }
@@ -311,7 +311,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     }
     
     public func socket(_ sock: GCDAsyncSocket, didRead data: Data, withTag tag: Int) {
-        Logger.network.debug("socket(<\(pub: sock)> didRead:<\(pub: data)> withTag:<\(pub: tag)>)")
+        Logger.network.debug("socket(<\(sock, privacy: .public)> didRead:<\(data, privacy: .public)> withTag:<\(tag, privacy: .public)>)")
         
         if data.count > 0 {
             if let packet = DataPacket(data: data) {
@@ -336,7 +336,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     }
     
     public func socketDidSecure(_ sock: GCDAsyncSocket) {
-        Logger.network.debug("socketDidSecure(<\(pub: sock)>)")
+        Logger.network.debug("socketDidSecure(<\(sock, privacy: .public)>)")
         self.waitingToSecure = false
         if self.shouldFinishIntializationWhenSecured {
             self.state = .Open
@@ -344,7 +344,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     }
     
     public func socketDidDisconnect(_ sock: GCDAsyncSocket, withError err: Error?) {
-        Logger.network.debug("socketDidDisconnect(<\(pub: sock)> withError:<\(pub: err)>)")
+        Logger.network.debug("socketDidDisconnect(<\(sock, privacy: .public)> withError:<\(err, privacy: .public)>)")
         
         // Execute state change before packets dicarding, so that delegate could reclaim unsent packets
         self.state = .Closed
@@ -361,7 +361,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     // MARK: UploadTaskDelegate
     
     public func uploadTask(_ task: UploadTask, finishedWithSuccess payloadSent: Bool) {
-        Logger.network.debug("uploadTask(<\(pub: task)> finishedWithSuccess:<\(pub: payloadSent)>)")
+        Logger.network.debug("uploadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(payloadSent, privacy: .public)>)")
         
         assert(self.packetsSending.firstIndex(where: { $0.uploadTask === task }) != nil, "Data packet is not in the packetsSending list.")
         guard let index = self.packetsSending.firstIndex(where: { $0.uploadTask === task }) else { return }
@@ -458,7 +458,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
                     try self.setSockOpt(socket: nativeSocket, level: IPPROTO_TCP, optionName: TCP_KEEPALIVE, optionValue: 10)
                 }
                 catch {
-                    Logger.network.error("Failed to configure socket for connection \(pub: self): \(pub: error)")
+                    Logger.network.error("Failed to configure socket for connection \(self, privacy: .public): \(error, privacy: .public)")
                 }
             }
             
@@ -469,7 +469,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
                     try self.setSockOpt(socket: nativeSocket, level: IPPROTO_TCP, optionName: TCP_KEEPALIVE, optionValue: 10)
                 }
                 catch {
-                    Logger.network.error("Failed to configure socket for connection \(pub: self): \(pub: error)")
+                    Logger.network.error("Failed to configure socket for connection \(self, privacy: .public): \(error, privacy: .public)")
                 }
             }
         }
@@ -486,7 +486,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     private func sendSimplePacket(_ packet: DataPacket, whenCompleted: SendingCompletionHandler? = nil) -> Bool {
         assert(!packet.hasPayload())
         
-        Logger.network.debug("send(:\(pub: packet) whenCompleted:\(pub: whenCompleted)) [\(pub: self)]")
+        Logger.network.debug("send(:\(String(describing: packet), privacy: .public) whenCompleted:\(String(describing: whenCompleted), privacy: .public)) [\(String(describing: self), privacy: .public)]")
         
         if let bytes = try? packet.serialize() {
             let data = Data(bytes)
@@ -495,7 +495,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
             self.packetsSending.append(info)
         }
         else {
-            Logger.network.error("Failed to serialize packet: \(pub: packet).")
+            Logger.network.error("Failed to serialize packet: \(packet, privacy: .public).")
             self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
         }
         
@@ -512,7 +512,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
         
         if let uploadTask = UploadTask(packet: packet, connection: self, readQueue: self.uploadQueue) {
             
-            Logger.network.debug("send(:\(pub: packet) whenCompleted:\(pub: whenCompleted)) [\(pub: self)]")
+            Logger.network.debug("send(:\(String(describing: packet), privacy: .public) whenCompleted:\(String(describing: whenCompleted), privacy: .public)) [\(String(describing: self), privacy: .public)]")
             
             var packet = packet
             packet.payloadInfo = uploadTask.payloadInfo
@@ -525,14 +525,14 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
                 self.packetsSending.append(info)
             }
             else {
-                Logger.network.error("Failed to serialize packet: \(pub: packet).")
+                Logger.network.error("Failed to serialize packet: \(packet, privacy: .public).")
                 self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
             }
             return true
         }
         else if !UploadTask.hasUsedPorts() {
             // We dont have any ports in use, so no will become available and no point of waiting - fail immediately
-            Logger.network.error("Failed to initialize upload task for packet \(pub: packet).")
+            Logger.network.error("Failed to initialize upload task for packet \(packet, privacy: .public).")
             self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
             return true
         }
@@ -559,7 +559,7 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     }
     
     private func handle(packet: DataPacket) {
-        Logger.network.debug("handle(packet: <\(pub: packet)>) [\(pub: self)]")
+        Logger.network.debug("handle(packet: <\(packet, privacy: .public)>) [\(self, privacy: .public)]")
         
         // try to handle with registered handlers
         for handler in self.packetHandlers {
@@ -620,10 +620,10 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
             
             let taskString: String = info.uploadTask != nil ? "\(info.uploadTask!)" : "nil"
             if silently {
-                Logger.network.debug("Reclaiming data packet <\(pub: info.dataPacket.id)> with upload task <\(pub: taskString)>. [\(pub: self)]")
+                Logger.network.debug("Reclaiming data packet <\(info.dataPacket.id, privacy: .public)> with upload task <\(taskString, privacy: .public)>. [\(self, privacy: .public)]")
             }
             else {
-                Logger.network.debug("Discarding data packet <\(pub: info.dataPacket.id)> with upload task <\(pub: taskString)>. [\(pub: self)]")
+                Logger.network.debug("Discarding data packet <\(info.dataPacket.id, privacy: .public)> with upload task <\(taskString, privacy: .public)>. [\(self, privacy: .public)]")
             }
         }
         self.packetsSending = self.packetsSending.filter { $0.packetSent != nil || $0.uploadTask?.isStarted == true }

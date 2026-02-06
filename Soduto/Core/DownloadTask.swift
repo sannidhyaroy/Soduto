@@ -122,7 +122,7 @@ public class DownloadTask: NSObject, GCDAsyncSocketDelegate {
             }
             
             if let error = err, !finished {
-                Logger.network.error("Download socket disconnected with error: \(pub: error)")
+                Logger.network.error("Download socket disconnected with error: \(error, privacy: .public)")
             }
             
             self.downloadFinished(success: finished)

@@ -81,7 +81,7 @@ public class BatteryService: Service {
             }
         }
         catch {
-            Logger.services.error("Error handling battery packet: \(pub: error)")
+            Logger.services.error("Error handling battery packet: \(error, privacy: .public)")
         }
         
         return true
@@ -199,7 +199,7 @@ public class BatteryService: Service {
             
         }
         catch {
-            Logger.services.error("Failed to read battery status information: \(pub: error)")
+            Logger.services.error("Failed to read battery status information: \(error, privacy: .public)")
             return nil
         }
     }

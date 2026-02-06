@@ -96,7 +96,7 @@ public class RunCommandService: Service {
                 // Handle received command list
                 if let commandList = try dataPacket.getCommandList() {
                     self.remoteCommands[device.id] = commandList
-                    Logger.services.debug("Received command list from \(pub: device.name)")
+                    Logger.services.debug("Received command list from \(device.name, privacy: .public)")
                 }
             }
             else if dataPacket.isRunCommandRequestPacket {
@@ -111,7 +111,7 @@ public class RunCommandService: Service {
             }
         }
         catch {
-            Logger.services.error("Error handling run command packet: \(pub: error)")
+            Logger.services.error("Error handling run command packet: \(error, privacy: .public)")
         }
         
         return true
@@ -202,7 +202,7 @@ public class RunCommandService: Service {
         guard let commands = getLocalCommands() else { return }
         
         if let commandData = commands.first(where: { $0.uuid == key }) {
-            Logger.services.debug("Executing command: \(pub: commandData.name)")
+            Logger.services.debug("Executing command: \(commandData.name, privacy: .public)")
             
             let task = Process()
             task.launchPath = "/bin/sh"
@@ -216,10 +216,10 @@ public class RunCommandService: Service {
                 try task.run()
                 task.waitUntilExit()
             } catch {
-                Logger.services.error("Error executing command: \(pub: error)")
+                Logger.services.error("Error executing command: \(error, privacy: .public)")
             }
         } else {
-            Logger.services.error("Command with key \(pub: key) not found")
+            Logger.services.error("Command with key \(key, privacy: .public) not found")
         }
     }
     

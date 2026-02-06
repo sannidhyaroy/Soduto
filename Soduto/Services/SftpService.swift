@@ -148,7 +148,7 @@ public class SftpService: NSObject, Service, NSWindowDelegate {
             }
         }
         catch {
-            Logger.services.error("Failed to handle SFTP data packet: \(pub: error)")
+            Logger.services.error("Failed to handle SFTP data packet: \(error, privacy: .public)")
             failedToActivateSftp(for: device)
         }
     }
@@ -196,7 +196,7 @@ public class SftpService: NSObject, Service, NSWindowDelegate {
         
         NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
             if let error = error {
-                Logger.services.error("Could not launch Soduto Files: \(pub: error)")
+                Logger.services.error("Could not launch Soduto Files: \(error, privacy: .public)")
             }
         }
     }
