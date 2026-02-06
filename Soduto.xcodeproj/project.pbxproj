@@ -52,7 +52,6 @@
 		761FBEF4293212030034FD44 /* CleanroomLogger.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF6293212600034FD44 /* Reachability.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805E2930EF31003453FD /* Reachability.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		761FBEF7293212E10034FD44 /* CleanroomLogger.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		76A5B0D029320D230061BF0B /* NMSSH.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; settings = {ATTRIBUTES = (Required, ); }; };
 		76B580582930EE1B003453FD /* libcrypto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580552930EE1B003453FD /* libcrypto.a */; };
 		76B580592930EE1B003453FD /* libssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580562930EE1B003453FD /* libssl.a */; };
@@ -236,7 +235,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				761FBEF7293212E10034FD44 /* CleanroomLogger.xcframework in Embed Frameworks */,
 				761FBEF6293212600034FD44 /* Reachability.xcframework in Embed Frameworks */,
 				761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */,
 				31B189B829ED73A1001C8735 /* Sparkle.framework in Embed Frameworks */,
