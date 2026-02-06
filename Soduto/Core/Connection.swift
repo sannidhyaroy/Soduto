@@ -311,7 +311,11 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     }
     
     public func socket(_ sock: GCDAsyncSocket, didRead data: Data, withTag tag: Int) {
+#if DEBUG
         Logger.network.debug("socket(<\(sock, privacy: .public)> didRead:<\(data, privacy: .public)> withTag:<\(tag, privacy: .public)>)")
+#else
+        Logger.network.debug("socket(<\(sock, privacy: .public)> didReadBytes:<\(data.count, privacy: .public)> withTag:<\(tag, privacy: .public)>)")
+#endif
         
         if data.count > 0 {
             if let packet = DataPacket(data: data) {

@@ -118,7 +118,11 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         
         guard dataPacket.isSharePacket else { return false }
         
-        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)");
+#if DEBUG
+        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)")
+#else
+        Logger.services.debug("handleDataPacket(type: \(dataPacket.type, privacy: .public), id: \(dataPacket.id, privacy: .public)) from device: \(device.id, privacy: .public)")
+#endif
         
         do {
             if let downloadTask = dataPacket.downloadTask {

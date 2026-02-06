@@ -68,7 +68,11 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         
         guard dataPacket.isTelephonyPacket else { return false }
         
+#if DEBUG
         Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)")
+#else
+        Logger.services.debug("handleDataPacket(type: \(dataPacket.type, privacy: .public), id: \(dataPacket.id, privacy: .public)) from device: \(device.id, privacy: .public)")
+#endif
         
         do {
             if try dataPacket.getCancelFlag() {

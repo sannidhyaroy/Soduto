@@ -187,7 +187,11 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
         guard let deviceId = try? packet.getDeviceId() else { return }
         guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else { return }
         
+#if DEBUG
         Logger.network.debug("udpSocket(<\(sock, privacy: .public)> didReceive:<<Data>> fromAddress:<\(SocketAddress(data: address), privacy: .public)> withFilterContext:<\(packet, privacy: .public)>)")
+#else
+        Logger.network.debug("udpSocket(<\(sock, privacy: .public)> didReceive:<<Data>> fromAddress:<\(SocketAddress(data: address), privacy: .public)> deviceId:<\(deviceId, privacy: .public)>)")
+#endif
         
         // create a new address to connect - ip the same as source, port - from packet info
         var connectionAddress = SocketAddress(data: address)
