@@ -8,7 +8,7 @@
 
 import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 import UniformTypeIdentifiers
 
 protocol BrowserWindowControllerDelegate: AnyObject {
@@ -27,13 +27,13 @@ class BrowserWindowController: NSWindowController {
         static let sortAscending = "com.soduto.SodutoBrowser.sortAscending"
         static let showThumbnails = "com.soduto.SodutoBrowser.showThumbnails"
     }
-
+    
     enum SortKey: String {
-      case none = "none"
-      case name = "name"
-      case date = "date"
-      case size = "size"
-      case extType = "extType"
+        case none = "none"
+        case name = "name"
+        case date = "date"
+        case size = "size"
+        case extType = "extType"
     }
     
     
@@ -66,15 +66,15 @@ class BrowserWindowController: NSWindowController {
             updateIconsSize()
         }
     }
-
+    
     public var isThumbnailsVisible: Bool = BrowserWindowController.userDefaults.bool(forKey: SettingKeys.showThumbnails) {
-      didSet {
+        didSet {
             guard isThumbnailsVisible != oldValue else { return }
             UserDefaults.standard.set(isThumbnailsVisible, forKey: SettingKeys.showThumbnails)
             self.collectionView.reloadData()
         }
     }
-
+    
     var sortKey: SortKey = {
         let raw = BrowserWindowController.userDefaults.string(forKey: SettingKeys.sortKey) ?? SortKey.name.rawValue
         return SortKey(rawValue: raw) ?? .name
@@ -85,7 +85,7 @@ class BrowserWindowController: NSWindowController {
             updateSortMenuState()
         }
     }
-
+    
     var isAscending: Bool = BrowserWindowController.userDefaults.bool(forKey: SettingKeys.sortAscending) {
         didSet {
             BrowserWindowController.userDefaults.set(isAscending, forKey: SettingKeys.sortAscending)
@@ -135,7 +135,7 @@ class BrowserWindowController: NSWindowController {
             SettingKeys.sortKey: SortKey.none.rawValue,
             SettingKeys.sortAscending: true,
             SettingKeys.showThumbnails: true,
-            ])
+        ])
         
         return UserDefaults.standard
     }()
@@ -155,7 +155,7 @@ class BrowserWindowController: NSWindowController {
         
         self.fileSystem.delegate = self
         self.fileOperationsQueue.underlyingQueue = DispatchQueue.main
-         
+        
         // make sure window is loaded
         let _ = self.window
     }
@@ -167,7 +167,7 @@ class BrowserWindowController: NSWindowController {
     public override func windowDidLoad() {
         super.windowDidLoad()
         
-        Log.debug?.message("===BrowserWindowController loaded===");
+        Logger.ui.debug("===BrowserWindowController loaded===");
         
         self.window?.delegate = self
         let autosaveNameID = self.fileSystem.name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
@@ -225,7 +225,7 @@ class BrowserWindowController: NSWindowController {
                 self.updateStatusInfo()
             }
             else {
-                Log.error?.message("Failed to load items from [\(url)] with error: \(String(describing: error))")
+                Logger.ui.error("Failed to load items from [\(url, privacy: .public)] with error: \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -334,33 +334,33 @@ class BrowserWindowController: NSWindowController {
         if isFoldersAlwaysFirst {
             descriptors.append(NSSortDescriptor(key: "isDirectory", ascending: false))
         }
-
+        
         switch sortKey {
         case .none:
             break
-
+            
         case .name:
             descriptors.append(NSSortDescriptor(key: "name", ascending: isAscending, selector: #selector(NSString.localizedCaseInsensitiveCompare(_:))))
-
+            
         case .date:
             descriptors.append(NSSortDescriptor(key: "modate", ascending: isAscending))
-
+            
         case .size:
             descriptors.append(NSSortDescriptor(key: "fileSize", ascending: isAscending))
-
+            
         case .extType:
             descriptors.append(NSSortDescriptor(key: "ext", ascending: isAscending, selector: #selector(NSString.localizedCaseInsensitiveCompare(_:))))
         }
-
+        
         if sortKey != .none && sortKey != .name {
             descriptors.append(NSSortDescriptor(key: "name", ascending: true, selector: #selector(NSString.localizedCaseInsensitiveCompare(_:))))
         }
-
+        
         self.itemArrayController.sortDescriptors = descriptors
         self.collectionView.reloadData()
         updateStatusInfo()
     }
-
+    
     private func updateBusyItems() {
         guard !isLoadingContents else { return } // we dont want to add busy items suring loadin new content - only after it is loaded
         
@@ -427,7 +427,7 @@ class BrowserWindowController: NSWindowController {
         }
         return paths
     }
-
+    
     fileprivate func canWriteFileItems(at indexPaths: Set<IndexPath>, to pasteboard: NSPasteboard) -> Bool {
         let fileItems = self.fileItems(at: indexPaths)
         return !fileItems.isEmpty && !fileItems.contains { $0.isBusy }
@@ -692,7 +692,7 @@ class BrowserWindowController: NSWindowController {
         
         return copyOperation
     }
-
+    
     
     /// Remove busy mark from url, mark it as deleted or restore to normal
     fileprivate func resetBusyUrl(_ url: URL, reload: Bool = true) {
@@ -783,25 +783,25 @@ class BrowserWindowController: NSWindowController {
             switch operation.operation {
             case .delete:
                 guard let srcUrl = operation.source else { continue }
-                Log.error?.message("Failed to delete file at [\(srcUrl)]: \(error)")
+                Logger.ui.error("Failed to delete file at [\(srcUrl, privacy: .public)]: \(error, privacy: .public)")
                 deleteMessages.append(self.fileSystem.description(for: srcUrl))
             case .copy:
                 guard let srcUrl = operation.source else { continue }
                 guard let destUrl = operation.destination else { continue }
-                Log.error?.message("Failed to copy file from [\(srcUrl)] to [\(destUrl)]: \(error)")
+                Logger.ui.error("Failed to copy file from [\(srcUrl, privacy: .public)] to [\(destUrl, privacy: .public)]: \(error, privacy: .public)")
                 let srcName = self.fileSystem.description(for: srcUrl)
                 let destName = self.fileSystem.description(for: destUrl)
                 copyMessages.append(String(format: NSLocalizedString("from %@ to %@", comment: ""), srcName, destName))
             case .move:
                 guard let srcUrl = operation.source else { continue }
                 guard let destUrl = operation.destination else { continue }
-                Log.error?.message("Failed to move file from [\(srcUrl)] to [\(destUrl)]: \(error)")
+                Logger.ui.error("Failed to move file from [\(srcUrl, privacy: .public)] to [\(destUrl, privacy: .public)]: \(error, privacy: .public)")
                 let srcName = self.fileSystem.description(for: srcUrl)
                 let destName = self.fileSystem.description(for: destUrl)
                 moveMessages.append(String(format: NSLocalizedString("from %@ to %@", comment: ""), srcName, destName))
             case .createFolder:
                 guard let destUrl = operation.destination else { continue }
-                Log.error?.message("Failed to create folder at [\(destUrl)]: \(error)")
+                Logger.ui.error("Failed to create folder at [\(destUrl, privacy: .public)]: \(error, privacy: .public)")
                 createFolderMessages.append(self.fileSystem.description(for: destUrl))
             }
         }
@@ -873,34 +873,34 @@ class BrowserWindowController: NSWindowController {
             openFile(fileItem)
         }
     }
-
+    
     private func updateSortMenuState() {
         guard sortMenuButton != nil else { return }
-
+        
         for item in sortMenuButton.menu?.items ?? [] {
             item.state = .off
-
+            
             switch item.tag {
             case 0: if sortKey == .name { item.state = .on }
             case 1: if sortKey == .date { item.state = .on }
             case 2: if sortKey == .size { item.state = .on }
             case 3: if sortKey == .extType { item.state = .on }
             case 4: if sortKey == .none { item.state = .on }
-
+                
             case 10: if isAscending { item.state = .on }
             case 11: if !isAscending { item.state = .on }
-
+                
             default: break
             }
         }
     }
-
+    
     // MARK: Actions
-
+    
     @IBAction func toggleThumbnails(_ sender: Any?) {
         self.isThumbnailsVisible = !self.isThumbnailsVisible
     }
-
+    
     @IBAction func changeSortOption(_ sender: Any) {
         let tag: Int
         if let item = sender as? NSMenuItem {
@@ -918,46 +918,46 @@ class BrowserWindowController: NSWindowController {
         case 2: self.sortKey = .size
         case 3: self.sortKey = .extType
         case 4: self.sortKey = .none
-
+            
         case 10: self.isAscending = true
         case 11: self.isAscending = false
-
+            
         default: break
         }
     }
-
+    
     @IBAction func toggleSortOrder(_ sender: Any?) {
         self.isAscending = !self.isAscending
     }
-
+    
     @IBAction func setSortOrderAscending(_ sender: Any?) {
         self.isAscending = true
     }
-
+    
     @IBAction func setSortOrderDescending(_ sender: Any?) {
         self.isAscending = false
     }
-
+    
     @IBAction func sortByName(_ sender: Any?) {
         self.sortKey = .name
     }
-
+    
     @IBAction func sortByDate(_ sender: Any?) {
         self.sortKey = .date
     }
-
+    
     @IBAction func sortBySize(_ sender: Any?) {
         self.sortKey = .size
     }
-
+    
     @IBAction func sortByExtension(_ sender: Any?) {
         self.sortKey = .extType
     }
-
+    
     @IBAction func sortByNone(_ sender: Any?) {
         self.sortKey = .none
     }
-
+    
     @objc func collectionItemViewLabelClick(_ sender: NSCollectionViewItem) {
         guard let item = sender as? IconItem else { return }
         guard self.collectionView.selectionIndexes.count == 1 else { return }
@@ -1075,7 +1075,7 @@ class BrowserWindowController: NSWindowController {
             return true
         default: break
         }
-
+        
         if let action = menuItem.action {
             switch action {
             case #selector(sortByName(_:)):
@@ -1103,7 +1103,7 @@ class BrowserWindowController: NSWindowController {
                 break
             }
         }
-
+        
         guard let action = menuItem.action else { return false }
         switch action {
         case #selector(copy(_:)): return self.canWriteFileItems(at: self.collectionView.selectionIndexPaths, to: NSPasteboard.general)
@@ -1392,7 +1392,7 @@ extension BrowserWindowController: NSCollectionViewDelegate {
      */
 //    @available(OSX 10.11, *)
 //    optional public func collectionView(_ collectionView: NSCollectionView, transitionLayoutForOldLayout fromLayout: NSCollectionViewLayout, newLayout toLayout: NSCollectionViewLayout) -> NSCollectionViewTransitionLayout
-
+    
     /* Sent to notify the delegate that the CollectionView is no longer displaying the given NSCollectionViewItem instance.  This happens when the model changes, or when an item is scrolled out of view.
      */
     public func collectionView(_ collectionView: NSCollectionView, didEndDisplaying item: NSCollectionViewItem, forRepresentedObjectAt indexPath: IndexPath) {
@@ -1400,9 +1400,9 @@ extension BrowserWindowController: NSCollectionViewDelegate {
         guard let iconItem = item as? IconItem, let fileItem = iconItem.fileItem else {
             return
         }
-
+        
         // We can just ask to cancel. If no task is running, nothing will happen.
-        Log.debug?.message("BrowserWindowController: Did end displaying \(fileItem.name). Requesting cancel.")
+        Logger.ui.debug("BrowserWindowController: Did end displaying \(fileItem.name, privacy: .public). Requesting cancel.")
         self.imageLoader.cancelLoad(for: fileItem.url)
     }
 }

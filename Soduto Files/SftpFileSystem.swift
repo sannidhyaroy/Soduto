@@ -7,7 +7,7 @@
 //
 
 import Foundation
-import CleanroomLogger
+import os
 import Cocoa
 
 class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
@@ -50,18 +50,18 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
     private let browseSession: NMSSHSession
     private let fileOperationsSession: NMSSHSession
     private let thumbnailQueue = OperationQueue()
-
+    
     // The pool of reusable sessions for thumbnails
     private var thumbnailSessionPool: [NMSSHSession] = []
     // A semaphore to limit concurrent access to the pool
     private let poolSemaphore: DispatchSemaphore
     // A lock to protect modifications to the thumbnailSessionPool array
     private let poolLock = NSLock()
-
+    
     private let hostWithPort: String
     private let user: String
     private let password: String
-
+    
     // A dictionary to track ongoing and queued download operations by their URL.
     private var downloadTasks: [URL: Operation] = [:]
     // A lock to make the downloadTasks dictionary thread-safe.
@@ -75,11 +75,11 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         let hostWithPort = port != nil ? "\(host):\(port!)" : host
         self.browseSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
         self.fileOperationsSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
-
+        
         self.hostWithPort = hostWithPort
         self.user = user
         self.password = password
-
+        
         // Initialize the semaphore with the pool size
         self.poolSemaphore = DispatchSemaphore(value: thumbnailSessionPoolSize)
         
@@ -93,27 +93,27 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         self.fileOperationsQueue.qualityOfService = .userInitiated
         self.thumbnailQueue.maxConcurrentOperationCount = thumbnailConcurrentOprationCount
         self.thumbnailQueue.qualityOfService = .utility
-
+        
         super.init() // Call super.init() before initializing the pool
-
-        Log.debug?.message("Initializing thumbnail session pool with size \(thumbnailSessionPoolSize)...")
+        
+        Logger.filesystem.debug("Initializing thumbnail session pool with size \(self.thumbnailSessionPoolSize, privacy: .public)...")
         // Create the initial pool of sessions
         for i in 0 ..< thumbnailSessionPoolSize {
             do {
                 let session = try type(of: self).initSession(host: self.hostWithPort, user: self.user, password: self.password)
                 self.thumbnailSessionPool.append(session)
             } catch {
-                Log.error?.message("Failed to create initial session \(i+1)/\(thumbnailSessionPoolSize): \(error.localizedDescription)")
+                Logger.filesystem.error("Failed to create initial session \(i+1, privacy: .public)/\(self.thumbnailSessionPoolSize, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 // If one fails, we just continue with a smaller pool.
                 // We must release the semaphore "permit" for the session we failed to create.
                 self.poolSemaphore.wait() // Consume the permit for the failed session
             }
         }
-        Log.debug?.message("Thumbnail session pool initialized with \(self.thumbnailSessionPool.count) sessions.")
+        Logger.filesystem.debug("Thumbnail session pool initialized with \(self.thumbnailSessionPool.count, privacy: .public) sessions.")
     }
-
+    
     deinit {
-        Log.debug?.message("SftpFileSystem deinit: Cancelling all thumbnail operations.")
+        Logger.filesystem.debug("SftpFileSystem deinit: Cancelling all thumbnail operations.")
         thumbnailQueue.cancelAllOperations()
     }
     
@@ -256,80 +256,74 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         self.fileOperationsQueue.addOperation(operation)
         return operation
     }
-
+    
     // MARK: Session Pool Management
-
-    /**
-      Acquires a reusable session from the pool. Blocks if the pool is empty.
-      */
+    
+    ///Acquires a reusable session from the pool. Blocks if the pool is empty.
     private func acquireThumbnailSession() -> NMSSHSession {
         // Wait until a session is available (blocks the current Operation, not the main thread)
         poolSemaphore.wait()
-
+        
         poolLock.lock()
         // We are guaranteed to have a session because the semaphore controls access
         let session = thumbnailSessionPool.removeFirst()
         poolLock.unlock()
-
-        Log.debug?.message("Session acquired. Pool size: \(thumbnailSessionPool.count)")
+        
+        Logger.filesystem.debug("Session acquired. Pool size: \(self.thumbnailSessionPool.count, privacy: .public)")
         return session
     }
-
-    /**
-     Returns a healthy session to the pool.
-     */
+    
+    ///Returns a healthy session to the pool.
     private func releaseThumbnailSession(_ session: NMSSHSession) {
         poolLock.lock()
         thumbnailSessionPool.append(session)
         poolLock.unlock()
-
+        
         // Release the semaphore permit
         poolSemaphore.signal()
-        Log.debug?.message("Session released. Pool size: \(thumbnailSessionPool.count)")
+        Logger.filesystem.debug("Session released. Pool size: \(self.thumbnailSessionPool.count, privacy: .public)")
     }
-
-    /**
-     Discards a dead session and tries to replace it with a new one.
-     Always releases the semaphore permit.
-     */
+    
+    ///Discards a dead session and tries to replace it with a new one.
+    ///Always releases the semaphore permit.
     private func replaceThumbnailSession(_ deadSession: NMSSHSession) {
-        Log.debug?.message("Replacing dead session...")
+        Logger.filesystem.debug("Replacing dead session...")
         deadSession.disconnect()
-
+        
         asynchronouslyRecreateAndAddSession()
     }
-
+    
     private func asynchronouslyRecreateAndAddSession() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
-
+            
             let retryInterval: TimeInterval = 5.0
-
+            
             while true {
-                Log.debug?.message("Attempting to recreate a session...")
+                Logger.filesystem.debug("Attempting to recreate a session...")
                 do {
                     let newSession = try type(of: self).initSession(
                         host: self.hostWithPort,
                         user: self.user,
                         password: self.password
                     )
-
-                    Log.debug?.message("Session recreated successfully.")
+                    
+                    Logger.filesystem.debug("Session recreated successfully.")
                     self.poolLock.lock()
                     self.thumbnailSessionPool.append(newSession)
                     self.poolLock.unlock()
-
+                    
                     self.poolSemaphore.signal()
-
+                    
                     break
                 } catch {
-                    Log.error?.message("Failed to recreate session: \(error.localizedDescription). Retrying in \(retryInterval)s...")
+                    Logger.filesystem.error("Failed to recreate session: \(error.localizedDescription, privacy: .public). Retrying in \(retryInterval, privacy: .public)s...")
                     Thread.sleep(forTimeInterval: retryInterval)
                 }
             }
         }
     }
-
+    
     // MARK: Private stuff
     
     /// Return the same given URL or an alternative that does not yet exist
@@ -516,47 +510,47 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 //    }
 
     // MARK: Data Loading
-
+    
     func loadData(at url: URL, completionHandler: @escaping ((Data?, Error?) -> Void)) {
         assert(isUnderRoot(url), "URL (\(url)) is outside root tree (\(self.rootUrl)).")
-
+        
         // This function is called by IconItem to fetch thumbnail data.
-
+        
         // Task Duplicate Check
         downloadTasksLock.lock()
         if downloadTasks[url] != nil {
             // Duplicated
             downloadTasksLock.unlock()
-            Log.debug?.message("SftpFileSystem loadData: Download for \(url.lastPathComponent) is already queued. Skipping.")
+            Logger.filesystem.debug("SftpFileSystem loadData: Download for \(url.lastPathComponent, privacy: .public) is already queued. Skipping.")
             // Do not call completionHandler, as the original request will handle it.
             return
         }
         downloadTasksLock.unlock()
-
+        
         // new request
         let opCount = thumbnailQueue.operationCount
-        Log.debug?.message(">>> QUEUEING operation for \(url.lastPathComponent). Current queue size: \(opCount)")
-
+        Logger.filesystem.debug(">>> QUEUEING operation for \(url.lastPathComponent, privacy: .public). Current queue size: \(opCount, privacy: .public)")
+        
         let operation = BlockOperation()
-
+        
         operation.addExecutionBlock { [weak self, weak operation] in
-            Log.debug?.message(">>> STARTING operation for \(url.lastPathComponent).")
+            Logger.filesystem.debug(">>> STARTING operation for \(url.lastPathComponent, privacy: .public).")
             // Check if self or operation are nil, or if operation was cancelled before starting
             guard let self = self, let strongOperation = operation, !strongOperation.isCancelled else {
-                Log.debug?.message("SftpFileSystem loadData: Operation was nil or cancelled before starting for \(url.lastPathComponent).")
+                Logger.filesystem.debug("SftpFileSystem loadData: Operation was nil or cancelled before starting for \(url.lastPathComponent, privacy: .public).")
                 DispatchQueue.main.async { completionHandler(nil, nil) }
                 return
             }
-            Log.debug?.message("SftpFileSystem loadData: <<< Operation STARTING for \(url.lastPathComponent) >>>")
-
+            Logger.filesystem.debug("SftpFileSystem loadData: <<< Operation STARTING for \(url.lastPathComponent, privacy: .public) >>>")
+            
             // 1. Acquire a session from the pool
             let session = self.acquireThumbnailSession()
             var sessionIsDead = false
-
+            
             var operationError: Error?
             var readSuccess = false
             let memoryStream = OutputStream.toMemory()
-
+            
             defer {
                 memoryStream.close()
                 // 3. Release or replace the session
@@ -565,89 +559,87 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
                 } else {
                     self.releaseThumbnailSession(session)
                 }
-                Log.debug?.message("SftpFileSystem loadData: <<< Operation FINISHED for \(url.lastPathComponent) >>>")
+                Logger.filesystem.debug("SftpFileSystem loadData: <<< Operation FINISHED for \(url.lastPathComponent, privacy: .public) >>>")
             }
-
+            
             // 2. Download
             memoryStream.open()
-
-            Log.debug?.message("SftpFileSystem loadData: Download starting for \(url.lastPathComponent).")
+            
+            Logger.filesystem.debug("SftpFileSystem loadData: Download starting for \(url.lastPathComponent, privacy: .public).")
             if session.sftp.readFile(atPath: url.path, to: memoryStream, progress: { _, _ in
                 // Abort if a cancellation occurs
                 return !strongOperation.isCancelled
             }) {
                 readSuccess = true
-                Log.debug?.message("SftpFileSystem loadData: Download success for \(url.lastPathComponent).")
+                Logger.filesystem.debug("SftpFileSystem loadData: Download success for \(url.lastPathComponent, privacy: .public).")
             } else {
                 if !strongOperation.isCancelled {
                     sessionIsDead = true // Download failure, mark the session as potentially dead
                     operationError = session.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
-                    Log.debug?.message("""
-                        SftpFileSystem loadData: Download failed for \(url.lastPathComponent):
-                            \(operationError?.localizedDescription ?? "Unknown SFTP error")
+                    Logger.filesystem.debug("""
+                        SftpFileSystem loadData: Download failed for \(url.lastPathComponent, privacy: .public):
+                            \(operationError?.localizedDescription ?? "Unknown SFTP error", privacy: .public)
                         """)
                 } else {
-                    Log.debug?.message("SftpFileSystem loadData: Download cancelled in progress for \(url.lastPathComponent).")
+                    Logger.filesystem.debug("SftpFileSystem loadData: Download cancelled in progress for \(url.lastPathComponent, privacy: .public).")
                 }
             }
-
+            
             // Final health check
             if !session.isConnected || !session.sftp.isConnected {
-                Log.debug?.message("Session found disconnected after operation for \(url.lastPathComponent).")
+                Logger.filesystem.debug("Session found disconnected after operation for \(url.lastPathComponent, privacy: .public).")
                 sessionIsDead = true
             }
-
+            
             // Completion Handler
-
+            
             // Cancelled
             if strongOperation.isCancelled {
-                Log.debug?.message("SftpFileSystem loadData: Operation finished but was cancelled for \(url.lastPathComponent). No callback.")
+                Logger.filesystem.debug("SftpFileSystem loadData: Operation finished but was cancelled for \(url.lastPathComponent, privacy: .public). No callback.")
                 DispatchQueue.main.async { completionHandler(nil, nil) }
                 return
             }
-
+            
             // Failure
             guard readSuccess, let data = memoryStream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data else {
-                Log.debug?.message("SftpFileSystem loadData: Failed to get data for \(url.lastPathComponent).")
+                Logger.filesystem.debug("SftpFileSystem loadData: Failed to get data for \(url.lastPathComponent, privacy: .public).")
                 let error = operationError ?? SftpError.downloadingFileFailed(at: url)
                 DispatchQueue.main.async { completionHandler(nil, error) }
                 return
             }
-
+            
             // Success
-            Log.debug?.message("""
+            Logger.filesystem.debug("""
                 SftpFileSystem loadData: Download complete.
-                    Returning \(data.count) bytes for \(url.lastPathComponent).
+                    Returning \(data.count, privacy: .public) bytes for \(url.lastPathComponent, privacy: .public).
                 """)
             DispatchQueue.main.async { completionHandler(data, nil) }
         }
-
+        
         operation.completionBlock = { [weak self] in
             self?.downloadTasksLock.lock()
             self?.downloadTasks.removeValue(forKey: url)
-            Log.debug?.message("SftpFileSystem: Removed task for \(url.lastPathComponent) from tracking. Remaining: \(self?.downloadTasks.count ?? 0)")
+            Logger.filesystem.debug("SftpFileSystem: Removed task for \(url.lastPathComponent, privacy: .public) from tracking. Remaining: \(self?.downloadTasks.count ?? 0, privacy: .public)")
             self?.downloadTasksLock.unlock()
         }
-
+        
         // Add the operation to the tracking dictionary before queueing it.
         downloadTasksLock.lock()
         downloadTasks[url] = operation
         downloadTasksLock.unlock()
-
+        
         thumbnailQueue.addOperation(operation)
     }
-
-    /**
-     Cancels any queued or ongoing thumbnail download for the specified URL.
-     */
+    
+    ///Cancels any queued or ongoing thumbnail download for the specified URL.
     public func cancelLoad(for url: URL) {
         downloadTasksLock.lock()
         defer { downloadTasksLock.unlock() }
-
+        
         if let operation = downloadTasks[url] {
             if !operation.isFinished && !operation.isCancelled {
                 operation.cancel()
-                Log.debug?.message("SftpFileSystem: Cancel request for \(url.lastPathComponent).")
+                Logger.filesystem.debug("SftpFileSystem: Cancel request for \(url.lastPathComponent, privacy: .public).")
             }
         }
     }
@@ -657,29 +649,29 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 // MARK: - FileSystem
 
 extension FileItem {
-
+    
     fileprivate convenience init?(sftpFile: NMSFTPFile, parentUrl: URL, user: String) {
         guard var name = sftpFile.filename else { return nil }
         if name.hasSuffix("/") { name = String(name.dropLast()) }
-
+        
         let url = parentUrl.appendingPathComponent(name, isDirectory: sftpFile.isDirectory)
-
+        
         var flags: Flags = []
         if sftpFile.isWritable(by: user) { flags.insert(.isWritable) }
         if sftpFile.isReadable(by: user) { flags.insert(.isReadable) }
         if sftpFile.isDirectory { flags.insert(.isDirectory) }
         if name.hasPrefix(".") { flags.insert(.isHidden) }
-
+        
         let fileType: String = flags.contains(.isDirectory) ? String(kUTTypeDirectory) : url.pathExtension
         let icon = flags.contains(.isDirectory) ? NSWorkspace.shared.icon(forFileType: kUTTypeFolder as String) : NSWorkspace.shared.icon(forFileType: fileType)
-
+        
         let fileSize = sftpFile.fileSize?.int64Value ?? 0
-
+        
         let modate = sftpFile.modificationDate
-
+        
         self.init(url: url, name: name, icon: icon, flags: flags, fileSize: fileSize, modate: modate)
     }
-
+    
 }
 
 
@@ -718,7 +710,7 @@ extension NMSSHChannel {
             return number.int64Value
         }
         catch {
-            Log.error?.message("Failed to retrieve free disk space for path [\(path)]: \(error).")
+            Logger.filesystem.error("Failed to retrieve free disk space for path [\(path, privacy: .public)]: \(error, privacy: .public).")
             return nil
         }*/
     }
