@@ -281,7 +281,6 @@
 		76B580552930EE1B003453FD /* libcrypto.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libcrypto.a; path = Libraries/lib/libcrypto.a; sourceTree = "<group>"; };
 		76B580562930EE1B003453FD /* libssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssl.a; path = Libraries/lib/libssl.a; sourceTree = "<group>"; };
 		76B580572930EE1B003453FD /* libssh2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssh2.a; path = Libraries/lib/libssh2.a; sourceTree = "<group>"; };
-		76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CleanroomLogger.xcframework; path = Carthage/Build/CleanroomLogger.xcframework; sourceTree = "<group>"; };
 		76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CocoaAsyncSocket.xcframework; path = Carthage/Build/CocoaAsyncSocket.xcframework; sourceTree = "<group>"; };
 		76B5805D2930EF31003453FD /* NMSSH.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = NMSSH.xcframework; path = Carthage/Build/NMSSH.xcframework; sourceTree = "<group>"; };
 		76B5805E2930EF31003453FD /* Reachability.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Reachability.xcframework; path = Carthage/Build/Reachability.xcframework; sourceTree = "<group>"; };
@@ -783,7 +782,6 @@
 			isa = PBXGroup;
 			children = (
 				31B189B529ED731B001C8735 /* Sparkle.framework */,
-				76B5805B2930EF31003453FD /* CleanroomLogger.xcframework */,
 				76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */,
 				76B5805D2930EF31003453FD /* NMSSH.xcframework */,
 				76B5805E2930EF31003453FD /* Reachability.xcframework */,
