@@ -1,5 +1,5 @@
 //
-//  Log.swift
+//  Logger+Categories.swift
 //  Soduto Files
 //
 //  Created by Sannidhya Roy on 04/02/26.
