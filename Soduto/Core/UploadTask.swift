@@ -8,7 +8,7 @@
 
 import Foundation
 import CocoaAsyncSocket
-import CleanroomLogger
+import os
 
 public protocol UploadTaskDelegate: AnyObject {
     func uploadTask(_ task: UploadTask, finishedWithSuccess success: Bool)
@@ -22,7 +22,7 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
         case port = "port"
     }
     
-
+    
     // MARK: Properties
     
     public static let portReleaseNotification: Notification.Name = Notification.Name(rawValue: "com.soduto.uploadTask.portReleasedNotification")
@@ -72,7 +72,7 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
         self.listenTimeoutTimer = Timer.compatTimer(withTimeInterval: UploadTask.listenTimeout, repeats: false, block: { _ in
             // Dont check for listeningSocket.isConnected, because it is false for listening socket
             guard !listeningSocket.isDisconnected else { return }
-            Log.info?.message("Serving payload for packet of type '\(packet.type)' on port \(listeningSocket.localPort) has timedout")
+            Logger.network.info("Serving payload for packet of type '\(pub: packet.type)' on port \(pub: listeningSocket.localPort) has timedout")
             listeningSocket.disconnect()
         })
         
@@ -85,7 +85,7 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
                 try self.listeningSocket.accept(onPort: port)
                 self.listeningPort = port
                 type(of: self).usePort(port)
-                Log.debug?.message("Providing payload for packet with id <\(packet.id)> on port \(port). [\(self)]")
+                Logger.network.debug("Providing payload for packet with id <\(pub: packet.id)> on port \(pub: port). [\(pub: self)]")
                 break
             }
             catch {}
@@ -106,7 +106,7 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
     // MARK: Public methods
     
     public func close() {
-        Log.debug?.message("close() [\(self)]")
+        Logger.network.debug("close() [\(pub: self)]")
         
         self.delegate = nil
         self.listeningSocket.disconnect()
@@ -170,11 +170,11 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
     }
     
     public func socketDidDisconnect(_ sock: GCDAsyncSocket, withError err: Error?) {
-        Log.debug?.message("socketDidDisconnect(<\(sock)>, withError: <\(String(describing: err))>) [\(self)]")
+        Logger.network.debug("socketDidDisconnect(<\(pub: sock)>, withError: <\(pub: String(describing: err))>) [\(pub: self)]")
         
         if sock === self.listeningSocket {
             if let error = err {
-                Log.error?.message("Upload listening socket disconnected with error: \(error)")
+                Logger.network.error("Upload listening socket disconnected with error: \(pub: error)")
             }
             self.listenTimeoutTimer.invalidate()
             if self.uploadingSocket == nil {
@@ -183,7 +183,7 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
         }
         else if sock === self.uploadingSocket {
             if let error = err {
-                Log.error?.message("Upload listening socket disconnected with error: \(error)")
+                Logger.network.error("Upload listening socket disconnected with error: \(pub: error)")
             }
             self.uploadFinished(success: err == nil)
         }
@@ -240,7 +240,7 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
     }
     
     private func uploadFinished(success: Bool) {
-        Log.debug?.message("uploadFinished(<\(success)>) [\(self)]")
+        Logger.network.debug("uploadFinished(<\(pub: success)>) [\(pub: self)]")
         
         type(of: self).releasePort(self.listeningPort)
         self.delegateQueue.async { [weak self] in

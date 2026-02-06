@@ -9,7 +9,7 @@
 import Foundation
 import Cocoa
 import Contacts
-import CleanroomLogger
+import os
 
 class SendMessageWindowController: NSWindowController {
     
@@ -66,9 +66,9 @@ class SendMessageWindowController: NSWindowController {
                     
                     // Log the result of the permission request
                     if granted {
-                        Log.debug?.message("Contacts access granted")
+                        Logger.ui.debug("Contacts access granted")
                     } else {
-                        Log.debug?.message("Contacts access denied or error: \(String(describing: error))")
+                        Logger.ui.debug("Contacts access denied or error: \(pub: String(describing: error))")
                     }
                     
                     NSApp.activate(ignoringOtherApps: true)
@@ -80,7 +80,7 @@ class SendMessageWindowController: NSWindowController {
             super.showWindow(sender)
         }
     }
-
+    
     public override func windowDidLoad() {
         self.bodyInput.textContainerInset = NSSize(width: 15.0, height: 8.0)
         self.bodyInput.font = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .regular))
@@ -281,7 +281,7 @@ extension SendMessageWindowController: NSTokenFieldDelegate {
 }
 
 
-// MARK: - 
+// MARK: -
 
 /// Represents a phone number from contacts
 final class ContactPhoneNumber: NSObject {
@@ -374,7 +374,7 @@ final class ContactPhoneNumber: NSObject {
             })
         }
         catch {
-            Log.error?.message("Failed to fetch contacts: \(error)")
+            Logger.ui.error("Failed to fetch contacts: \(pub: error)")
             return nil
         }
         
@@ -465,9 +465,9 @@ extension ContactPhoneNumber {
             try store.enumerateContacts(with: request, usingBlock: { (contact: CNContact, result: UnsafeMutablePointer<ObjCBool>) in
                 let phoneNumbers = contact.phoneNumbers.filter { phoneNumber in
                     return phoneNumber.label != CNLabelPhoneNumberPager
-                        && phoneNumber.label != CNLabelPhoneNumberHomeFax
-                        && phoneNumber.label != CNLabelPhoneNumberWorkFax
-                        && phoneNumber.label != CNLabelPhoneNumberOtherFax
+                    && phoneNumber.label != CNLabelPhoneNumberHomeFax
+                    && phoneNumber.label != CNLabelPhoneNumberWorkFax
+                    && phoneNumber.label != CNLabelPhoneNumberOtherFax
                 }
                 guard phoneNumbers.count > 0 else { return }
                 guard let fullName = CNContactFormatter.string(from: contact, style: .fullName) else { return }
@@ -480,7 +480,7 @@ extension ContactPhoneNumber {
             })
         }
         catch {
-            Log.error?.message("Failed to fetch contacts: \(error)")
+            Logger.ui.error("Failed to fetch contacts: \(pub: error)")
         }
         
         results.sort { (c1, c2) in c1.displayString.compare(c2.displayString) == .orderedAscending }

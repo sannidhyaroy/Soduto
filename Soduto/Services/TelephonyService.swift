@@ -8,7 +8,7 @@
 
 import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 import UserNotifications
 import AVFoundation
 import CoreAudio
@@ -68,7 +68,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         
         guard dataPacket.isTelephonyPacket else { return false }
         
-        Log.debug?.message("handleDataPacket(<\(dataPacket)> fromDevice:<\(device)> onConnection:<\(connection)>)")
+        Logger.services.debug("handleDataPacket(<\(pub: dataPacket)> fromDevice:<\(pub: device)> onConnection:<\(pub: connection)>)")
         
         do {
             if try dataPacket.getCancelFlag() {
@@ -89,13 +89,13 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     self.handleSMSPacket(dataPacket, from: device)
                     break
                 default:
-                    Log.error?.message("Unknown telephony event type: \(event)")
+                    Logger.services.error("Unknown telephony event type: \(pub: event)")
                     break
                 }
             }
         }
         catch {
-            Log.error?.message("Error while handling telephony packet: \(error)")
+            Logger.services.error("Error while handling telephony packet: \(pub: error)")
         }
         
         return true
@@ -218,21 +218,21 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
                     notification.attachments = [attachment]
                 } catch {
-                    Log.error?.message("Failed to create ringing notification attachment: \(error)")
+                    Logger.services.error("Failed to create ringing notification attachment: \(pub: error)")
                 }
             }
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             un.add(request) { error in
                 if let error = error {
-                    Log.error?.message("Failed to add ringing notification request: \(error)")
+                    Logger.services.error("Failed to add ringing notification request: \(pub: error)")
                 }
             }
             
-            Log.debug?.message("Ringing notification shown: \(notificationId)")
+            Logger.services.debug("Ringing notification shown: \(pub: notificationId)")
         }
         catch {
-            Log.error?.message("Error while showing ringing notification: \(error)")
+            Logger.services.error("Error while showing ringing notification: \(pub: error)")
         }
     }
     
@@ -258,21 +258,21 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
                     notification.attachments = [attachment]
                 } catch {
-                    Log.error?.message("Failed to create missed call notification attachment: \(error)")
+                    Logger.services.error("Failed to create missed call notification attachment: \(pub: error)")
                 }
             }
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             un.add(request) { error in
                 if let error = error {
-                    Log.error?.message("Failed to add missed call notification request: \(error)")
+                    Logger.services.error("Failed to add missed call notification request: \(pub: error)")
                 }
             }
             
-            Log.debug?.message("Missed call notification shown: \(notificationId)")
+            Logger.services.debug("Missed call notification shown: \(pub: notificationId)")
         }
         catch {
-            Log.error?.message("Error while showing missed call notification: \(error)")
+            Logger.services.error("Error while showing missed call notification: \(pub: error)")
         }
     }
     
@@ -323,7 +323,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                         let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
                         notification.attachments = [attachment]
                     } catch {
-                        Log.error?.message("Failed to create SMS notification attachment: \(error)")
+                        Logger.services.error("Failed to create SMS notification attachment: \(pub: error)")
                     }
                 }
                 
@@ -334,15 +334,15 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
                 self.un.add(request) { error in
                     if let error = error {
-                        Log.error?.message("Failed to add SMS notification request: \(error)")
+                        Logger.services.error("Failed to add SMS notification request: \(pub: error)")
                     }
                 }
                 
-                Log.debug?.message("SMS notification shown: \(notificationId)")
+                Logger.services.debug("SMS notification shown: \(pub: notificationId)")
             }
         }
         catch {
-            Log.error?.message("Error while showing sms notification: \(error)")
+            Logger.services.error("Error while showing sms notification: \(pub: error)")
         }
     }
     
@@ -360,12 +360,12 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 }
             }
         } catch {
-            Log.error?.message("Error determining call event type: \(error)")
+            Logger.services.error("Error determining call event type: \(pub: error)")
         }
         
         un.removeNotification(withId: id)
         
-        Log.debug?.message("Notification hidden: \(id)")
+        Logger.services.debug("Notification hidden: \(pub: id)")
     }
     
     private func handleSMSPacket(_ packet: DataPacket, from device: Device) {
@@ -403,7 +403,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 self.showSmsNotification(for: packet, from: device)
             }
             catch {
-                Log.error?.message("Failed to handle SMS packets: \(error)")
+                Logger.services.error("Failed to handle SMS packets: \(pub: error)")
             }
         }
         

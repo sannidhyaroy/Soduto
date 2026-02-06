@@ -7,7 +7,7 @@
 //
 
 import Foundation
-import CleanroomLogger
+import os
 import ServiceManagement
 
 public class DeviceConfiguration: NSObject {
@@ -81,7 +81,7 @@ public class DeviceConfiguration: NSObject {
                 }
             }
             catch {
-                Log.error?.message("Failed to update certificate: \(error)")
+                Logger.config.error("Failed to update certificate: \(pub: error)")
             }
         }
     }
@@ -123,7 +123,7 @@ public class DeviceConfiguration: NSObject {
     
     convenience init(configKey: String, userDefaults: UserDefaults) {
         assert(DeviceConfiguration.isDeviceConfigKey(configKey), "configKey is not a valid device configuration key")
-    
+        
         let deviceId: Device.Id
         if DeviceConfiguration.isDeviceConfigKey(configKey) {
             deviceId = String(configKey[configKey.index(configKey.startIndex, offsetBy: DeviceConfiguration.configKeyPrefix.count)...])
@@ -254,7 +254,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
     public weak var capabilitiesDataSource: CapabilitiesDataSource? = nil
     
     private let userDefaults: UserDefaults
-   
+    
     convenience init() {
         self.init(userDefaults: UserDefaults.standard)
     }
@@ -337,7 +337,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
         set {
             if #available(macOS 13.0, *) {
                 let loginItem = SMAppService.mainApp
-
+                
                 do {
                     if newValue {
                         if loginItem.status != .enabled {
@@ -348,7 +348,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                             try loginItem.unregister()
                         }
                     }
-
+                    
                     let isEnabled = loginItem.status == .enabled
                     self.userDefaults.set(isEnabled, forKey: Property.launchOnLogin.rawValue)
                 } catch {
@@ -378,7 +378,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                 do {
                     return try JSONDecoder().decode([RunCommandService.Command].self, from: data)
                 } catch {
-                    Log.error?.message("Failed to decode run commands: \(error)")
+                    Logger.config.error("Failed to decode run commands: \(pub: error)")
                     return []
                 }
             }
@@ -389,7 +389,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                 let data = try JSONEncoder().encode(newValue)
                 self.userDefaults.set(data, forKey: Property.runCommands.rawValue)
             } catch {
-                Log.error?.message("Failed to encode run commands: \(error)")
+                Logger.config.error("Failed to encode run commands: \(pub: error)")
             }
         }
     }
@@ -407,11 +407,11 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
     
     fileprivate class func hostCertificate(using userDefaults: UserDefaults) -> SecIdentity? {
         guard let hostDeviceId = userDefaults.string(forKey: Property.hostDeviceId.rawValue) else {
-            Log.error?.message("Failed to get host device ID")
+            Logger.config.error("Failed to get host device ID")
             return nil
         }
         guard let name = userDefaults.string(forKey: Property.hostCertificateName.rawValue) else {
-            Log.error?.message("Failed to get host certificate name")
+            Logger.config.error("Failed to get host certificate name")
             return nil
         }
         let expirationInterval = 60.0 * 60.0 * 24.0 * 365.0 * 10.0
@@ -419,9 +419,9 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
             return try CertificateUtils.getOrCreateIdentity(name, certCommonName: hostDeviceId, expirationInterval: expirationInterval)
         }
         catch {
-            Log.error?.message("Failed to get host identity for SSL: \(error)")
+            Logger.config.error("Failed to get host identity for SSL: \(pub: error)")
             return nil
         }
-
+        
     }
 }

@@ -8,7 +8,7 @@
 
 import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 import ApplicationServices
 
 public class RemoteKeyboardService: Service {
@@ -35,7 +35,7 @@ public class RemoteKeyboardService: Service {
             checkAndRequestAccessibilityPermissions()
             hasCheckedAccessibility = true
         }
-
+        
         do {
             if (dataPacket.isPresenterPacket) {
                 // Process presenter input
@@ -46,13 +46,13 @@ public class RemoteKeyboardService: Service {
                 
                 // Process mouse input
                 processMouseInput(dataPacket)
-
+                
                 guard try dataPacket.getSendAckFlag() else { return true }
                 device.send(try DataPacket.remoteKeyboardEchoPacket(for: dataPacket))
             }
         }
         catch {
-            Log.error?.message("Failed handling remote keyboard data packet: \(error).")
+            Logger.services.error("Failed handling remote keyboard data packet: \(pub: error).")
         }
         
         return true
@@ -112,7 +112,7 @@ public class RemoteKeyboardService: Service {
             // Handle regular alphanumeric/character keys
             simulateKeyPress(key, withModifiers: modifiers)
         } else {
-            Log.warning?.message("Received keyboard input packet with no valid key or special key")
+            Logger.services.notice("Received keyboard input packet with no valid key or special key")
         }
     }
     
@@ -133,7 +133,7 @@ public class RemoteKeyboardService: Service {
     private func simulateKeyPress(_ key: String, withModifiers modifiers: KeyModifiers) {
         // Create a source for the CGEvent
         guard let source = CGEventSource(stateID: .hidSystemState) else {
-            Log.error?.message("Failed to create CGEventSource")
+            Logger.services.error("Failed to create CGEventSource")
             return
         }
         
@@ -163,7 +163,7 @@ public class RemoteKeyboardService: Service {
         let mappedKeyCode = mapSpecialKey(kdeKeyCode)
         
         guard let source = CGEventSource(stateID: .hidSystemState) else {
-            Log.error?.message("Failed to create CGEventSource")
+            Logger.services.error("Failed to create CGEventSource")
             return
         }
         
@@ -229,7 +229,7 @@ public class RemoteKeyboardService: Service {
     }
     
     // MARK: Mouse Input Properties
-
+    
     struct MouseInputProperty {
         public static let dx = "dx"
         public static let dy = "dy"
@@ -241,79 +241,79 @@ public class RemoteKeyboardService: Service {
         public static let singlehold = "singlehold"
         public static let singlerelease = "singlerelease"
     }
-
+    
     // Extract mouse movement values (dx, dy)
     func getMouseDx(from dataPacket: DataPacket) throws -> Double {
         try dataPacket.validateRemoteKeyboardRequestType()
         guard dataPacket.body.keys.contains(MouseInputProperty.dx) else { return 0 }
-        guard let value = dataPacket.body[MouseInputProperty.dx] as? NSNumber else { 
+        guard let value = dataPacket.body[MouseInputProperty.dx] as? NSNumber else {
             throw DataPacket.RemoteKeyboardError.invalidMouseInput
         }
         return value.doubleValue
     }
-
+    
     func getMouseDy(from dataPacket: DataPacket) throws -> Double {
         try dataPacket.validateRemoteKeyboardRequestType()
         guard dataPacket.body.keys.contains(MouseInputProperty.dy) else { return 0 }
-        guard let value = dataPacket.body[MouseInputProperty.dy] as? NSNumber else { 
+        guard let value = dataPacket.body[MouseInputProperty.dy] as? NSNumber else {
             throw DataPacket.RemoteKeyboardError.invalidMouseInput
         }
         return value.doubleValue
     }
-
+    
     // Extract scroll values
     func getScrollDx(from dataPacket: DataPacket) throws -> Double {
         try dataPacket.validateRemoteKeyboardRequestType()
-        guard dataPacket.body.keys.contains(MouseInputProperty.scroll) && dataPacket.body.keys.contains(MouseInputProperty.dx) else { 
-            return 0 
+        guard dataPacket.body.keys.contains(MouseInputProperty.scroll) && dataPacket.body.keys.contains(MouseInputProperty.dx) else {
+            return 0
         }
-        guard let value = dataPacket.body[MouseInputProperty.dx] as? NSNumber else { 
+        guard let value = dataPacket.body[MouseInputProperty.dx] as? NSNumber else {
             throw DataPacket.RemoteKeyboardError.invalidMouseInput
         }
         return value.doubleValue
     }
-
+    
     func getScrollDy(from dataPacket: DataPacket) throws -> Double {
         try dataPacket.validateRemoteKeyboardRequestType()
-        guard dataPacket.body.keys.contains(MouseInputProperty.scroll) && dataPacket.body.keys.contains(MouseInputProperty.dy) else { 
-            return 0 
+        guard dataPacket.body.keys.contains(MouseInputProperty.scroll) && dataPacket.body.keys.contains(MouseInputProperty.dy) else {
+            return 0
         }
-        guard let value = dataPacket.body[MouseInputProperty.dy] as? NSNumber else { 
+        guard let value = dataPacket.body[MouseInputProperty.dy] as? NSNumber else {
             throw DataPacket.RemoteKeyboardError.invalidMouseInput
         }
         return value.doubleValue
     }
-
+    
     func hasMouseSingleClick(in dataPacket: DataPacket) throws -> Bool {
         try dataPacket.validateRemoteKeyboardRequestType()
         return dataPacket.body.keys.contains(MouseInputProperty.singleclick)
     }
-
+    
     func hasMouseDoubleClick(in dataPacket: DataPacket) throws -> Bool {
         try dataPacket.validateRemoteKeyboardRequestType()
         return dataPacket.body.keys.contains(MouseInputProperty.doubleclick)
     }
-
+    
     func hasMouseMiddleClick(in dataPacket: DataPacket) throws -> Bool {
         try dataPacket.validateRemoteKeyboardRequestType()
         return dataPacket.body.keys.contains(MouseInputProperty.middleclick)
     }
-
+    
     func hasMouseRightClick(in dataPacket: DataPacket) throws -> Bool {
         try dataPacket.validateRemoteKeyboardRequestType()
         return dataPacket.body.keys.contains(MouseInputProperty.rightclick)
     }
-
+    
     func hasMouseSingleHold(in dataPacket: DataPacket) throws -> Bool {
         try dataPacket.validateRemoteKeyboardRequestType()
         return dataPacket.body.keys.contains(MouseInputProperty.singlehold)
     }
-
+    
     func hasMouseSingleRelease(in dataPacket: DataPacket) throws -> Bool {
         try dataPacket.validateRemoteKeyboardRequestType()
         return dataPacket.body.keys.contains(MouseInputProperty.singlerelease)
     }
-
+    
     // MARK: - Mouse Input Processing
     
     private func processMouseInput(_ dataPacket: DataPacket) {
@@ -327,11 +327,11 @@ public class RemoteKeyboardService: Service {
         }
         
         // Then check for regular mouse movement (dx/dy)
-        if !dataPacket.body.keys.contains(MouseInputProperty.scroll) && 
-           dataPacket.body.keys.contains(MouseInputProperty.dx) && 
-           dataPacket.body.keys.contains(MouseInputProperty.dy) {
-            if let dx = try? getMouseDx(from: dataPacket), 
-               let dy = try? getMouseDy(from: dataPacket) {
+        if !dataPacket.body.keys.contains(MouseInputProperty.scroll) &&
+            dataPacket.body.keys.contains(MouseInputProperty.dx) &&
+            dataPacket.body.keys.contains(MouseInputProperty.dy) {
+            if let dx = try? getMouseDx(from: dataPacket),
+                let dy = try? getMouseDy(from: dataPacket) {
                 movePointer(dx: dx, dy: dy)
                 return
             }
@@ -371,7 +371,7 @@ public class RemoteKeyboardService: Service {
     
     private func movePointer(dx: Double, dy: Double) {
         guard let currentPos = CGEvent(source: nil)?.location else {
-            Log.error?.message("Failed to get current pointer position")
+            Logger.services.error("Failed to get current pointer position")
             return
         }
         
@@ -379,48 +379,48 @@ public class RemoteKeyboardService: Service {
         let newY = currentPos.y + CGFloat(dy)
         
         // Create and post the mouse move event
-        if let moveEvent = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, 
-                                 mouseCursorPosition: CGPoint(x: newX, y: newY), 
-                                 mouseButton: .left) {
+        if let moveEvent = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
+                                   mouseCursorPosition: CGPoint(x: newX, y: newY),
+                                   mouseButton: .left) {
             moveEvent.post(tap: .cghidEventTap)
         } else {
-            Log.error?.message("Failed to create mouse move event")
+            Logger.services.error("Failed to create mouse move event")
         }
     }
     
     private func scrollPointer(dx: Double, dy: Double) {
         // Create a CGEvent source
         guard let source = CGEventSource(stateID: .hidSystemState) else {
-            Log.error?.message("Failed to create CGEventSource")
+            Logger.services.error("Failed to create CGEventSource")
             return
         }
         
         // Create a scroll wheel event (dy is vertical, dx is horizontal)
         if let scrollEvent = CGEvent(scrollWheelEvent2Source: source,
-                                   units: .pixel,
-                                   wheelCount: 2,
-                                   wheel1: Int32(dy),
-                                   wheel2: Int32(dx),
-                                   wheel3: 0
+                                     units: .pixel,
+                                     wheelCount: 2,
+                                     wheel1: Int32(dy),
+                                     wheel2: Int32(dx),
+                                     wheel3: 0
         ) {
             scrollEvent.post(tap: .cghidEventTap)
         } else {
-            Log.error?.message("Failed to create scroll event")
+            Logger.services.error("Failed to create scroll event")
         }
     }
     
     private func clickPointer(button: CGMouseButton) {
         guard let currentPos = CGEvent(source: nil)?.location else {
-            Log.error?.message("Failed to get current pointer position")
+            Logger.services.error("Failed to get current pointer position")
             return
         }
         
         // Create a mouse down event
-        if let downEvent = CGEvent(mouseEventSource: nil, 
-                                 mouseType: button == .left ? .leftMouseDown : 
-                                           (button == .right ? .rightMouseDown : .otherMouseDown), 
-                                 mouseCursorPosition: currentPos, 
-                                 mouseButton: button) {
+        if let downEvent = CGEvent(mouseEventSource: nil,
+                                   mouseType: button == .left ? .leftMouseDown :
+                                    (button == .right ? .rightMouseDown : .otherMouseDown),
+                                   mouseCursorPosition: currentPos,
+                                   mouseButton: button) {
             if button == MouseButtons.center {
                 downEvent.setIntegerValueField(.mouseEventButtonNumber, value: Int64(button.rawValue))
             }
@@ -431,11 +431,11 @@ public class RemoteKeyboardService: Service {
         usleep(10000) // 10ms
         
         // Create a mouse up event
-        if let upEvent = CGEvent(mouseEventSource: nil, 
-                               mouseType: button == .left ? .leftMouseUp : 
-                                         (button == .right ? .rightMouseUp : .otherMouseUp), 
-                               mouseCursorPosition: currentPos, 
-                               mouseButton: button) {
+        if let upEvent = CGEvent(mouseEventSource: nil,
+                                 mouseType: button == .left ? .leftMouseUp :
+                                    (button == .right ? .rightMouseUp : .otherMouseUp),
+                                 mouseCursorPosition: currentPos,
+                                 mouseButton: button) {
             if button == MouseButtons.center {
                 upEvent.setIntegerValueField(.mouseEventButtonNumber, value: Int64(button.rawValue))
             }
@@ -446,31 +446,31 @@ public class RemoteKeyboardService: Service {
     private func doubleClickPointer() {
         // https://developer.apple.com/forums/thread/685901?answerId=752279022#752279022
         guard let currentPos = CGEvent(source: nil)?.location else {
-            Log.error?.message("Failed to get current pointer position")
+            Logger.services.error("Failed to get current pointer position")
             return
         }
         
         // Create a source for the CGEvent
         guard let source = CGEventSource(stateID: .hidSystemState) else {
-            Log.error?.message("Failed to create CGEventSource")
+            Logger.services.error("Failed to create CGEventSource")
             return
         }
         
         // Perform the double-click sequence twice since only that seems to work
         
         // First double-click sequence
-        if let eventDown = CGEvent(mouseEventSource: source, 
-                                 mouseType: .leftMouseDown, 
-                                 mouseCursorPosition: currentPos, 
-                                 mouseButton: .left) {
+        if let eventDown = CGEvent(mouseEventSource: source,
+                                   mouseType: .leftMouseDown,
+                                   mouseCursorPosition: currentPos,
+                                   mouseButton: .left) {
             eventDown.setIntegerValueField(.mouseEventClickState, value: 2)
             eventDown.post(tap: .cghidEventTap)
         }
         
-        if let eventUp = CGEvent(mouseEventSource: source, 
-                               mouseType: .leftMouseUp, 
-                               mouseCursorPosition: currentPos, 
-                               mouseButton: .left) {
+        if let eventUp = CGEvent(mouseEventSource: source,
+                                 mouseType: .leftMouseUp,
+                                 mouseCursorPosition: currentPos,
+                                 mouseButton: .left) {
             eventUp.setIntegerValueField(.mouseEventClickState, value: 2)
             eventUp.post(tap: .cghidEventTap)
         }
@@ -479,18 +479,18 @@ public class RemoteKeyboardService: Service {
         usleep(50000) // 50ms delay
         
         // Second double-click sequence
-        if let eventDown2 = CGEvent(mouseEventSource: source, 
-                                  mouseType: .leftMouseDown, 
-                                  mouseCursorPosition: currentPos, 
-                                  mouseButton: .left) {
+        if let eventDown2 = CGEvent(mouseEventSource: source,
+                                    mouseType: .leftMouseDown,
+                                    mouseCursorPosition: currentPos,
+                                    mouseButton: .left) {
             eventDown2.setIntegerValueField(.mouseEventClickState, value: 2)
             eventDown2.post(tap: .cghidEventTap)
         }
         
-        if let eventUp2 = CGEvent(mouseEventSource: source, 
-                                mouseType: .leftMouseUp, 
-                                mouseCursorPosition: currentPos, 
-                                mouseButton: .left) {
+        if let eventUp2 = CGEvent(mouseEventSource: source,
+                                  mouseType: .leftMouseUp,
+                                  mouseCursorPosition: currentPos,
+                                  mouseButton: .left) {
             eventUp2.setIntegerValueField(.mouseEventClickState, value: 2)
             eventUp2.post(tap: .cghidEventTap)
         }
@@ -498,48 +498,48 @@ public class RemoteKeyboardService: Service {
     
     private func pressPointer(button: CGMouseButton) {
         guard let currentPos = CGEvent(source: nil)?.location else {
-            Log.error?.message("Failed to get current pointer position")
+            Logger.services.error("Failed to get current pointer position")
             return
         }
         
         // Create a mouse down event without an up event (for dragging)
-        if let downEvent = CGEvent(mouseEventSource: nil, 
-                                 mouseType: button == .left ? .leftMouseDown : 
-                                           (button == .right ? .rightMouseDown : .otherMouseDown), 
-                                 mouseCursorPosition: currentPos, 
-                                 mouseButton: button) {
+        if let downEvent = CGEvent(mouseEventSource: nil,
+                                   mouseType: button == .left ? .leftMouseDown :
+                                    (button == .right ? .rightMouseDown : .otherMouseDown),
+                                   mouseCursorPosition: currentPos,
+                                   mouseButton: button) {
             downEvent.post(tap: .cghidEventTap)
         } else {
-            Log.error?.message("Failed to create mouse press event")
+            Logger.services.error("Failed to create mouse press event")
         }
     }
     
     private func releasePointer(button: CGMouseButton) {
         guard let currentPos = CGEvent(source: nil)?.location else {
-            Log.error?.message("Failed to get current pointer position")
+            Logger.services.error("Failed to get current pointer position")
             return
         }
         
         // Create a mouse up event
-        if let upEvent = CGEvent(mouseEventSource: nil, 
-                               mouseType: button == .left ? .leftMouseUp : 
-                                         (button == .right ? .rightMouseUp : .otherMouseUp), 
-                               mouseCursorPosition: currentPos, 
-                               mouseButton: button) {
+        if let upEvent = CGEvent(mouseEventSource: nil,
+                                 mouseType: button == .left ? .leftMouseUp :
+                                    (button == .right ? .rightMouseUp : .otherMouseUp),
+                                 mouseCursorPosition: currentPos,
+                                 mouseButton: button) {
             upEvent.post(tap: .cghidEventTap)
         } else {
-            Log.error?.message("Failed to create mouse release event")
+            Logger.services.error("Failed to create mouse release event")
         }
     }
     
     // MARK: - Accessibility Permissions
-
+    
     private func checkAndRequestAccessibilityPermissions() {
         let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let accessEnabled = AXIsProcessTrustedWithOptions(options)
         
         if !accessEnabled {
-            Log.warning?.message("Accessibility permissions not granted. Prompting user.")
+            Logger.services.notice("Accessibility permissions not granted. Prompting user.")
             
             // Show an alert explaining why we need accessibility permissions
             DispatchQueue.main.async {
@@ -564,7 +564,7 @@ public class RemoteKeyboardService: Service {
                 }
             }
         } else {
-            Log.info?.message("Accessibility permissions already granted.")
+            Logger.services.info("Accessibility permissions already granted.")
         }
     }
     

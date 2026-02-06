@@ -7,10 +7,8 @@
 //
 
 import Foundation
-
-import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 
 /// This service receives packages with type "kdeconnect.sftp" and reads the
 /// following fields:
@@ -150,7 +148,7 @@ public class SftpService: NSObject, Service, NSWindowDelegate {
             }
         }
         catch {
-            Log.error?.message("Failed to handle SFTP data packet: \(error)")
+            Logger.services.error("Failed to handle SFTP data packet: \(pub: error)")
             failedToActivateSftp(for: device)
         }
     }
@@ -192,13 +190,13 @@ public class SftpService: NSObject, Service, NSWindowDelegate {
             .appendingPathComponent("Contents")
             .appendingPathComponent("Helpers")
             .appendingPathComponent("Soduto Files.app", isDirectory: false)
-
+        
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
-
+        
         NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
             if let error = error {
-                Log.error?.message("Could not launch Soduto Files: \(error)")
+                Logger.services.error("Could not launch Soduto Files: \(pub: error)")
             }
         }
     }
@@ -251,7 +249,7 @@ fileprivate extension DataPacket {
     static func sftpStartBrowsingPacket() -> DataPacket {
         return DataPacket(type: sftpRequestPacketType, body: [
             SftpProperty.startBrowsing: true as AnyObject
-            ])
+        ])
     }
     
     

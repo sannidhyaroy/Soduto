@@ -8,7 +8,7 @@
 
 import Cocoa
 import Foundation
-import CleanroomLogger
+import os
 import UserNotifications
 import Sparkle
 import MediaPlayer
@@ -29,22 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     let updaterController: SPUStandardUpdaterController
     private var heartbeatTimer: Timer?
     
-    static let logLevelConfigurationKey = "com.soduto.logLevel"
-    
     override init() {
-        UserDefaults.standard.register(defaults: [AppDelegate.logLevelConfigurationKey: LogSeverity.info.rawValue])
-        
-#if DEBUG
-        Log.enable(configuration: XcodeLogConfiguration(minimumSeverity: .debug, debugMode: true))
-#else
-        let formatter = FieldBasedLogFormatter(fields: [.severity(.simple), .delimiter(.spacedPipe), .payload])
-        if let osRecorder = OSLogRecorder(formatters: [formatter]) {
-            let severity: LogSeverity = LogSeverity(rawValue: UserDefaults.standard.integer(forKey: AppDelegate.logLevelConfigurationKey)) ?? .info
-            Log.enable(configuration: BasicLogConfiguration(minimumSeverity: severity, recorders: [osRecorder]))
-        }
-#endif
-        
-        
         self.connectionProvider = ConnectionProvider(config: config)
         self.deviceManager = DeviceManager(config: config, serviceManager: self.serviceManager)
         self.updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
@@ -112,7 +97,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     }
     
     func deviceManager(_ manager: DeviceManager, didReceivePairingRequest request: PairingRequest, forDevice device: Device) {
-        Log.debug?.message("deviceManager(<\(request)> didReceivePairingRequest:<\(request)> forDevice:<\(device)>)")
+        Logger.general.debug("deviceManager(<\(pub: request)> didReceivePairingRequest:<\(pub: request)> forDevice:<\(pub: device)>)")
         PairingInterfaceController.showPairingNotification(for: device)
     }
     
@@ -224,7 +209,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
                 }
             } catch {
                 failedCount += 1
-                Log.error?.message("Failed to resolve bookmark: \(error)")
+                Logger.general.error("Failed to resolve bookmark: \(pub: error)")
             }
         }
         

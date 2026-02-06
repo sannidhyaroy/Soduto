@@ -8,7 +8,7 @@
 
 import Foundation
 import QuartzCore
-import CleanroomLogger
+import os
 
 public protocol DeviceManagerDelegate: AnyObject {
     func deviceManager(_ manager: DeviceManager, didChangeDeviceState device: Device)
@@ -91,7 +91,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     }
     
     public func connectionProvider(_ provider: ConnectionProvider, didCreateConnection connection: Connection) {
-        Log.debug?.message("connectionProvider(<\(provider)> didCreateConnection:<\(connection)>)")
+        Logger.device.debug("connectionProvider(<\(pub: provider)> didCreateConnection:<\(pub: connection)>)")
         
         assert(connection.state == .Open, "Connection from connection provider expected to be in open state")
         assert(connection.identity != nil, "Connection identity expected to be not nil")
@@ -109,7 +109,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
             }
         }
         catch {
-            Log.error?.message("Error adding new connection: \(error)")
+            Logger.device.error("Error adding new connection: \(pub: error)")
         }
     }
     
@@ -124,7 +124,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     // MARK: DeviceDelegate
     
     public func device(_ device: Device, didChangePairingStatus status: PairingStatus) {
-        Log.debug?.message("device(<\(device)> didChangePairingStatus:<\(status)>)")
+        Logger.device.debug("device(<\(pub: device)> didChangePairingStatus:<\(pub: status)>)")
         
         if device.isReachable {
             if status == .Paired {
@@ -143,7 +143,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     
     
     public func device(_ device: Device, didChangeReachabilityStatus isReachable: Bool) {
-        Log.debug?.message("device(<\(device)> didChangeReachabilityStatus:<\(isReachable)>)")
+        Logger.device.debug("device(<\(pub: device)> didChangeReachabilityStatus:<\(pub: isReachable)>)")
         
         if device.pairingStatus == .Paired {
             if isReachable {

@@ -8,7 +8,7 @@
 
 import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 
 /// This service receives packages with type "kdeconnect.connectivity_report" and reads the
 /// following fields:
@@ -47,9 +47,9 @@ public class ConnectivityReportService: Service {
             try handle(statusPacket: dataPacket, fromDevice: device)
         }
         catch {
-            Log.error?.message("Error handling connectivity report packet: \(error)")
+            Logger.services.error("Error handling connectivity report packet: \(pub: error)")
         }
-            
+        
         return true
     }
     

@@ -8,7 +8,7 @@
 
 import Foundation
 import Cocoa
-import CleanroomLogger
+import os
 import IOKit.ps
 import UserNotifications
 
@@ -81,9 +81,9 @@ public class BatteryService: Service {
             }
         }
         catch {
-            Log.error?.message("Error handling battery packet: \(error)")
+            Logger.services.error("Error handling battery packet: \(pub: error)")
         }
-            
+        
         return true
     }
     
@@ -161,7 +161,7 @@ public class BatteryService: Service {
         let title = device.name
         let subtitle = NSLocalizedString("Low Battery", comment: "notification title")
         let info = NSString(format: NSLocalizedString("%d%% of battery remaining", comment: "notification info") as NSString, status.currentCharge)
-
+        
         UserNotificationHelper.show(title: title, subtitle: subtitle, body: info as String, sound: true, id: self.notificationId(for: device), urgency: .active)
     }
     
@@ -175,17 +175,17 @@ public class BatteryService: Service {
         do {
             // Take a snapshot of all the power source info
             guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue()
-                else { throw BatteryStatusError.readFailure(info: "IOPSCopyPowerSourcesInfo failed") }
+            else { throw BatteryStatusError.readFailure(info: "IOPSCopyPowerSourcesInfo failed") }
             
             // Pull out a list of power sources
             guard let sources: NSArray = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue()
-                else { throw BatteryStatusError.readFailure(info: "IOPSCopyPowerSourcesList failed") }
+            else { throw BatteryStatusError.readFailure(info: "IOPSCopyPowerSourcesList failed") }
             
             // For each power source...
             for ps in sources {
                 // Fetch the information for a given power source out of our snapshot
                 guard let info: NSDictionary = IOPSGetPowerSourceDescription(snapshot, ps as CFTypeRef)?.takeUnretainedValue()
-                    else { throw BatteryStatusError.readFailure(info: "IOPSGetPowerSourceDescription failed") }
+                else { throw BatteryStatusError.readFailure(info: "IOPSGetPowerSourceDescription failed") }
                 
                 guard let capacity = info[kIOPSCurrentCapacityKey] as? Int else { continue }
                 guard let maxCapacity = info[kIOPSMaxCapacityKey] as? Int else { continue }
@@ -199,7 +199,7 @@ public class BatteryService: Service {
             
         }
         catch {
-            Log.error?.message("Failed to read battery status information: \(error)")
+            Logger.services.error("Failed to read battery status information: \(pub: error)")
             return nil
         }
     }
@@ -300,7 +300,7 @@ fileprivate extension DataPacket {
             BatteryProperty.isCharging: isCharging as AnyObject,
             BatteryProperty.thresholdEvent: thresholdEvent.rawValue as AnyObject
         ])
-
+        
     }
     
     
