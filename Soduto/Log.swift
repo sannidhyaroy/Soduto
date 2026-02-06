@@ -30,7 +30,7 @@ import os
 /// - `services`: Service-specific packet handling (all 13 services)
 /// - `ui`: UI controllers and views
 extension Logger {
-    private static var subsystem = Bundle.main.bundleIdentifier!
+    private static let subsystem = Bundle.main.bundleIdentifier ?? "com.soduto.Soduto"
     
     static let general = Logger(subsystem: subsystem, category: "general")
     static let network = Logger(subsystem: subsystem, category: "network")

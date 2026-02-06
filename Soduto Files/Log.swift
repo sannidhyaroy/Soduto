@@ -27,7 +27,7 @@ import os
 /// - `filesystem`: SFTP operations, file handling
 /// - `ui`: Browser UI, image loading
 extension Logger {
-    private static var subsystem = Bundle.main.bundleIdentifier!
+    private static let subsystem = Bundle.main.bundleIdentifier ?? "com.soduto.Soduto-Files"
     
     static let general = Logger(subsystem: subsystem, category: "general")
     static let filesystem = Logger(subsystem: subsystem, category: "filesystem")
