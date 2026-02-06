@@ -59,7 +59,6 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
                 }
             }
         }
-        self.pathMonitor.start(queue: self.pathMonitorQueue)
         self.udpSocket.setDelegate(self)
         self.tcpSocket.delegate = self
         
@@ -101,6 +100,8 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
         
         self.isStarted = true
         
+        // Start monitoring network reachability
+        self.pathMonitor.start(queue: self.pathMonitorQueue)
         broadcastAnnouncement()
         
         // Speculative broadcasts after some intervals.
@@ -112,6 +113,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     
     public func stop() {
         self.isStarted = false
+        self.pathMonitor.cancel()
         self.udpSocket.close()
         self.tcpSocket.disconnect()
     }
