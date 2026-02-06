@@ -72,7 +72,7 @@ public class UploadTask: NSObject, GCDAsyncSocketDelegate {
         self.listenTimeoutTimer = Timer.compatTimer(withTimeInterval: UploadTask.listenTimeout, repeats: false, block: { _ in
             // Dont check for listeningSocket.isConnected, because it is false for listening socket
             guard !listeningSocket.isDisconnected else { return }
-            Logger.network.info("Serving payload for packet of type '\(packet.type, privacy: .public)' on port \(listeningSocket.localPort, privacy: .public) has timedout")
+            Logger.network.info("Serving payload for packet of type '\(packet.type, privacy: .public)' on port \(listeningSocket.localPort, privacy: .public) has timed out")
             listeningSocket.disconnect()
         })
         

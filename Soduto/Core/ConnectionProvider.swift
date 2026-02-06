@@ -70,7 +70,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
         
         // Listen for device announcement broadcasts
         do { try self.udpSocket.enableBroadcast(true) }
-        catch { Logger.network.error("Could not enable brodcast for udp socket: \(error, privacy: .public)") }
+        catch { Logger.network.error("Could not enable broadcast for udp socket: \(error, privacy: .public)") }
         do { try self.udpSocket.enableReusePort(true) }
         catch { Logger.network.error("Could not enable port reuse for udp socket: \(error, privacy: .public)") }
         do {
