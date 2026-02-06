@@ -73,7 +73,7 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 >  [!NOTE]
 >  If there are errors similar to the following:
 >  ```
->  *** Skipped downloading CleanroomLogger binary due to the error:
+>  *** Skipped downloading CocoaAsyncSocket binary due to the error:
 >      "Bad credentials"
 >  *** Downloading binary-only framework Sparkle at "https://sparkle-project.org/Carthage/Sparkle.json"
 >  *** Skipped downloading CocoaAsyncSocket binary due to the error:
@@ -117,16 +117,48 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 ---
 ## Debugging
 
-* To see logged messages of Release build of Soduto:
-    * Open `Console.app`
-    * On Action menu select "Include Debug Messages"
-    * In Search field enter "process:Soduto category:CleanroomLogger"
+Soduto uses Apple's Unified Logging system (`os.Logger`). Logs are organized by subsystem (`com.soduto.Soduto` → `Soduto` and `com.soduto.Soduto-Files` → `Soduto Files`) and categories (`general`, `network`, `services`, `device`, `config`, `filesystem`, `ui`).
 
-* To switch logging level in `Terminal.app` run command (with `<level>` being an integer between 1 and 5, 1 being the most verbose and 5 - the least):
+### View logs in real-time:
+```bash
+# Show all messages (debug, info, notice, error) for Soduto
+log stream --predicate 'subsystem == "com.soduto.Soduto"' --level debug
 
-    `defaults write com.soduto.Soduto com.soduto.logLevel -int <level>`
-    
-    It is highly recommended to enable verbose logging levels only during debugging as sensitive data may be logged in plain text (like passwords copied into a clipboard).
+# Show all messages (debug, info, notice, error) for Soduto Files
+log stream --predicate 'subsystem == "com.soduto.Soduto-Files"' --level debug
+
+# Show only info and above (excludes debug logs) for Soduto
+log stream --predicate 'subsystem == "com.soduto.Soduto"' --level info
+
+# Show only notice and above (excludes debug and info logs) for Soduto
+log stream --predicate 'subsystem == "com.soduto.Soduto"' --level notice
+
+# Show only error and above (excludes debug, info and notice logs) for Soduto
+log stream --predicate 'subsystem == "com.soduto.Soduto"' --level error
+```
+
+The `--level debug` flag shows messages at debug level **and above** (info, notice, error, fault).
+
+### Enable debug message persistence:
+By default, debug messages are only kept in memory and not saved to disk. To persist them:
+
+```bash
+sudo log config --subsystem com.soduto.Soduto --mode level:debug
+```
+
+This allows you to view debug messages in Console.app after they occur. To revert to default behavior:
+
+```bash
+sudo log config --subsystem com.soduto.Soduto --mode level:default
+```
+
+### View logs in the Console:
+- Open `Console.app`
+- In the search field, enter the subsystem of the target for which want to view logs. (`subsystem:com.soduto.Soduto` or `subsystem:com.soduto.Soduto-Files`)
+- Filter by category for targeted debugging: `category:network`, `category:services`, `category:device`, etc.
+- Enable "Include Debug Messages" in the Action menu to see debug-level logs
+
+**Warning:** Debug logging may include sensitive data (clipboard contents, passwords). Only enable its persistence during debugging and revert to default when done.
 
 ---
 ## Verifying Downloads
