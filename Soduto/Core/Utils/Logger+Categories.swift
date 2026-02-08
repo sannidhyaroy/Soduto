@@ -6,6 +6,7 @@
 //  Copyright © 2026 Soduto. All rights reserved.
 //
 
+import Foundation
 import os
 
 /// Logger categories for Soduto main application.
