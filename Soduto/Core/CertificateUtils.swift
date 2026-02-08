@@ -8,6 +8,10 @@
 
 import Foundation
 import os
+import X509
+import Crypto
+import _CryptoExtras
+import SwiftASN1
 
 public class CertificateUtils {
     
@@ -153,16 +157,8 @@ public class CertificateUtils {
     
     public class func digest(for certificate: SecCertificate) -> [UInt8] {
         let data = SecCertificateCopyData(certificate) as Data
-        var digest = [UInt8](repeating: 0, count:Int(CC_SHA1_DIGEST_LENGTH))
-        data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard let baseAddress = buffer.baseAddress else { return }
-            _ = CC_SHA1(
-                baseAddress.assumingMemoryBound(to: UInt8.self),
-                CC_LONG(data.count),
-                &digest
-            )
-        }
-        return digest
+        let hash = Insecure.SHA1.hash(data: data)
+        return Array(hash)
     }
     
     public class func digestString(for certificate: SecCertificate) -> String {
@@ -278,48 +274,107 @@ public class CertificateUtils {
     }
     
     public class func createIdentity(label: String, certCommonName: String, expirationInterval: TimeInterval) throws -> SecIdentity? {
+        // Generate RSA keypair (stored permanently in keychain)
         let (publicKey, privateKey) = try generateRSAKeyPair(sizeInBits: 2048, permanent: true, label: label)
-        
-        try? deleteKey(publicKey) // public key not needed
-        
-        var privateKeyCFData: CFData? = nil
-        SecItemExport(privateKey, .formatOpenSSL, .pemArmour, nil, &privateKeyCFData)
-        
-        guard let data = generateIdentityWithPrivateKey(certCommonName, privateKeyCFData! as Data) else { throw CertificateError.createIdentityFailure(status: errSecInternalError) }
-        
-        var cfItems: CFArray? = nil
-        var format: SecExternalFormat = .formatPEMSequence
-        var type: SecExternalItemType = .itemTypeAggregate
-        let status = SecItemImport(data as CFData, "\(label).pem" as CFString, &format, &type, [], nil, nil, &cfItems)
-        guard status == noErr else { throw CertificateError.createIdentityFailure(status: status) }
-        guard let items = cfItems as? [Any] else { throw CertificateError.createIdentityFailure(status: status) }
-        guard items.count == 2 else { throw CertificateError.createIdentityFailure(status: status) }
-        
-        let certificate = items[1] as! SecCertificate
-        
+
+        try? deleteKey(publicKey) // public key not needed in keychain
+
         do {
-            try addCertificate(certificate, name: label)
-            guard let savedCertificate = findCertificate(label) else { throw CertificateError.addCertificateFailure(error: nil) }
-            
+            // Export private key to PEM format for swift-crypto
+            var privateKeyCFData: CFData? = nil
+            let exportStatus = SecItemExport(privateKey, .formatOpenSSL, .pemArmour, nil, &privateKeyCFData)
+            guard exportStatus == errSecSuccess, let pemData = privateKeyCFData as Data? else {
+                throw CertificateError.createIdentityFailure(status: exportStatus)
+            }
+
+            guard let pemString = String(data: pemData, encoding: .utf8) else {
+                throw CertificateError.createIdentityFailure(status: errSecInternalError)
+            }
+
+            // Parse PEM key with swift-crypto
+            let rsaPrivateKey = try _RSA.Signing.PrivateKey(pemRepresentation: pemString)
+
+            // Create self-signed certificate using swift-certificates
+            let certificate = try createSelfSignedCertificate(
+                commonName: certCommonName,
+                privateKey: rsaPrivateKey
+            )
+
+            // Serialize certificate to DER format
+            var serializer = DER.Serializer()
+            try certificate.serialize(into: &serializer)
+            let derData = Data(serializer.serializedBytes)
+
+            // Create SecCertificate from DER data
+            guard let secCertificate = SecCertificateCreateWithData(nil, derData as CFData) else {
+                throw CertificateError.createCertificateFailure(error: nil)
+            }
+
+            // Add certificate to keychain
+            try addCertificate(secCertificate, name: label, dontCopy: true)
+            guard let savedCertificate = findCertificate(label) else {
+                throw CertificateError.addCertificateFailure(error: nil)
+            }
+
+            // Create identity from certificate and existing private key in keychain
             var identity: SecIdentity? = nil
-            let status = SecIdentityCreateWithCertificate(nil, savedCertificate,  &identity)
-            if status == noErr {
+            let identityStatus = SecIdentityCreateWithCertificate(nil, savedCertificate, &identity)
+            if identityStatus == noErr {
                 let prefStatus = SecIdentitySetPreferred(identity, label as CFString, nil)
                 if prefStatus != noErr {
                     try? deleteCertificate(label)
-                    throw CertificateError.createIdentityFailure(status: status)
+                    throw CertificateError.createIdentityFailure(status: prefStatus)
                 }
                 return identity
             }
             else {
                 try? deleteCertificate(label)
-                throw CertificateError.createIdentityFailure(status: status)
+                throw CertificateError.createIdentityFailure(status: identityStatus)
             }
         }
         catch {
             try? deleteKey(privateKey)
             throw error
         }
+    }
+
+    /// Creates a self-signed X.509 certificate using swift-certificates
+    /// - Parameters:
+    ///   - commonName: The CN (Common Name) for the certificate subject/issuer
+    ///   - privateKey: The RSA private key to sign the certificate with
+    /// - Returns: A signed X.509 certificate
+    private class func createSelfSignedCertificate(
+        commonName: String,
+        privateKey: _RSA.Signing.PrivateKey
+    ) throws -> Certificate {
+        // Create distinguished name: CN=commonName, O=Soduto
+        // Order matches the original OpenSSL implementation
+        let name = try DistinguishedName {
+            CommonName(commonName)
+            OrganizationName("Soduto")
+        }
+
+        let now = Date()
+        // Valid from 1 year ago (matches original OpenSSL behavior)
+        let notValidBefore = now.addingTimeInterval(-365 * 24 * 60 * 60)
+        // Valid for 10 years from now (matches original OpenSSL behavior)
+        let notValidAfter = now.addingTimeInterval(10 * 365 * 24 * 60 * 60)
+
+        // Create self-signed certificate (issuer == subject)
+        let certificate = try Certificate(
+            version: .v3,
+            serialNumber: Certificate.SerialNumber(1),
+            publicKey: .init(privateKey.publicKey),
+            notValidBefore: notValidBefore,
+            notValidAfter: notValidAfter,
+            issuer: name,
+            subject: name,
+            signatureAlgorithm: .sha256WithRSAEncryption,
+            extensions: Certificate.Extensions(),
+            issuerPrivateKey: .init(privateKey)
+        )
+
+        return certificate
     }
     
 }

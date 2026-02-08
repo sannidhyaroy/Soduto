@@ -5,8 +5,6 @@
 #import "MyAnonymousIdentity.h"
 #import "SimplePing.h"
 #import "IO.h"
-#import "CertificateUtils.h"
-#import <CommonCrypto/CommonCrypto.h>
 
 #import <netinet/in.h>
 #import <netinet/if_ether.h>
