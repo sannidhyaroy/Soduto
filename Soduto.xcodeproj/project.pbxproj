@@ -369,7 +369,6 @@
 		849962121D572B1F002B893A /* Logging.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = Logging.m; path = MYUtilities/Logging.m; sourceTree = "<group>"; };
 		84A16BDF1E9EBADD00DE2C0B /* Sequence.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Sequence.swift; sourceTree = "<group>"; };
 		84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SftpFileSystem.swift; sourceTree = "<group>"; };
-		84C545F71EABECDE005A8107 /* Soduto-Files-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Soduto-Files-Bridging-Header.h"; sourceTree = "<group>"; };
 		84C613E21DECBF6B00CE7F7A /* UploadTask.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UploadTask.swift; sourceTree = "<group>"; };
 		84D903A11DC696A600E61DA7 /* CertificateUtils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CertificateUtils.swift; sourceTree = "<group>"; };
 		84FA45CF1DDDCB3D00EF3992 /* Connection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
@@ -685,7 +684,6 @@
 				8440FD061E6CA6CA00E5BFA9 /* LocalFileSystem.swift */,
 				845BC7101E69F00E00DC9B81 /* MainMenu.xib */,
 				84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */,
-				84C545F71EABECDE005A8107 /* Soduto-Files-Bridging-Header.h */,
 				8438ECE01EBA650A006CBB07 /* Soduto_Files.entitlements */,
 				845847201E75D0ED00EE5A09 /* Utils */,
 			);
@@ -1633,7 +1631,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Soduto/OpenSSL/openssl/include";
-				SWIFT_OBJC_BRIDGING_HEADER = "Soduto Files/Soduto-Files-Bridging-Header.h";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
 				SWIFT_VERSION = 5.0;
 			};
@@ -1663,7 +1660,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Soduto/OpenSSL/openssl/include";
-				SWIFT_OBJC_BRIDGING_HEADER = "Soduto Files/Soduto-Files-Bridging-Header.h";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
 				SWIFT_VERSION = 5.0;
 			};
