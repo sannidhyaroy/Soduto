@@ -103,23 +103,57 @@ public class CertificateUtils {
             kSecClass as String: kSecClassCertificate,
             kSecValueRef as String: certificate
         ]
-        var status = SecItemAdd(attrs as CFDictionary, nil)
-        if status != noErr && status != errSecDuplicateItem {
-            throw CertificateError.addCertificateFailure(error: NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: nil))
+        let addStatus = SecItemAdd(attrs as CFDictionary, nil)
+        
+        // Determine which certificate reference to use for setting preference
+        let keychainCertificate: SecCertificate
+        if addStatus == noErr {
+            keychainCertificate = certificate
         }
-        else if status == errSecDuplicateItem {
-            Logger.config.error("Could not add the certificate because that item is already added")
+        else if addStatus == errSecDuplicateItem {
+            // Certificate already exists in keychain - find it by data and use that reference
+            // (This handles orphaned certificates from previous pairings)
+            if let existingCert = findCertificateByData(certificate) {
+                keychainCertificate = existingCert
+            }
+            else {
+                keychainCertificate = certificate
+            }
+        }
+        else {
+            throw CertificateError.addCertificateFailure(error: NSError(domain: NSOSStatusErrorDomain, code: Int(addStatus), userInfo: nil))
         }
         
-        status = SecCertificateSetPreferred(certificate, name as CFString, nil)
-        if status != noErr && status != errSecDuplicateItem {
-            try? deleteCertificate(certificate)
+        let prefStatus = SecCertificateSetPreferred(keychainCertificate, name as CFString, nil)
+        if prefStatus != noErr && prefStatus != errSecDuplicateItem {
+            try? deleteCertificate(keychainCertificate)
             SecCertificateSetPreferred(nil, name as CFString, nil)
-            throw CertificateError.addCertificateFailure(error: NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: nil))
+            throw CertificateError.addCertificateFailure(error: NSError(domain: NSOSStatusErrorDomain, code: Int(prefStatus), userInfo: nil))
         }
-        else if status == errSecDuplicateItem {
-            Logger.config.error("Could not set certificate preference because it is already set")
+    }
+    
+    /// Find an existing certificate in keychain that matches the given certificate's data
+    private class func findCertificateByData(_ certificate: SecCertificate) -> SecCertificate? {
+        let targetData = SecCertificateCopyData(certificate) as Data
+        
+        let query: [String: AnyObject] = [
+            kSecClass as String: kSecClassCertificate,
+            kSecReturnRef as String: kCFBooleanTrue,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == noErr,
+              let certs = result as? [SecCertificate] else {
+            return nil
         }
+        
+        for existingCert in certs {
+            let existingData = SecCertificateCopyData(existingCert) as Data
+            if existingData == targetData {
+                return existingCert
+            }
+        }
+        return nil
     }
     
     public class func findCertificate(_ name: String) -> SecCertificate? {
@@ -143,10 +177,14 @@ public class CertificateUtils {
         // remove preference
         SecCertificateSetPreferred(nil, name as CFString, nil)
         
-        guard let certificate = certificateOpt else { return }
+        if let certificate = certificateOpt {
+            // remove certificate itself
+            try? deleteCertificate(certificate)
+        }
         
-        // remove certificate itself
-        try deleteCertificate(certificate)
+        // Also try to delete certificate by its label attribute directly
+        // (certificate might have been added with this name as label, not preference)
+        try? deleteItem(name, secClass: kSecClassCertificate)
     }
     
     public class func compareCertificates(_ certificate1: SecCertificate, _ certificate2: SecCertificate) -> Bool {
@@ -274,11 +312,18 @@ public class CertificateUtils {
     }
     
     public class func createIdentity(label: String, certCommonName: String, expirationInterval: TimeInterval) throws -> SecIdentity? {
+        // Clean up any orphaned certificates to avoid conflicts
+        // (e.g., user deleted "Soduto Host" preference but not the underlying certificate)
+        try? deleteCertificate(label)
+        if label != certCommonName {
+            try? deleteCertificate(certCommonName)
+        }
+        
         // Generate RSA keypair (stored permanently in keychain)
         let (publicKey, privateKey) = try generateRSAKeyPair(sizeInBits: 2048, permanent: true, label: label)
-
-        try? deleteKey(publicKey) // public key not needed in keychain
-
+        
+        try? deleteKey(publicKey) // public key not needed
+        
         do {
             // Export private key to PEM format for swift-crypto
             var privateKeyCFData: CFData? = nil
@@ -286,36 +331,36 @@ public class CertificateUtils {
             guard exportStatus == errSecSuccess, let pemData = privateKeyCFData as Data? else {
                 throw CertificateError.createIdentityFailure(status: exportStatus)
             }
-
+            
             guard let pemString = String(data: pemData, encoding: .utf8) else {
                 throw CertificateError.createIdentityFailure(status: errSecInternalError)
             }
-
+            
             // Parse PEM key with swift-crypto
             let rsaPrivateKey = try _RSA.Signing.PrivateKey(pemRepresentation: pemString)
-
+            
             // Create self-signed certificate using swift-certificates
             let certificate = try createSelfSignedCertificate(
                 commonName: certCommonName,
                 privateKey: rsaPrivateKey
             )
-
+            
             // Serialize certificate to DER format
             var serializer = DER.Serializer()
             try certificate.serialize(into: &serializer)
             let derData = Data(serializer.serializedBytes)
-
+            
             // Create SecCertificate from DER data
             guard let secCertificate = SecCertificateCreateWithData(nil, derData as CFData) else {
                 throw CertificateError.createCertificateFailure(error: nil)
             }
-
+            
             // Add certificate to keychain
-            try addCertificate(secCertificate, name: label, dontCopy: true)
+            try addCertificate(secCertificate, name: label)
             guard let savedCertificate = findCertificate(label) else {
                 throw CertificateError.addCertificateFailure(error: nil)
             }
-
+            
             // Create identity from certificate and existing private key in keychain
             var identity: SecIdentity? = nil
             let identityStatus = SecIdentityCreateWithCertificate(nil, savedCertificate, &identity)
@@ -337,7 +382,7 @@ public class CertificateUtils {
             throw error
         }
     }
-
+    
     /// Creates a self-signed X.509 certificate using swift-certificates
     /// - Parameters:
     ///   - commonName: The CN (Common Name) for the certificate subject/issuer
@@ -353,13 +398,13 @@ public class CertificateUtils {
             CommonName(commonName)
             OrganizationName("Soduto")
         }
-
+        
         let now = Date()
         // Valid from 1 year ago (matches original OpenSSL behavior)
         let notValidBefore = now.addingTimeInterval(-365 * 24 * 60 * 60)
         // Valid for 10 years from now (matches original OpenSSL behavior)
         let notValidAfter = now.addingTimeInterval(10 * 365 * 24 * 60 * 60)
-
+        
         // Create self-signed certificate (issuer == subject)
         let certificate = try Certificate(
             version: .v3,
@@ -373,7 +418,7 @@ public class CertificateUtils {
             extensions: Certificate.Extensions(),
             issuerPrivateKey: .init(privateKey)
         )
-
+        
         return certificate
     }
     
