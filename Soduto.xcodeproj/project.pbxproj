@@ -270,7 +270,6 @@
 		76B580562930EE1B003453FD /* libssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssl.a; path = Libraries/lib/libssl.a; sourceTree = "<group>"; };
 		76B580572930EE1B003453FD /* libssh2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssh2.a; path = Libraries/lib/libssh2.a; sourceTree = "<group>"; };
 		76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CocoaAsyncSocket.xcframework; path = Carthage/Build/CocoaAsyncSocket.xcframework; sourceTree = "<group>"; };
-		76B5805D2930EF31003453FD /* NMSSH.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = NMSSH.xcframework; path = Carthage/Build/NMSSH.xcframework; sourceTree = "<group>"; };
 		8405381F1ED62282003798AA /* WelcomeWindowController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WelcomeWindowController.swift; sourceTree = "<group>"; };
 		840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ClipboardService.swift; sourceTree = "<group>"; };
 		841E814C1D809C360096A846 /* Soduto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto.entitlements; sourceTree = "<group>"; };
@@ -774,7 +773,6 @@
 			children = (
 				31B189B529ED731B001C8735 /* Sparkle.framework */,
 				76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */,
-				76B5805D2930EF31003453FD /* NMSSH.xcframework */,
 				76B580552930EE1B003453FD /* libcrypto.a */,
 				76B580572930EE1B003453FD /* libssh2.a */,
 				76B580562930EE1B003453FD /* libssl.a */,
