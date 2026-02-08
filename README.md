@@ -78,29 +78,11 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 >  *** Downloading binary-only framework Sparkle at "https://sparkle-project.org/Carthage/Sparkle.json"
 >  *** Skipped downloading CocoaAsyncSocket binary due to the error:
 >      "Bad credentials"
->  *** Skipped downloading NMSSH binary due to the error:
->      "Bad credentials"
->  *** Skipped downloading Reachability.swift binary due to the error:
->      "Bad credentials"
 >  ```
 >
 >  This is likely due to GitHub Rate Limits. You can create a [GitHub Token](https://github.com/settings/tokens) and export it as an environment variable (format: `ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`):
 >  ```bash
 >  export GITHUB_ACCESS_TOKEN=<INSERT YOUR TOKEN HERE>
->  ```
-        
-
->  [!TIP]
->  If you get an error in Xcode that says:
->
->  `While building for macOS, no library for this platform was found in '/path/to/NMSSH.xcframework'.`
->
->  This means the NMSSH framework was built for iOS instead of macOS. To fix this, temporarily rename the Examples workspace and rebuild NMSSH:
->
->  ```bash
->  mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak
->  XCODE_XCCONFIG_FILE="./carthage.xcconfig" carthage build NMSSH --platform macOS --use-xcframeworks --no-use-binaries
->  mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace
 >  ```
 
 * Compile universal openssl and libssh2 library using [iSSH2](https://github.com/sannidhyaroy/iSSH2):
