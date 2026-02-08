@@ -11,23 +11,23 @@ import os
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDelegate {
-
+    
     // MARK: Types
-
+    
     struct MenuItemTags {
         // Application menu
         static let about: Int = 1
-
+        
         // Go menu
         static let back: Int = 1001
         static let forward: Int = 1002
         static let enclosingFolder: Int = 1003
-
+        
         // View menu
         static let toggleHiddenFiles: Int = 2001
         static let toggleThumbnails: Int = 2002
         static let foldersAlwaysFirst: Int = 2101
-
+        
         // File menu
         static let deleteFiles: Int = 3001
         static let newFolder: Int = 3002
@@ -37,16 +37,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
         static let newTab: Int = 3006
         static let open: Int = 3007
     }
-
+    
     struct ToolbarItemTags {
         static let backForward: Int = 50001
     }
-
-
+    
+    
     // MARK: Properties
-
+    
     private(set) var browserWindowControllers: [BrowserWindowController] = []
-
+    
     var keyBrowserWindowController: BrowserWindowController? {
         return NSApp.keyWindow?.windowController as? BrowserWindowController
     }
@@ -185,7 +185,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
     
     private func open(_ url: URL) {
         guard let scheme = url.scheme else { Logger.general.info("Input URL expected to contain valid scheme part."); return }
-
+        
         switch scheme {
         case "sftp":
             guard let host = url.host else { Logger.general.info("Input URL expected to contain valid host part."); return }
@@ -194,7 +194,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
             let name = url.fragment ?? host
             let port: UInt16? = (url.port != nil) ? UInt16(url.port!) : nil
             let path = url.path
-
+            
             // Create SFTP file system asynchronously
             Task { @MainActor in
                 do {
