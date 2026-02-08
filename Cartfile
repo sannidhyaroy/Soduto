@@ -1,3 +1,2 @@
 github "sannidhyaroy/CocoaAsyncSocket" "master"
-github "sannidhyaroy/NMSSH" "soduto"
 binary "https://sparkle-project.org/Carthage/Sparkle.json"
