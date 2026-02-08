@@ -34,6 +34,7 @@
 		312674CD2F2CE5C700D68B2C /* DeviceScrubberItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
 		313416CA2F381D44007E7640 /* X509 in Frameworks */ = {isa = PBXBuildFile; productRef = 313416C92F381D44007E7640 /* X509 */; };
+		313416CD2F3856C0007E7640 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 313416CC2F3856C0007E7640 /* Citadel */; };
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
@@ -425,6 +426,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				76A5B0D029320D230061BF0B /* NMSSH.xcframework in Frameworks */,
+				313416CD2F3856C0007E7640 /* Citadel in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -977,6 +979,7 @@
 			mainGroup = 843301571D2D8CB8008934BB;
 			packageReferences = (
 				313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */,
+				313416CB2F3856C0007E7640 /* XCRemoteSwiftPackageReference "Citadel" */,
 			);
 			productRefGroup = 843301611D2D8CB8008934BB /* Products */;
 			projectDirPath = "";
@@ -1778,6 +1781,14 @@
 				minimumVersion = 1.17.1;
 			};
 		};
+		313416CB2F3856C0007E7640 /* XCRemoteSwiftPackageReference "Citadel" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/orlandos-nl/Citadel";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.12.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1785,6 +1796,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */;
 			productName = X509;
+		};
+		313416CC2F3856C0007E7640 /* Citadel */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 313416CB2F3856C0007E7640 /* XCRemoteSwiftPackageReference "Citadel" */;
+			productName = Citadel;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
