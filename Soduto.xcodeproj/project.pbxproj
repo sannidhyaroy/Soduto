@@ -51,9 +51,7 @@
 		31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */; };
 		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareExtensionController.swift */; };
-		761FBEF3293211C50034FD44 /* NMSSH.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		76A5B0D029320D230061BF0B /* NMSSH.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; settings = {ATTRIBUTES = (Required, ); }; };
 		76B580582930EE1B003453FD /* libcrypto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580552930EE1B003453FD /* libcrypto.a */; };
 		76B580592930EE1B003453FD /* libssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580562930EE1B003453FD /* libssl.a */; };
 		76B5805A2930EE1B003453FD /* libssh2.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580572930EE1B003453FD /* libssh2.a */; };
@@ -174,17 +172,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		023BD5A2204AEE270045B5F9 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				761FBEF3293211C50034FD44 /* NMSSH.xcframework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		31F3A15D293B5EA300550088 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -424,7 +411,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				76A5B0D029320D230061BF0B /* NMSSH.xcframework in Frameworks */,
 				313416CD2F3856C0007E7640 /* Citadel in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -885,7 +871,6 @@
 				845BC7061E69F00E00DC9B81 /* Sources */,
 				845BC7071E69F00E00DC9B81 /* Frameworks */,
 				845BC7081E69F00E00DC9B81 /* Resources */,
-				023BD5A2204AEE270045B5F9 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
