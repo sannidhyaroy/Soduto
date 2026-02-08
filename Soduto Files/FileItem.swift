@@ -9,6 +9,7 @@
 import Foundation
 import AppKit
 import os
+import UniformTypeIdentifiers
 
 public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
     
@@ -88,8 +89,8 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
             var flags: Flags = [.isReadable, .isWritable]
             if url.hasDirectoryPath { flags.insert(.isDirectory) }
             if url.lastPathComponent.hasPrefix(".") { flags.insert(.isHidden) }
-            let fileType: String = flags.contains(.isDirectory) ? String(kUTTypeDirectory) : url.pathExtension
-            let icon = flags.contains(.isDirectory) ? NSWorkspace.shared.icon(forFileType: kUTTypeFolder as String) : NSWorkspace.shared.icon(forFileType: fileType)
+            let fileType = flags.contains(.isDirectory) ? UTType.folder : UTType(filenameExtension: url.pathExtension) ?? .data
+            let icon = NSWorkspace.shared.icon(for: fileType)
             self.init(url: url, name: name, icon: icon, flags: flags, fileSize: 0, modate: nil)
             
         }
@@ -104,38 +105,38 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
                 return [
                     NSPasteboard.PasteboardType(rawValue: kPasteboardTypeFileURLPromise),
                     NSPasteboard.PasteboardType(rawValue: kPasteboardTypeFilePromiseContent),
-                    NSPasteboard.PasteboardType(rawValue: kUTTypeDirectory as String),
-                    NSPasteboard.PasteboardType(rawValue: kUTTypeFileURL as String),
-                    NSPasteboard.PasteboardType(rawValue: kUTTypeURL as String) ]
+                    NSPasteboard.PasteboardType(UTType.directory.identifier),
+                    NSPasteboard.PasteboardType(UTType.fileURL.identifier),
+                    NSPasteboard.PasteboardType(UTType.url.identifier) ]
             }
             else {
                 return [
                     NSPasteboard.PasteboardType(rawValue: kPasteboardTypeFileURLPromise),
                     NSPasteboard.PasteboardType(rawValue: kPasteboardTypeFilePromiseContent),
-                    NSPasteboard.PasteboardType(rawValue: kUTTypeFileURL as String),
-                    NSPasteboard.PasteboardType(rawValue: kUTTypeURL as String) ]
+                    NSPasteboard.PasteboardType(UTType.fileURL.identifier),
+                    NSPasteboard.PasteboardType(UTType.url.identifier) ]
             }
         }
         else {
             return [
                 NSPasteboard.PasteboardType(rawValue: kPasteboardTypeFileURLPromise),
                 NSPasteboard.PasteboardType(rawValue: kPasteboardTypeFilePromiseContent),
-                NSPasteboard.PasteboardType(rawValue: kUTTypeURL as String) ]
+                NSPasteboard.PasteboardType(UTType.url.identifier) ]
         }
     }
     
     public func pasteboardPropertyList(forType type: NSPasteboard.PasteboardType) -> Any? {
         switch type.rawValue {
-        case String(kUTTypeDirectory):
+        case UTType.directory.identifier:
             guard self.url.isFileURL && self.isDirectory else { return nil }
             return self.url.path
-        case String(kUTTypeFileURL):
+        case UTType.fileURL.identifier:
             guard self.url.isFileURL else { return nil }
             return (self.url as NSURL).pasteboardPropertyList(forType: type)
-        case String(kUTTypeURL):
+        case UTType.url.identifier:
             return (self.url as NSURL).pasteboardPropertyList(forType: type)
         case String(kPasteboardTypeFilePromiseContent):
-            return  kUTTypeBMP
+            return UTType.bmp.identifier
         case String(kPasteboardTypeFileURLPromise):
             return nil
         default:
@@ -147,7 +148,7 @@ public class FileItem: NSObject, NSPasteboardReading, NSPasteboardWriting {
     // MARK: NSPasteboardReading
     
     public static func readableTypes(for pasteboard: NSPasteboard) -> [NSPasteboard.PasteboardType] {
-        return [ kUTTypeURL as NSPasteboard.PasteboardType ]
+        return [ NSPasteboard.PasteboardType(UTType.url.identifier) ]
     }
     
     public static func readingOptions(forType type: NSPasteboard.PasteboardType, pasteboard: NSPasteboard) -> NSPasteboard.ReadingOptions {

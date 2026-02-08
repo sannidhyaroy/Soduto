@@ -29,7 +29,7 @@ struct Place {
     }
 }
 
-class FileOperation: BlockOperation {
+class FileOperation: BlockOperation, @unchecked Sendable {
     
     enum FileState {
         case unchanged

@@ -9,6 +9,7 @@
 import Foundation
 import AppKit
 import ServiceManagement
+import UniformTypeIdentifiers
 
 public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate, NSDraggingDestination {
     
@@ -43,8 +44,8 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         self.statusBarItem.menu = self.statusBarMenu
         
         let dragTypes: [NSPasteboard.PasteboardType] = [
-            NSPasteboard.PasteboardType(rawValue: kUTTypeURL as String),
-            NSPasteboard.PasteboardType(rawValue: kUTTypeText as String) ]
+            NSPasteboard.PasteboardType(UTType.url.identifier),
+            NSPasteboard.PasteboardType(UTType.text.identifier) ]
         self.statusBarItem.button?.window?.registerForDraggedTypes(dragTypes)
         self.statusBarItem.button?.window?.delegate = self
     }

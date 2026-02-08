@@ -603,7 +603,8 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     private func shouldTrustPeer(_ trust: SecTrust) -> Bool {
         assert(self.identity != nil, "Identity expected to be known before securing connection and evaluating trust")
         
-        guard let peerCertificate = SecTrustGetCertificateAtIndex(trust, 0) else { return false }
+        guard let certificateChain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
+              let peerCertificate = certificateChain.first else { return false }
         self.peerCertificate = peerCertificate
         
         if self.pairingHandler!.pairingStatus == .Paired {

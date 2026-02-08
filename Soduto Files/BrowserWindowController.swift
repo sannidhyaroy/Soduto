@@ -125,7 +125,7 @@ class BrowserWindowController: NSWindowController {
     
     override var windowNibName: String? { return "BrowserWindow" }
     
-    fileprivate static let dropTypes: [NSPasteboard.PasteboardType] = [ NSPasteboard.PasteboardType(rawValue: kUTTypeURL as String) ]
+    fileprivate static let dropTypes: [NSPasteboard.PasteboardType] = [ NSPasteboard.PasteboardType(UTType.url.identifier) ]
     private static var userDefaults: UserDefaults = {
         // Setup user settings default values
         UserDefaults.standard.register(defaults: [
@@ -284,7 +284,7 @@ class BrowserWindowController: NSWindowController {
             guard component != "/" else { continue }
             url.appendPathComponent(component, isDirectory: true)
             let cell = NSPathComponentCell()
-            cell.image = NSWorkspace.shared.icon(forFileType: kUTTypeFolder as String)
+            cell.image = NSWorkspace.shared.icon(for: .folder)
             cell.title = component.removingPercentEncoding ?? component
             cell.url = url
             cells.append(cell)
@@ -292,7 +292,7 @@ class BrowserWindowController: NSWindowController {
         
         if self.collectionView.selectionIndexPaths.count == 1, let fileItem = self.fileItem(at: self.collectionView.selectionIndexPaths.first!), fileItem.isDirectory {
             let cell = NSPathComponentCell()
-            cell.image = NSWorkspace.shared.icon(forFileType: kUTTypeFolder as String)
+            cell.image = NSWorkspace.shared.icon(for: .folder)
             cell.title = fileItem.name.removingPercentEncoding ?? fileItem.name
             cell.url = fileItem.url
             cells.append(cell)
