@@ -33,6 +33,7 @@
 		312674C92F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312674C82F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift */; };
 		312674CD2F2CE5C700D68B2C /* DeviceScrubberItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
+		313416CA2F381D44007E7640 /* X509 in Frameworks */ = {isa = PBXBuildFile; productRef = 313416C92F381D44007E7640 /* X509 */; };
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
@@ -408,6 +409,7 @@
 			files = (
 				76B580582930EE1B003453FD /* libcrypto.a in Frameworks */,
 				76B580592930EE1B003453FD /* libssl.a in Frameworks */,
+				313416CA2F381D44007E7640 /* X509 in Frameworks */,
 				31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */,
 				76B5805A2930EE1B003453FD /* libssh2.a in Frameworks */,
 				843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */,
@@ -978,6 +980,9 @@
 				Base,
 			);
 			mainGroup = 843301571D2D8CB8008934BB;
+			packageReferences = (
+				313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */,
+			);
 			productRefGroup = 843301611D2D8CB8008934BB /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -1769,6 +1774,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-certificates.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.17.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		313416C92F381D44007E7640 /* X509 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */;
+			productName = X509;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 843301581D2D8CB8008934BB /* Project object */;
 }
