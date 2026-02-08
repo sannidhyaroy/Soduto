@@ -11,23 +11,23 @@ import os
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDelegate {
-    
+
     // MARK: Types
-    
+
     struct MenuItemTags {
         // Application menu
         static let about: Int = 1
-        
+
         // Go menu
         static let back: Int = 1001
         static let forward: Int = 1002
         static let enclosingFolder: Int = 1003
-        
+
         // View menu
         static let toggleHiddenFiles: Int = 2001
         static let toggleThumbnails: Int = 2002
         static let foldersAlwaysFirst: Int = 2101
-        
+
         // File menu
         static let deleteFiles: Int = 3001
         static let newFolder: Int = 3002
@@ -37,26 +37,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
         static let newTab: Int = 3006
         static let open: Int = 3007
     }
-    
+
     struct ToolbarItemTags {
         static let backForward: Int = 50001
     }
-    
-    
+
+
     // MARK: Properties
-    
+
     private(set) var browserWindowControllers: [BrowserWindowController] = []
-    
+
     var keyBrowserWindowController: BrowserWindowController? {
         return NSApp.keyWindow?.windowController as? BrowserWindowController
-    }
-    
-    override init() {
-#if DEBUG
-        NMSSHLogger.shared().logLevel = .verbose
-#else
-        NMSSHLogger.shared().logLevel = .error
-#endif
     }
     
     
@@ -193,7 +185,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
     
     private func open(_ url: URL) {
         guard let scheme = url.scheme else { Logger.general.info("Input URL expected to contain valid scheme part."); return }
-        
+
         switch scheme {
         case "sftp":
             guard let host = url.host else { Logger.general.info("Input URL expected to contain valid host part."); return }
@@ -202,13 +194,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
             let name = url.fragment ?? host
             let port: UInt16? = (url.port != nil) ? UInt16(url.port!) : nil
             let path = url.path
-            guard let fs = try? SftpFileSystem(name: name, host: host, port: port, user: user, password: password, path: path) else {
-                var urlWithouPassword = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                urlWithouPassword?.password = nil
-                Logger.general.info("Failed to connect to SFTP at URL [\(urlWithouPassword?.string ?? "", privacy: .public)]");
-                return
+
+            // Create SFTP file system asynchronously
+            Task { @MainActor in
+                do {
+                    let fs = try await SftpFileSystem(name: name, host: host, port: port, user: user, password: password, path: path)
+                    self.newBrowserWindow(with: fs)
+                } catch {
+                    var urlWithoutPassword = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                    urlWithoutPassword?.password = nil
+                    Logger.general.error("Failed to connect to SFTP at URL [\(urlWithoutPassword?.string ?? "", privacy: .public)]: \(error.localizedDescription, privacy: .public)")
+                }
             }
-            newBrowserWindow(with: fs)
         default:
             Logger.general.info("Unsupported URL scheme: \(scheme, privacy: .public)")
         }

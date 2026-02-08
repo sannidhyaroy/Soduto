@@ -10,13 +10,165 @@ import Foundation
 import os
 import Cocoa
 import UniformTypeIdentifiers
+import Citadel
+import NIOCore
 
-class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
-    private let thumbnailConcurrentOprationCount = 16
+// MARK: - Session Pool Actor
+
+/// An actor that manages a pool of SSH/SFTP connections for concurrent operations.
+/// Uses a semaphore-like pattern with async/await for thread-safe session management.
+private actor SftpSessionPool {
+    private let host: String
+    private let port: Int
+    private let user: String
+    private let password: String
+    private let poolSize: Int
+
+    private var sessions: [SFTPClient] = []
+    private var waiters: [CheckedContinuation<SFTPClient, Error>] = []
+    private var isShuttingDown = false
+
+    init(host: String, port: Int, user: String, password: String, poolSize: Int) async throws {
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.poolSize = poolSize
+
+        // Create initial sessions
+        for i in 0..<poolSize {
+            do {
+                let session = try await Self.createSession(host: host, port: port, user: user, password: password)
+                sessions.append(session)
+                Logger.filesystem.debug("Session pool: Created initial session \(i + 1, privacy: .public)/\(poolSize, privacy: .public)")
+            } catch {
+                Logger.filesystem.error("Session pool: Failed to create initial session \(i + 1, privacy: .public)/\(poolSize, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                // Continue with smaller pool
+            }
+        }
+
+        Logger.filesystem.debug("Session pool initialized with \(self.sessions.count, privacy: .public) sessions")
+    }
+
+    private static func createSession(host: String, port: Int, user: String, password: String) async throws -> SFTPClient {
+        let ssh = try await SSHClient.connect(
+            host: host,
+            port: port,
+            authenticationMethod: .passwordBased(username: user, password: password),
+            hostKeyValidator: .acceptAnything(),
+            reconnect: .never
+        )
+        return try await ssh.openSFTP()
+    }
+
+    /// Acquire a session from the pool. Suspends if none available.
+    func acquire() async throws -> SFTPClient {
+        if isShuttingDown {
+            throw SftpFileSystem.SftpError.connectionFailed
+        }
+
+        // If we have an available session, return it
+        if !sessions.isEmpty {
+            let session = sessions.removeFirst()
+            if session.isActive {
+                Logger.filesystem.debug("Session pool: Acquired session. Remaining: \(self.sessions.count, privacy: .public)")
+                return session
+            } else {
+                // Session died, try to get another or create new
+                Logger.filesystem.debug("Session pool: Found dead session, discarding")
+                return try await acquire()
+            }
+        }
+
+        // No sessions available, wait for one
+        return try await withCheckedThrowingContinuation { continuation in
+            waiters.append(continuation)
+            Logger.filesystem.debug("Session pool: No sessions available, waiting. Waiters: \(self.waiters.count, privacy: .public)")
+        }
+    }
+
+    /// Release a session back to the pool.
+    func release(_ session: SFTPClient) {
+        guard !isShuttingDown else {
+            Task { try? await session.close() }
+            return
+        }
+
+        // If there are waiters, give them the session directly
+        if !waiters.isEmpty {
+            let waiter = waiters.removeFirst()
+            if session.isActive {
+                waiter.resume(returning: session)
+                Logger.filesystem.debug("Session pool: Released session to waiter. Waiters remaining: \(self.waiters.count, privacy: .public)")
+            } else {
+                // Session is dead, create a new one for the waiter
+                Task {
+                    do {
+                        let newSession = try await Self.createSession(host: host, port: port, user: user, password: password)
+                        waiter.resume(returning: newSession)
+                    } catch {
+                        waiter.resume(throwing: error)
+                    }
+                }
+            }
+            return
+        }
+
+        // No waiters, return to pool if healthy
+        if session.isActive {
+            sessions.append(session)
+            Logger.filesystem.debug("Session pool: Released session. Pool size: \(self.sessions.count, privacy: .public)")
+        } else {
+            // Replace dead session
+            Logger.filesystem.debug("Session pool: Session dead, creating replacement")
+            Task {
+                do {
+                    let newSession = try await Self.createSession(host: host, port: port, user: user, password: password)
+                    await self.addSession(newSession)
+                } catch {
+                    Logger.filesystem.error("Session pool: Failed to create replacement session: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    private func addSession(_ session: SFTPClient) {
+        if !waiters.isEmpty {
+            let waiter = waiters.removeFirst()
+            waiter.resume(returning: session)
+        } else {
+            sessions.append(session)
+        }
+    }
+
+    /// Shutdown the pool and close all sessions.
+    func shutdown() async {
+        isShuttingDown = true
+
+        // Fail all waiters
+        for waiter in waiters {
+            waiter.resume(throwing: SftpFileSystem.SftpError.connectionFailed)
+        }
+        waiters.removeAll()
+
+        // Close all sessions
+        for session in sessions {
+            try? await session.close()
+        }
+        sessions.removeAll()
+
+        Logger.filesystem.debug("Session pool: Shutdown complete")
+    }
+}
+
+// MARK: - SftpFileSystem
+
+class SftpFileSystem: NSObject, FileSystem {
+    private let thumbnailConcurrentOperationCount = 16
     private let thumbnailSessionPoolSize = 6
-    
+
     // MARK: Types
-    
+
     enum SftpError: Error {
         case connectionFailed
         case authenticationFailed
@@ -32,611 +184,606 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
         case creatingDirectoryFailed(at: URL)
         case openInputStreamFailed(at: URL)
         case openOutputStreamFailed(at: URL)
+        case operationCancelled
     }
-    
-    typealias DownloadProgress = ((UInt, UInt)->Bool)
-    typealias UploadProgress = ((UInt)->Bool)
-    
-    
+
     // MARK: Properties
-    
+
     weak var delegate: FileSystemDelegate?
-    
+
     let name: String
     let rootUrl: URL
     let places: [Place] = []
-    
+
     private let browseQueue = OperationQueue()
     private let fileOperationsQueue = OperationQueue()
-    private let browseSession: NMSSHSession
-    private let fileOperationsSession: NMSSHSession
     private let thumbnailQueue = OperationQueue()
-    
-    // The pool of reusable sessions for thumbnails
-    private var thumbnailSessionPool: [NMSSHSession] = []
-    // A semaphore to limit concurrent access to the pool
-    private let poolSemaphore: DispatchSemaphore
-    // A lock to protect modifications to the thumbnailSessionPool array
-    private let poolLock = NSLock()
-    
-    private let hostWithPort: String
+
+    private let host: String
+    private let port: Int
     private let user: String
     private let password: String
-    
+
+    // Main SFTP clients for browsing and file operations
+    private var browseClient: SFTPClient?
+    private var fileOperationsClient: SFTPClient?
+
+    // Session pool for thumbnail downloads
+    private var thumbnailPool: SftpSessionPool?
+
     // A dictionary to track ongoing and queued download operations by their URL.
     private var downloadTasks: [URL: Operation] = [:]
     // A lock to make the downloadTasks dictionary thread-safe.
     private let downloadTasksLock = NSLock()
-    
+
     // MARK: Setup / Cleanup
-    
-    init(name: String, host: String, port: UInt16?, user: String, password: String, path: String) throws {
+
+    init(name: String, host: String, port: UInt16?, user: String, password: String, path: String) async throws {
         self.name = name
-        
-        let hostWithPort = port != nil ? "\(host):\(port!)" : host
-        self.browseSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
-        self.fileOperationsSession = try type(of: self).initSession(host: hostWithPort, user: user, password: password)
-        
-        self.hostWithPort = hostWithPort
+        self.host = host
+        self.port = Int(port ?? 22)
         self.user = user
         self.password = password
-        
-        // Initialize the semaphore with the pool size
-        self.poolSemaphore = DispatchSemaphore(value: thumbnailSessionPoolSize)
-        
+
         let directoryPath = path.hasSuffix("/") ? path : path + "/"
-        guard let rootUrl = URL.url(scheme: "sftp", host: host, port: port, user: user, path: directoryPath) else { throw SftpError.rootUrlInitializationFailed }
+        guard let rootUrl = URL.url(scheme: "sftp", host: host, port: port, user: user, path: directoryPath) else {
+            throw SftpError.rootUrlInitializationFailed
+        }
         self.rootUrl = rootUrl
-        
+
         self.browseQueue.maxConcurrentOperationCount = 1
         self.browseQueue.qualityOfService = .userInteractive
         self.fileOperationsQueue.maxConcurrentOperationCount = 1
         self.fileOperationsQueue.qualityOfService = .userInitiated
-        self.thumbnailQueue.maxConcurrentOperationCount = thumbnailConcurrentOprationCount
+        self.thumbnailQueue.maxConcurrentOperationCount = thumbnailConcurrentOperationCount
         self.thumbnailQueue.qualityOfService = .utility
-        
-        super.init() // Call super.init() before initializing the pool
-        
-        Logger.filesystem.debug("Initializing thumbnail session pool with size \(self.thumbnailSessionPoolSize, privacy: .public)...")
-        // Create the initial pool of sessions
-        for i in 0 ..< thumbnailSessionPoolSize {
-            do {
-                let session = try type(of: self).initSession(host: self.hostWithPort, user: self.user, password: self.password)
-                self.thumbnailSessionPool.append(session)
-            } catch {
-                Logger.filesystem.error("Failed to create initial session \(i+1, privacy: .public)/\(self.thumbnailSessionPoolSize, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                // If one fails, we just continue with a smaller pool.
-                // We must release the semaphore "permit" for the session we failed to create.
-                self.poolSemaphore.wait() // Consume the permit for the failed session
-            }
-        }
-        Logger.filesystem.debug("Thumbnail session pool initialized with \(self.thumbnailSessionPool.count, privacy: .public) sessions.")
+
+        super.init()
+
+        // Initialize SSH connections
+        Logger.filesystem.debug("Connecting to SFTP server at \(host, privacy: .public):\(self.port, privacy: .public)")
+
+        self.browseClient = try await Self.createSftpClient(host: host, port: self.port, user: user, password: password)
+        self.fileOperationsClient = try await Self.createSftpClient(host: host, port: self.port, user: user, password: password)
+
+        Logger.filesystem.debug("Main SFTP clients connected")
+
+        // Initialize thumbnail session pool
+        self.thumbnailPool = try await SftpSessionPool(
+            host: host,
+            port: self.port,
+            user: user,
+            password: password,
+            poolSize: thumbnailSessionPoolSize
+        )
+
+        Logger.filesystem.debug("SftpFileSystem initialization complete")
     }
-    
+
     deinit {
-        Logger.filesystem.debug("SftpFileSystem deinit: Cancelling all thumbnail operations.")
+        Logger.filesystem.debug("SftpFileSystem deinit: Cancelling all operations and closing connections")
         thumbnailQueue.cancelAllOperations()
+
+        // Close clients in a detached task since deinit can't be async
+        let browseClient = self.browseClient
+        let fileOpsClient = self.fileOperationsClient
+        let pool = self.thumbnailPool
+
+        Task.detached {
+            try? await browseClient?.close()
+            try? await fileOpsClient?.close()
+            await pool?.shutdown()
+        }
     }
-    
-    private static func initSession(host: String, user: String, password: String) throws -> NMSSHSession {
-        guard let session = NMSSHSession.connect(toHost: host, withUsername: user) else { throw SftpError.connectionFailed }
-        guard session.isConnected else { throw SftpError.connectionFailed }
-        
-        session.authenticate(byPassword: password)
-        guard session.isAuthorized else { throw SftpError.authenticationFailed }
-        
-        session.sftp.connect()
-        guard session.sftp.isConnected else { throw SftpError.sftpInitializationFailed }
-        
-        return session
+
+    private static func createSftpClient(host: String, port: Int, user: String, password: String) async throws -> SFTPClient {
+        let ssh = try await SSHClient.connect(
+            host: host,
+            port: port,
+            authenticationMethod: .passwordBased(username: user, password: password),
+            hostKeyValidator: .acceptAnything(),
+            reconnect: .never
+        )
+        return try await ssh.openSFTP()
     }
-    
-    
+
     // MARK: FileSystem
-    
+
     func load(_ url: URL, completionHandler: @escaping (([FileItem]?, Int64?, Error?) -> Void)) {
         assert(isUnderRoot(url) || url == self.rootUrl, "URL (\(url)) is outside root tree (\(self.rootUrl)).")
-        
-        browseQueue.addOperation {[weak self] in
-            guard let `self` = self else { return }
-            do {
-                let rawContents = self.browseSession.sftp.contentsOfDirectory(atPath: url.path)
-                guard let contents = rawContents as? [NMSFTPFile] else { throw SftpError.invalidDirectoryContent(at: url) }
-                let fileItems = contents.compactMap { return FileItem(sftpFile: $0, parentUrl: url, user: self.browseSession.username ?? "") }
-                let freeSpace = self.browseSession.channel.freeSpace(at: url.path)
-                DispatchQueue.main.async { completionHandler(fileItems, freeSpace, nil) }
+
+        browseQueue.addOperation { [weak self] in
+            guard let self = self, let client = self.browseClient else {
+                DispatchQueue.main.async { completionHandler(nil, nil, SftpError.connectionFailed) }
+                return
             }
-            catch {
-                print("\(String(describing: self.browseSession.lastError))")
-                print("\(String(describing: self.browseSession.sftp.lastError))")
-                DispatchQueue.main.async { completionHandler(nil, nil, error) }
+
+            Task {
+                do {
+                    let contents = try await client.listDirectory(atPath: url.path)
+                    let fileItems = contents.flatMap { name -> [FileItem] in
+                        name.components.compactMap { component in
+                            FileItem(sftpComponent: component, parentUrl: url)
+                        }
+                    }
+                    // Free space not available through Citadel SFTP
+                    DispatchQueue.main.async { completionHandler(fileItems, nil, nil) }
+                } catch {
+                    Logger.filesystem.error("Failed to list directory \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    DispatchQueue.main.async { completionHandler(nil, nil, error) }
+                }
             }
         }
     }
-    
+
     func delete(_ url: URL) -> FileOperation {
         _ = canDelete(url, assertOnFailure: true)
-        
+
         let operation = FileOperation(operation: .delete, source: url)
         operation.sourceState = .inProgress
         operation.addExecutionBlock { [weak self] in
-            guard let `self` = self else { return }
-            do {
-                try self.deleteRemote(at: url)
-                operation.sourceState = .deleted
-            }
-            catch {
-                operation.error = error
+            guard let self = self, let client = self.fileOperationsClient else {
+                operation.error = SftpError.connectionFailed
                 operation.sourceState = .present
+                return
             }
+
+            let semaphore = DispatchSemaphore(value: 0)
+            Task {
+                do {
+                    try await self.deleteRemote(at: url, using: client)
+                    operation.sourceState = .deleted
+                } catch {
+                    operation.error = error
+                    operation.sourceState = .present
+                }
+                semaphore.signal()
+            }
+            semaphore.wait()
         }
         self.fileOperationsQueue.addOperation(operation)
         return operation
     }
-    
+
     func copy(_ srcUrl: URL, to destUrl: URL) -> FileOperation {
         _ = canCopy(srcUrl, to: destUrl, assertOnFailure: true)
-        
+
         let operation = FileOperation(operation: .copy, source: srcUrl, destination: destUrl)
         operation.destinationState = .inProgress
         operation.addExecutionBlock { [weak self] in
-            guard let `self` = self else { return }
-            do {
-                let progress: DownloadProgress = { _, _ in return !operation.isCancelled }
-                
-                let destUrl = try self.nonExistingUrl(for: destUrl)
-                operation.destination = destUrl
-                self.willAddFile(at: destUrl, from: operation)
-                
-                if self.isUnderRoot(srcUrl) && self.isUnderRoot(destUrl) {
-                    guard self.fileOperationsSession.sftp.copyContents(ofPath: srcUrl.path, toFileAtPath: destUrl.path, progress: progress) else { throw SftpError.copyingFileFailed(from: srcUrl, to: destUrl) }
-                }
-                else if self.isUnderRoot(srcUrl) {
-                    try self.download(from: srcUrl, to: destUrl, progress: progress)
-                }
-                else if self.isUnderRoot(destUrl) {
-                    try self.upload(from: srcUrl, to: destUrl)
-                }
-                operation.destinationState = .present
-            }
-            catch {
-                operation.error = error
+            guard let self = self, let client = self.fileOperationsClient else {
+                operation.error = SftpError.connectionFailed
                 operation.destinationState = .deleted
+                return
             }
+
+            let semaphore = DispatchSemaphore(value: 0)
+            Task {
+                do {
+                    let finalDestUrl = try await self.nonExistingUrl(for: destUrl, using: client)
+                    operation.destination = finalDestUrl
+                    self.willAddFile(at: finalDestUrl, from: operation)
+
+                    if self.isUnderRoot(srcUrl) && self.isUnderRoot(finalDestUrl) {
+                        // Remote to remote copy: read then write
+                        try await self.copyRemoteToRemote(from: srcUrl, to: finalDestUrl, using: client, isCancelled: { operation.isCancelled })
+                    } else if self.isUnderRoot(srcUrl) {
+                        // Download from remote
+                        try await self.download(from: srcUrl, to: finalDestUrl, using: client, isCancelled: { operation.isCancelled })
+                    } else if self.isUnderRoot(finalDestUrl) {
+                        // Upload to remote
+                        try await self.upload(from: srcUrl, to: finalDestUrl, using: client, isCancelled: { operation.isCancelled })
+                    }
+                    operation.destinationState = .present
+                } catch {
+                    operation.error = error
+                    operation.destinationState = .deleted
+                }
+                semaphore.signal()
+            }
+            semaphore.wait()
         }
         self.fileOperationsQueue.addOperation(operation)
         return operation
     }
-    
+
     func move(_ srcUrl: URL, to destUrl: URL) -> FileOperation {
         _ = canMove(srcUrl, to: destUrl, assertOnFailure: true)
-        
+
         let operation = FileOperation(operation: .move, source: srcUrl, destination: destUrl)
         operation.sourceState = .inProgress
         operation.destinationState = .inProgress
-        operation.addExecutionBlock {[weak self] in
-            guard let `self` = self else { return }
-            do {
-                let destUrl = try self.nonExistingUrl(for: destUrl)
-                operation.destination = destUrl
-                self.willAddFile(at: destUrl, from: operation)
-                
-                guard self.fileOperationsSession.sftp.moveItem(atPath: srcUrl.path, toPath: destUrl.path) else { throw SftpError.movingFileFailed(from: srcUrl, to: destUrl) }
-                operation.sourceState = .deleted
-                operation.destinationState = .present
-            }
-            catch {
-                operation.error = error
+        operation.addExecutionBlock { [weak self] in
+            guard let self = self, let client = self.fileOperationsClient else {
+                operation.error = SftpError.connectionFailed
                 operation.sourceState = .present
                 operation.destinationState = .deleted
+                return
             }
+
+            let semaphore = DispatchSemaphore(value: 0)
+            Task {
+                do {
+                    let finalDestUrl = try await self.nonExistingUrl(for: destUrl, using: client)
+                    operation.destination = finalDestUrl
+                    self.willAddFile(at: finalDestUrl, from: operation)
+
+                    try await client.rename(at: srcUrl.path, to: finalDestUrl.path)
+                    operation.sourceState = .deleted
+                    operation.destinationState = .present
+                } catch {
+                    operation.error = error
+                    operation.sourceState = .present
+                    operation.destinationState = .deleted
+                }
+                semaphore.signal()
+            }
+            semaphore.wait()
         }
         self.fileOperationsQueue.addOperation(operation)
         return operation
     }
-    
+
     func createFolder(_ url: URL) -> FileOperation {
         _ = canCreateFolder(url, assertOnFailure: true)
-        
+
         let operation = FileOperation(operation: .createFolder, destination: url)
         operation.destinationState = .inProgress
-        operation.addExecutionBlock {
-            do {
-                let url = try self.nonExistingUrl(for: url)
-                operation.destination = url
-                self.willAddFile(at: url, from: operation)
-                
-                guard self.fileOperationsSession.sftp.createDirectory(atPath: url.path) else { throw SftpError.creatingDirectoryFailed(at: url) }
-                operation.destinationState = .present
-            }
-            catch {
-                operation.error = error
+        operation.addExecutionBlock { [weak self] in
+            guard let self = self, let client = self.fileOperationsClient else {
+                operation.error = SftpError.connectionFailed
                 operation.destinationState = .deleted
+                return
             }
+
+            let semaphore = DispatchSemaphore(value: 0)
+            Task {
+                do {
+                    let finalUrl = try await self.nonExistingUrl(for: url, using: client)
+                    operation.destination = finalUrl
+                    self.willAddFile(at: finalUrl, from: operation)
+
+                    try await client.createDirectory(atPath: finalUrl.path)
+                    operation.destinationState = .present
+                } catch {
+                    operation.error = error
+                    operation.destinationState = .deleted
+                }
+                semaphore.signal()
+            }
+            semaphore.wait()
         }
         self.fileOperationsQueue.addOperation(operation)
         return operation
     }
-    
-    // MARK: Session Pool Management
-    
-    ///Acquires a reusable session from the pool. Blocks if the pool is empty.
-    private func acquireThumbnailSession() -> NMSSHSession {
-        // Wait until a session is available (blocks the current Operation, not the main thread)
-        poolSemaphore.wait()
-        
-        poolLock.lock()
-        // We are guaranteed to have a session because the semaphore controls access
-        let session = thumbnailSessionPool.removeFirst()
-        poolLock.unlock()
-        
-        Logger.filesystem.debug("Session acquired. Pool size: \(self.thumbnailSessionPool.count, privacy: .public)")
-        return session
-    }
-    
-    ///Returns a healthy session to the pool.
-    private func releaseThumbnailSession(_ session: NMSSHSession) {
-        poolLock.lock()
-        thumbnailSessionPool.append(session)
-        poolLock.unlock()
-        
-        // Release the semaphore permit
-        poolSemaphore.signal()
-        Logger.filesystem.debug("Session released. Pool size: \(self.thumbnailSessionPool.count, privacy: .public)")
-    }
-    
-    ///Discards a dead session and tries to replace it with a new one.
-    ///Always releases the semaphore permit.
-    private func replaceThumbnailSession(_ deadSession: NMSSHSession) {
-        Logger.filesystem.debug("Replacing dead session...")
-        deadSession.disconnect()
-        
-        asynchronouslyRecreateAndAddSession()
-    }
-    
-    private func asynchronouslyRecreateAndAddSession() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self else { return }
-            
-            let retryInterval: TimeInterval = 5.0
-            
-            while true {
-                Logger.filesystem.debug("Attempting to recreate a session...")
-                do {
-                    let newSession = try type(of: self).initSession(
-                        host: self.hostWithPort,
-                        user: self.user,
-                        password: self.password
-                    )
-                    
-                    Logger.filesystem.debug("Session recreated successfully.")
-                    self.poolLock.lock()
-                    self.thumbnailSessionPool.append(newSession)
-                    self.poolLock.unlock()
-                    
-                    self.poolSemaphore.signal()
-                    
-                    break
-                } catch {
-                    Logger.filesystem.error("Failed to recreate session: \(error.localizedDescription, privacy: .public). Retrying in \(retryInterval, privacy: .public)s...")
-                    Thread.sleep(forTimeInterval: retryInterval)
-                }
-            }
+
+    // MARK: Private - Remote Operations
+
+    /// Check if a remote path exists and return its attributes, or nil if it doesn't exist.
+    private func getAttributesIfExists(at path: String, using client: SFTPClient) async -> SFTPFileAttributes? {
+        do {
+            return try await client.getAttributes(at: path)
+        } catch {
+            return nil
         }
     }
-    
-    // MARK: Private stuff
-    
-    /// Return the same given URL or an alternative that does not yet exist
-    private func nonExistingUrl(for url: URL) throws -> URL {
+
+    /// Check if a remote file exists.
+    private func fileExists(at path: String, using client: SFTPClient) async -> Bool {
+        guard let attrs = await getAttributesIfExists(at: path, using: client) else { return false }
+        // Check it's not a directory
+        return attrs.permissions.map { $0 & 0o40000 == 0 } ?? true
+    }
+
+    /// Check if a remote directory exists.
+    private func directoryExists(at path: String, using client: SFTPClient) async -> Bool {
+        guard let attrs = await getAttributesIfExists(at: path, using: client) else { return false }
+        // Check it's a directory
+        return attrs.permissions.map { $0 & 0o40000 != 0 } ?? false
+    }
+
+    /// Return the same given URL or an alternative that does not yet exist.
+    private func nonExistingUrl(for url: URL, using client: SFTPClient) async throws -> URL {
         var url = url
-        
+
         if isUnderRoot(url) {
-            while self.fileOperationsSession.sftp.fileExists(atPath: url.regularFileURL.path) || self.fileOperationsSession.sftp.directoryExists(atPath: url.regularFileURL.path) {
+            while await remotePathExists(at: url.regularFileURL.path, using: client) {
                 url = url.alternativeForDuplicate()
             }
             return url
-        }
-        else if url.isFileURL {
+        } else if url.isFileURL {
             while FileManager.default.fileExists(atPath: url.regularFileURL.path) {
                 url = url.alternativeForDuplicate()
             }
             return url
-        }
-        else {
+        } else {
             throw FileSystemError.invalidUrl(url: url)
         }
     }
-    
-    /// Make sure there is required directory on local file system
-    private func ensureLocalDirectory(at url: URL) throws {
-        var url = url
-        var existsDirectory: ObjCBool = false
-        if !FileManager.default.fileExists(atPath: url.path, isDirectory: &existsDirectory) {
-            url = try nonExistingUrl(for: url)
-        }
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: nil)
+
+    /// Check if a remote path exists (either file or directory).
+    private func remotePathExists(at path: String, using client: SFTPClient) async -> Bool {
+        return await getAttributesIfExists(at: path, using: client) != nil
     }
-    
-    /// Synchronously download remote file or directory to local destination.
-    private func download(from srcUrl: URL, to destUrl: URL, progress: DownloadProgress?) throws {
-        assert(isUnderRoot(srcUrl), "Source URL (\(srcUrl)) expected to be under root (\(self.rootUrl)).")
-        assert(destUrl.isFileURL, "Destination URL (\(destUrl)) expected to be local URL.")
-        
-        if srcUrl.hasDirectoryPath {
-            try downloadDirectory(from: srcUrl, to: destUrl, progress: progress)
-        }
-        else {
-            let destUrl = try nonExistingUrl(for: destUrl)
-            guard let stream = OutputStream(url: destUrl, append: false) else { throw SftpError.openOutputStreamFailed(at: srcUrl) }
-            guard self.fileOperationsSession.sftp.readFile(atPath: srcUrl.path, to: stream, progress: progress) else { throw SftpError.copyingFileFailed(from: srcUrl, to: destUrl) }
-        }
-    }
-    
-    /// Synchromously donwload remote directory to local destination.
-    private func downloadDirectory(from srcUrl: URL, to destUrl: URL, progress: DownloadProgress?) throws {
-        assert(isUnderRoot(srcUrl), "Source URL (\(srcUrl)) expected to be under root (\(self.rootUrl)).")
-        assert(srcUrl.hasDirectoryPath, "Source URL (\(srcUrl)) expected to be a directory.")
-        assert(destUrl.isFileURL, "Destination URL (\(destUrl)) expected to be local directory URL.")
-        
-        guard let files = self.fileOperationsSession.sftp.contentsOfDirectory(atPath: srcUrl.path) as? [NMSFTPFile] else { throw SftpError.invalidDirectoryContent(at: srcUrl) }
-        
-        try ensureLocalDirectory(at: destUrl)
-        
-        for file in files {
-            guard let filename = file.filename else { assertionFailure("File name expected to be non-nil."); continue }
-            let fileSrcUrl = srcUrl.appendingPathComponent(filename, isDirectory: file.isDirectory)
-            let fileDestUrl = destUrl.appendingPathComponent(filename, isDirectory: file.isDirectory)
-            try download(from: fileSrcUrl, to: fileDestUrl, progress: progress)
-        }
-    }
-    
-    /// Make sure there is required directory on remote file system
-    private func ensureRemoteDirectory(at url: URL) throws {
-        assert(isUnderRoot(url), "URL (\(url)) expected to be under root (\(self.rootUrl)).")
-        
-        var url = url
-        if self.fileOperationsSession.sftp.fileExists(atPath: url.path) {
-            url = try nonExistingUrl(for: url)
-        }
-        guard !self.fileOperationsSession.sftp.directoryExists(atPath: url.path) else { return }
-        guard self.fileOperationsSession.sftp.createDirectory(atPath: url.path) else { throw SftpError.creatingDirectoryFailed(at: url) }
-    }
-    
-    /// Synchronously upload local file or directory to remote destination.
-    private func upload(from srcUrl: URL, to destUrl: URL) throws {
-        assert(srcUrl.isFileURL, "Source URL (\(srcUrl)) expected to be local directory URL.")
-        assert(isUnderRoot(destUrl), "Destination URL (\(destUrl)) expected to be under root (\(self.rootUrl)).")
-        
-        if srcUrl.hasDirectoryPath {
-            try uploadDirectory(from: srcUrl, to: destUrl)
-        }
-        else {
-            let destUrl = try nonExistingUrl(for: destUrl)
-            var started: Bool = false
-            let progress: UploadProgress = { _ in
-                if !started {
-                    started = true
-                }
-                return true
-            }
-            guard let stream = InputStream(url: srcUrl) else { throw SftpError.openInputStreamFailed(at: srcUrl) }
-            guard self.fileOperationsSession.sftp.write(stream, toFileAtPath: destUrl.path, progress: progress) else { throw SftpError.copyingFileFailed(from: srcUrl, to: destUrl) }
-        }
-    }
-    
-    /// Synchromously upload local directory to remote destination.
-    private func uploadDirectory(from srcUrl: URL, to destUrl: URL) throws {
-        assert(srcUrl.isFileURL, "Source URL (\(srcUrl)) expected to be local directory URL.")
-        assert(srcUrl.hasDirectoryPath, "Source URL (\(srcUrl)) expected to be a directory.")
-        assert(isUnderRoot(destUrl), "Destination URL (\(destUrl)) expected to be under root (\(self.rootUrl)).")
-        
-        let files = try FileManager.default.contentsOfDirectory(at: srcUrl, includingPropertiesForKeys: nil, options: [.skipsPackageDescendants, .skipsSubdirectoryDescendants])
-        
-        try ensureRemoteDirectory(at: destUrl)
-        
-        for fileSrcUrl in files {
-            let fileDestUrl = fileSrcUrl.movedTo(destUrl)
-            try upload(from: fileSrcUrl, to: fileDestUrl)
-        }
-    }
-    
-    /// Synchromously delete remote item, be it a file or a possibly non-empty directory
-    private func deleteRemote(at url: URL) throws {
+
+    /// Delete a remote file or directory.
+    private func deleteRemote(at url: URL, using client: SFTPClient) async throws {
         assert(isUnderRoot(url), "URL being deleted (\(url)) expected to be under root (\(self.rootUrl)).")
-        
+
         if url.hasDirectoryPath {
-            try deleteRemoteDirectory(at: url)
-        }
-        else {
-            guard self.fileOperationsSession.sftp.removeFile(atPath: url.path) else { throw SftpError.deletingFileFailed(at: url) }
+            try await deleteRemoteDirectory(at: url, using: client)
+        } else {
+            try await client.remove(at: url.path)
         }
     }
-    
-    /// Synchronously delete possibly non-empty remote directory
-    private func deleteRemoteDirectory(at url: URL) throws {
+
+    /// Delete a possibly non-empty remote directory.
+    private func deleteRemoteDirectory(at url: URL, using client: SFTPClient) async throws {
         assert(isUnderRoot(url), "URL being deleted (\(url)) expected to be under root (\(self.rootUrl)).")
         assert(url.hasDirectoryPath, "URL being deleted (\(url)) expected to be a directory.")
-        
-        let session = self.fileOperationsSession
-        
-        // first try delete directly
-        if session.sftp.removeDirectory(atPath: url.path) {
+
+        // First try to delete directly (works for empty directories)
+        do {
+            try await client.rmdir(at: url.path)
             return
+        } catch {
+            // May fail on non-empty directory, try recursive delete
         }
-        
-        // However direct delete may fail on non-empty directory with SFTP error 4 (Failure). In such case try deleteing children manually.
-        
-        switch session.lastError {
-        case let err as NSError: guard Int32(err.code) == LIBSSH2_ERROR_SFTP_PROTOCOL else { throw session.lastError }
-        default: throw session.lastError
+
+        // List and delete children
+        let contents = try await client.listDirectory(atPath: url.path)
+        for name in contents {
+            for component in name.components {
+                let filename = component.filename
+                guard filename != "." && filename != ".." else { continue }
+                let isDir = component.attributes.permissions.map { $0 & 0o40000 != 0 } ?? false
+                let fileUrl = url.appendingPathComponent(filename, isDirectory: isDir)
+                try await deleteRemote(at: fileUrl, using: client)
+            }
         }
-        
-        switch session.sftp.lastError {
-        case let err as NSError: guard Int32(err.code) == LIBSSH2_FX_FAILURE else { throw session.sftp.lastError }
-        default: throw session.sftp.lastError
-        }
-        
-        // Delete children
-        guard let files = session.sftp.contentsOfDirectory(atPath: url.path) as? [NMSFTPFile] else { throw SftpError.invalidDirectoryContent(at: url) }
-        for file in files {
-            guard let filename = file.filename else { assertionFailure("File name expected to be non-nil."); continue }
-            let fileUrl = url.appendingPathComponent(filename, isDirectory: file.isDirectory)
-            try deleteRemote(at: fileUrl)
-        }
-        
-        // Try again to delete directory
-        guard session.sftp.removeDirectory(atPath: url.path) else { throw SftpError.deletingFileFailed(at: url) }
+
+        // Try again to delete now-empty directory
+        try await client.rmdir(at: url.path)
     }
-    
-    /// Perform notification about starting to add new file (file name might be different than requested)
+
+    /// Copy a remote file to another remote location (read + write).
+    private func copyRemoteToRemote(from srcUrl: URL, to destUrl: URL, using client: SFTPClient, isCancelled: @escaping () -> Bool) async throws {
+        if srcUrl.hasDirectoryPath {
+            // Create destination directory
+            try await client.createDirectory(atPath: destUrl.path)
+
+            // Copy children
+            let contents = try await client.listDirectory(atPath: srcUrl.path)
+            for name in contents {
+                for component in name.components {
+                    let filename = component.filename
+                    guard filename != "." && filename != ".." else { continue }
+                    if isCancelled() { throw SftpError.operationCancelled }
+
+                    let isDir = component.attributes.permissions.map { $0 & 0o40000 != 0 } ?? false
+                    let fileSrcUrl = srcUrl.appendingPathComponent(filename, isDirectory: isDir)
+                    let fileDestUrl = destUrl.appendingPathComponent(filename, isDirectory: isDir)
+                    try await copyRemoteToRemote(from: fileSrcUrl, to: fileDestUrl, using: client, isCancelled: isCancelled)
+                }
+            }
+        } else {
+            // Read source file
+            let data = try await client.withFile(filePath: srcUrl.path, flags: .read) { file in
+                try await file.readAll()
+            }
+
+            if isCancelled() { throw SftpError.operationCancelled }
+
+            // Write to destination
+            try await client.withFile(filePath: destUrl.path, flags: [.write, .create, .truncate]) { file in
+                try await file.write(data)
+            }
+        }
+    }
+
+    /// Download a remote file or directory to a local destination.
+    private func download(from srcUrl: URL, to destUrl: URL, using client: SFTPClient, isCancelled: @escaping () -> Bool) async throws {
+        assert(isUnderRoot(srcUrl), "Source URL (\(srcUrl)) expected to be under root (\(self.rootUrl)).")
+        assert(destUrl.isFileURL, "Destination URL (\(destUrl)) expected to be local URL.")
+
+        if srcUrl.hasDirectoryPath {
+            try await downloadDirectory(from: srcUrl, to: destUrl, using: client, isCancelled: isCancelled)
+        } else {
+            let finalDestUrl = try await nonExistingUrl(for: destUrl, using: client)
+
+            // Read remote file
+            let data = try await client.withFile(filePath: srcUrl.path, flags: .read) { file in
+                try await file.readAll()
+            }
+
+            if isCancelled() { throw SftpError.operationCancelled }
+
+            // Write to local file
+            let dataBytes = Data(buffer: data)
+            try dataBytes.write(to: finalDestUrl)
+        }
+    }
+
+    /// Download a remote directory to a local destination.
+    private func downloadDirectory(from srcUrl: URL, to destUrl: URL, using client: SFTPClient, isCancelled: @escaping () -> Bool) async throws {
+        // Create local directory
+        try FileManager.default.createDirectory(at: destUrl, withIntermediateDirectories: true, attributes: nil)
+
+        // List and download children
+        let contents = try await client.listDirectory(atPath: srcUrl.path)
+        for name in contents {
+            for component in name.components {
+                let filename = component.filename
+                guard filename != "." && filename != ".." else { continue }
+                if isCancelled() { throw SftpError.operationCancelled }
+
+                let isDir = component.attributes.permissions.map { $0 & 0o40000 != 0 } ?? false
+                let fileSrcUrl = srcUrl.appendingPathComponent(filename, isDirectory: isDir)
+                let fileDestUrl = destUrl.appendingPathComponent(filename, isDirectory: isDir)
+                try await download(from: fileSrcUrl, to: fileDestUrl, using: client, isCancelled: isCancelled)
+            }
+        }
+    }
+
+    /// Upload a local file or directory to a remote destination.
+    private func upload(from srcUrl: URL, to destUrl: URL, using client: SFTPClient, isCancelled: @escaping () -> Bool) async throws {
+        assert(srcUrl.isFileURL, "Source URL (\(srcUrl)) expected to be local URL.")
+        assert(isUnderRoot(destUrl), "Destination URL (\(destUrl)) expected to be under root (\(self.rootUrl)).")
+
+        if srcUrl.hasDirectoryPath {
+            try await uploadDirectory(from: srcUrl, to: destUrl, using: client, isCancelled: isCancelled)
+        } else {
+            let finalDestUrl = try await nonExistingUrl(for: destUrl, using: client)
+
+            // Read local file
+            let data = try Data(contentsOf: srcUrl)
+
+            if isCancelled() { throw SftpError.operationCancelled }
+
+            // Write to remote
+            var buffer = ByteBuffer()
+            buffer.writeBytes(data)
+            let bufferToWrite = buffer
+            try await client.withFile(filePath: finalDestUrl.path, flags: [.write, .create, .truncate]) { file in
+                try await file.write(bufferToWrite)
+            }
+        }
+    }
+
+    /// Upload a local directory to a remote destination.
+    private func uploadDirectory(from srcUrl: URL, to destUrl: URL, using client: SFTPClient, isCancelled: @escaping () -> Bool) async throws {
+        // Create remote directory
+        try await client.createDirectory(atPath: destUrl.path)
+
+        // List and upload children
+        let contents = try FileManager.default.contentsOfDirectory(at: srcUrl, includingPropertiesForKeys: nil, options: [.skipsPackageDescendants, .skipsSubdirectoryDescendants])
+
+        for fileSrcUrl in contents {
+            if isCancelled() { throw SftpError.operationCancelled }
+            let fileDestUrl = fileSrcUrl.movedTo(destUrl)
+            try await upload(from: fileSrcUrl, to: fileDestUrl, using: client, isCancelled: isCancelled)
+        }
+    }
+
+    /// Perform notification about starting to add new file.
     private func willAddFile(at url: URL, from fileOperation: FileOperation) {
         DispatchQueue.main.async {
             self.delegate?.fileSystem(self, willAddFileAt: url, from: fileOperation)
         }
     }
-    
-    /// Perform notification about deleted file
-//    private func didRemoveFile(at url: URL) {
-//        DispatchQueue.main.async {
-//            self.delegate?.fileSystem(self, didRemoveFileAt: url)
-//        }
-//    }
-    
-    /// Perform notification about added file
-//    private func didAddFile(at url: URL) {
-//        DispatchQueue.main.async {
-//            self.delegate?.fileSystem(self, didAddFileAt: url)
-//        }
-//    }
 
-    // MARK: Data Loading
-    
+    // MARK: Data Loading (Thumbnails)
+
     func loadData(at url: URL, completionHandler: @escaping ((Data?, Error?) -> Void)) {
         assert(isUnderRoot(url), "URL (\(url)) is outside root tree (\(self.rootUrl)).")
-        
-        // This function is called by IconItem to fetch thumbnail data.
-        
+
         // Task Duplicate Check
         downloadTasksLock.lock()
         if downloadTasks[url] != nil {
-            // Duplicated
             downloadTasksLock.unlock()
             Logger.filesystem.debug("SftpFileSystem loadData: Download for \(url.lastPathComponent, privacy: .public) is already queued. Skipping.")
-            // Do not call completionHandler, as the original request will handle it.
             return
         }
         downloadTasksLock.unlock()
-        
-        // new request
+
         let opCount = thumbnailQueue.operationCount
         Logger.filesystem.debug(">>> QUEUEING operation for \(url.lastPathComponent, privacy: .public). Current queue size: \(opCount, privacy: .public)")
-        
+
         let operation = BlockOperation()
-        
+
         operation.addExecutionBlock { [weak self, weak operation] in
             Logger.filesystem.debug(">>> STARTING operation for \(url.lastPathComponent, privacy: .public).")
-            // Check if self or operation are nil, or if operation was cancelled before starting
+
             guard let self = self, let strongOperation = operation, !strongOperation.isCancelled else {
                 Logger.filesystem.debug("SftpFileSystem loadData: Operation was nil or cancelled before starting for \(url.lastPathComponent, privacy: .public).")
                 DispatchQueue.main.async { completionHandler(nil, nil) }
                 return
             }
-            Logger.filesystem.debug("SftpFileSystem loadData: <<< Operation STARTING for \(url.lastPathComponent, privacy: .public) >>>")
-            
-            // 1. Acquire a session from the pool
-            let session = self.acquireThumbnailSession()
-            var sessionIsDead = false
-            
-            var operationError: Error?
-            var readSuccess = false
-            let memoryStream = OutputStream.toMemory()
-            
-            defer {
-                memoryStream.close()
-                // 3. Release or replace the session
-                if sessionIsDead {
-                    self.replaceThumbnailSession(session)
-                } else {
-                    self.releaseThumbnailSession(session)
-                }
-                Logger.filesystem.debug("SftpFileSystem loadData: <<< Operation FINISHED for \(url.lastPathComponent, privacy: .public) >>>")
+
+            guard let pool = self.thumbnailPool else {
+                DispatchQueue.main.async { completionHandler(nil, SftpError.connectionFailed) }
+                return
             }
-            
-            // 2. Download
-            memoryStream.open()
-            
-            Logger.filesystem.debug("SftpFileSystem loadData: Download starting for \(url.lastPathComponent, privacy: .public).")
-            if session.sftp.readFile(atPath: url.path, to: memoryStream, progress: { _, _ in
-                // Abort if a cancellation occurs
-                return !strongOperation.isCancelled
-            }) {
-                readSuccess = true
-                Logger.filesystem.debug("SftpFileSystem loadData: Download success for \(url.lastPathComponent, privacy: .public).")
-            } else {
+
+            let semaphore = DispatchSemaphore(value: 0)
+
+            Task {
+                var session: SFTPClient?
+                var resultData: Data?
+                var resultError: Error?
+
+                defer {
+                    // Return session to pool
+                    if let session = session {
+                        Task { await pool.release(session) }
+                    }
+                    semaphore.signal()
+                }
+
+                do {
+                    session = try await pool.acquire()
+
+                    if strongOperation.isCancelled {
+                        Logger.filesystem.debug("SftpFileSystem loadData: Operation cancelled after acquiring session for \(url.lastPathComponent, privacy: .public).")
+                        return
+                    }
+
+                    Logger.filesystem.debug("SftpFileSystem loadData: Download starting for \(url.lastPathComponent, privacy: .public).")
+
+                    let buffer = try await session!.withFile(filePath: url.path, flags: .read) { file in
+                        try await file.readAll()
+                    }
+
+                    if strongOperation.isCancelled {
+                        Logger.filesystem.debug("SftpFileSystem loadData: Operation cancelled after download for \(url.lastPathComponent, privacy: .public).")
+                        return
+                    }
+
+                    resultData = Data(buffer: buffer)
+                    Logger.filesystem.debug("SftpFileSystem loadData: Download complete. \(resultData?.count ?? 0, privacy: .public) bytes for \(url.lastPathComponent, privacy: .public).")
+
+                } catch {
+                    if !strongOperation.isCancelled {
+                        resultError = error
+                        Logger.filesystem.error("SftpFileSystem loadData: Download failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    }
+                }
+
                 if !strongOperation.isCancelled {
-                    sessionIsDead = true // Download failure, mark the session as potentially dead
-                    operationError = session.sftp.lastError ?? SftpError.downloadingFileFailed(at: url)
-                    Logger.filesystem.debug("""
-                        SftpFileSystem loadData: Download failed for \(url.lastPathComponent, privacy: .public):
-                            \(operationError?.localizedDescription ?? "Unknown SFTP error", privacy: .public)
-                        """)
+                    DispatchQueue.main.async {
+                        completionHandler(resultData, resultError)
+                    }
                 } else {
-                    Logger.filesystem.debug("SftpFileSystem loadData: Download cancelled in progress for \(url.lastPathComponent, privacy: .public).")
+                    DispatchQueue.main.async {
+                        completionHandler(nil, nil)
+                    }
                 }
             }
-            
-            // Final health check
-            if !session.isConnected || !session.sftp.isConnected {
-                Logger.filesystem.debug("Session found disconnected after operation for \(url.lastPathComponent, privacy: .public).")
-                sessionIsDead = true
-            }
-            
-            // Completion Handler
-            
-            // Cancelled
-            if strongOperation.isCancelled {
-                Logger.filesystem.debug("SftpFileSystem loadData: Operation finished but was cancelled for \(url.lastPathComponent, privacy: .public). No callback.")
-                DispatchQueue.main.async { completionHandler(nil, nil) }
-                return
-            }
-            
-            // Failure
-            guard readSuccess, let data = memoryStream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data else {
-                Logger.filesystem.debug("SftpFileSystem loadData: Failed to get data for \(url.lastPathComponent, privacy: .public).")
-                let error = operationError ?? SftpError.downloadingFileFailed(at: url)
-                DispatchQueue.main.async { completionHandler(nil, error) }
-                return
-            }
-            
-            // Success
-            Logger.filesystem.debug("""
-                SftpFileSystem loadData: Download complete.
-                    Returning \(data.count, privacy: .public) bytes for \(url.lastPathComponent, privacy: .public).
-                """)
-            DispatchQueue.main.async { completionHandler(data, nil) }
+
+            semaphore.wait()
+            Logger.filesystem.debug("SftpFileSystem loadData: <<< Operation FINISHED for \(url.lastPathComponent, privacy: .public) >>>")
         }
-        
+
         operation.completionBlock = { [weak self] in
             self?.downloadTasksLock.lock()
             self?.downloadTasks.removeValue(forKey: url)
             Logger.filesystem.debug("SftpFileSystem: Removed task for \(url.lastPathComponent, privacy: .public) from tracking. Remaining: \(self?.downloadTasks.count ?? 0, privacy: .public)")
             self?.downloadTasksLock.unlock()
         }
-        
+
         // Add the operation to the tracking dictionary before queueing it.
         downloadTasksLock.lock()
         downloadTasks[url] = operation
         downloadTasksLock.unlock()
-        
+
         thumbnailQueue.addOperation(operation)
     }
-    
-    ///Cancels any queued or ongoing thumbnail download for the specified URL.
+
+    /// Cancels any queued or ongoing thumbnail download for the specified URL.
     public func cancelLoad(for url: URL) {
         downloadTasksLock.lock()
         defer { downloadTasksLock.unlock() }
-        
+
         if let operation = downloadTasks[url] {
             if !operation.isFinished && !operation.isCancelled {
                 operation.cancel()
@@ -647,73 +794,31 @@ class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
 }
 
 
-// MARK: - FileSystem
+// MARK: - FileItem Extension for Citadel
 
 extension FileItem {
-    
-    fileprivate convenience init?(sftpFile: NMSFTPFile, parentUrl: URL, user: String) {
-        guard var name = sftpFile.filename else { return nil }
+
+    fileprivate convenience init?(sftpComponent: SFTPPathComponent, parentUrl: URL) {
+        var name = sftpComponent.filename
+        guard name != "." && name != ".." else { return nil }
         if name.hasSuffix("/") { name = String(name.dropLast()) }
-        
-        let url = parentUrl.appendingPathComponent(name, isDirectory: sftpFile.isDirectory)
-        
-        var flags: Flags = []
-        if sftpFile.isWritable(by: user) { flags.insert(.isWritable) }
-        if sftpFile.isReadable(by: user) { flags.insert(.isReadable) }
-        if sftpFile.isDirectory { flags.insert(.isDirectory) }
+
+        let attrs = sftpComponent.attributes
+        let isDir = attrs.permissions.map { $0 & 0o40000 != 0 } ?? false
+
+        let url = parentUrl.appendingPathComponent(name, isDirectory: isDir)
+
+        var flags: Flags = [.isReadable, .isWritable] // Assume readable/writable
+        if isDir { flags.insert(.isDirectory) }
         if name.hasPrefix(".") { flags.insert(.isHidden) }
-        
+
         let fileType = flags.contains(.isDirectory) ? UTType.folder : UTType(filenameExtension: url.pathExtension) ?? .data
         let icon = NSWorkspace.shared.icon(for: fileType)
-        
-        let fileSize = sftpFile.fileSize?.int64Value ?? 0
-        
-        let modate = sftpFile.modificationDate
-        
+
+        let fileSize = Int64(attrs.size ?? 0)
+
+        let modate: Date? = attrs.accessModificationTime?.modificationTime
+
         self.init(url: url, name: name, icon: icon, flags: flags, fileSize: fileSize, modate: modate)
     }
-    
-}
-
-
-// MARK: - NMSFTPFile
-
-extension NMSFTPFile {
-    
-    fileprivate func isReadable(by user: String) -> Bool {
-        return true
-    }
-    
-    fileprivate func isWritable(by user: String) -> Bool {
-        return true
-    }
-    
-}
-
-
-// MARK: - NMSSHSession
-
-extension NMSSHChannel {
-    
-    func freeSpace(at path: String) -> Int64? {
-        return nil
-        
-        /*do {
-            let output = try execute("df \(path.replacingOccurrences(of: " ", with: "\\ ")) | tail -1 | awk '{ print $4 }' ")
-            let outputLines = output.components(separatedBy: "\n")
-            guard outputLines.count > 0 else { assertionFailure("Expected non-empty response"); return nil }
-            
-            var space: AnyObject? = nil
-            var error: NSString? = nil
-            let formatter = ByteCountFormatter()
-            guard formatter.getObjectValue(&space, for: outputLines[0], errorDescription: &error) else { assertionFailure("Failed to retrieve free space for path [\(path)], got response: \(output)"); return nil }
-            guard let number = space as? NSNumber else { assertionFailure("Unexepected parsed byte count object type: \(type(of: space))"); return nil }
-            return number.int64Value
-        }
-        catch {
-            Logger.filesystem.error("Failed to retrieve free disk space for path [\(path, privacy: .public)]: \(error, privacy: .public).")
-            return nil
-        }*/
-    }
-    
 }
