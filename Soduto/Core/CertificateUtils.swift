@@ -342,7 +342,8 @@ public class CertificateUtils {
             // Create self-signed certificate using swift-certificates
             let certificate = try createSelfSignedCertificate(
                 commonName: certCommonName,
-                privateKey: rsaPrivateKey
+                privateKey: rsaPrivateKey,
+                expirationInterval: expirationInterval
             )
             
             // Serialize certificate to DER format
@@ -387,10 +388,12 @@ public class CertificateUtils {
     /// - Parameters:
     ///   - commonName: The CN (Common Name) for the certificate subject/issuer
     ///   - privateKey: The RSA private key to sign the certificate with
+    ///   - expirationInterval: How long the certificate should be valid (from now)
     /// - Returns: A signed X.509 certificate
     private class func createSelfSignedCertificate(
         commonName: String,
-        privateKey: _RSA.Signing.PrivateKey
+        privateKey: _RSA.Signing.PrivateKey,
+        expirationInterval: TimeInterval
     ) throws -> Certificate {
         // Create distinguished name: CN=commonName, O=Soduto
         // Order matches the original OpenSSL implementation
@@ -398,12 +401,12 @@ public class CertificateUtils {
             CommonName(commonName)
             OrganizationName("Soduto")
         }
-        
+
         let now = Date()
         // Valid from 1 year ago (matches original OpenSSL behavior)
         let notValidBefore = now.addingTimeInterval(-365 * 24 * 60 * 60)
-        // Valid for 10 years from now (matches original OpenSSL behavior)
-        let notValidAfter = now.addingTimeInterval(10 * 365 * 24 * 60 * 60)
+        // Valid for the specified expiration interval from now
+        let notValidAfter = now.addingTimeInterval(expirationInterval)
         
         // Create self-signed certificate (issuer == subject)
         let certificate = try Certificate(
