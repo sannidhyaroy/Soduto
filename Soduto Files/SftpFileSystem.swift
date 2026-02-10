@@ -132,7 +132,7 @@ private actor SftpSessionPool {
         }
     }
     
-    private func addSession(_ session: SFTPClient) {
+    private func addSession(_ session: SFTPClient) async {
         if !waiters.isEmpty {
             let waiter = waiters.removeFirst()
             waiter.resume(returning: session)
@@ -307,10 +307,10 @@ class SftpFileSystem: NSObject, FileSystem {
                         }
                     }
                     // Free space not available through Citadel SFTP
-                    DispatchQueue.main.async { completionHandler(fileItems, nil, nil) }
+                    await MainActor.run { completionHandler(fileItems, nil, nil) }
                 } catch {
                     Logger.filesystem.error("Failed to list directory \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                    DispatchQueue.main.async { completionHandler(nil, nil, error) }
+                    await MainActor.run { completionHandler(nil, nil, error) }
                 }
             }
         }
@@ -750,13 +750,11 @@ class SftpFileSystem: NSObject, FileSystem {
                 }
                 
                 if !strongOperation.isCancelled {
-                    DispatchQueue.main.async {
-                        completionHandler(resultData, resultError)
-                    }
+                    let data = resultData
+                    let error = resultError
+                    await MainActor.run { completionHandler(data, error) }
                 } else {
-                    DispatchQueue.main.async {
-                        completionHandler(nil, nil)
-                    }
+                    await MainActor.run { completionHandler(nil, nil) }
                 }
             }
             
