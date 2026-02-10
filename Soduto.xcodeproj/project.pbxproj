@@ -52,9 +52,6 @@
 		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareExtensionController.swift */; };
 		761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		76B580582930EE1B003453FD /* libcrypto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580552930EE1B003453FD /* libcrypto.a */; };
-		76B580592930EE1B003453FD /* libssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580562930EE1B003453FD /* libssl.a */; };
-		76B5805A2930EE1B003453FD /* libssh2.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580572930EE1B003453FD /* libssh2.a */; };
 		840538201ED62282003798AA /* WelcomeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8405381F1ED62282003798AA /* WelcomeWindowController.swift */; };
 		840FC2F91DEF6AF400AC4824 /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */; };
 		84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */; };
@@ -390,11 +387,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				76B580582930EE1B003453FD /* libcrypto.a in Frameworks */,
-				76B580592930EE1B003453FD /* libssl.a in Frameworks */,
 				313416CA2F381D44007E7640 /* X509 in Frameworks */,
 				31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */,
-				76B5805A2930EE1B003453FD /* libssh2.a in Frameworks */,
 				843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
