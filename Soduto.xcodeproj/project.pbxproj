@@ -46,8 +46,7 @@
 		319CBA2A2939F07D00DAE301 /* AirDrop.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA292939F07D00DAE301 /* AirDrop.png */; };
 		31A0A3C02F2C118F00CDA243 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */; };
 		31A0A3C52F2C7C6100CDA243 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */; };
-		31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31B189B529ED731B001C8735 /* Sparkle.framework */; };
-		31B189B829ED73A1001C8735 /* Sparkle.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 31B189B529ED731B001C8735 /* Sparkle.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		31DB2F072F3BE86300654096 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F062F3BE86300654096 /* Sparkle */; };
 		31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */; };
 		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareExtensionController.swift */; };
@@ -218,7 +217,6 @@
 			dstSubfolderSpec = 10;
 			files = (
 				761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */,
-				31B189B829ED73A1001C8735 /* Sparkle.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -256,7 +254,6 @@
 		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
 		31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetView.swift; sourceTree = "<group>"; };
-		31B189B529ED731B001C8735 /* Sparkle.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Sparkle.framework; path = Carthage/Build/Mac/Sparkle.framework; sourceTree = "<group>"; };
 		31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		31F3A14F293B5EA300550088 /* Soduto Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Soduto Share.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		31F3A153293B5EA300550088 /* ShareExtensionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionController.swift; sourceTree = "<group>"; };
@@ -382,7 +379,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				313416CA2F381D44007E7640 /* X509 in Frameworks */,
-				31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */,
+				31DB2F072F3BE86300654096 /* Sparkle in Frameworks */,
 				843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -757,7 +754,6 @@
 		849962261D574530002B893A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				31B189B529ED731B001C8735 /* Sparkle.framework */,
 				76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */,
 				843E17881E26B56A001D0444 /* ServiceManagement.framework */,
 			);
@@ -944,6 +940,7 @@
 			packageReferences = (
 				313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */,
 				313416CB2F3856C0007E7640 /* XCRemoteSwiftPackageReference "Citadel" */,
+				31DB2F052F3BE86300654096 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = 843301611D2D8CB8008934BB /* Products */;
 			projectDirPath = "";
@@ -1738,6 +1735,14 @@
 				minimumVersion = 0.12.0;
 			};
 		};
+		31DB2F052F3BE86300654096 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.8.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1750,6 +1755,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 313416CB2F3856C0007E7640 /* XCRemoteSwiftPackageReference "Citadel" */;
 			productName = Citadel;
+		};
+		31DB2F062F3BE86300654096 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 31DB2F052F3BE86300654096 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
