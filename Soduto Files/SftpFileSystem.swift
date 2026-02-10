@@ -305,6 +305,12 @@ class SftpFileSystem: NSObject, FileSystem {
                         name.components.compactMap { component in
                             FileItem(sftpComponent: component, parentUrl: url)
                         }
+                    }.sorted { lhs, rhs in
+                        // Directories first, then sort by name (case-insensitive)
+                        if lhs.isDirectory != rhs.isDirectory {
+                            return lhs.isDirectory
+                        }
+                        return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
                     }
                     // Free space not available through Citadel SFTP
                     await MainActor.run { completionHandler(fileItems, nil, nil) }
