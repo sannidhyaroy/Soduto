@@ -258,6 +258,42 @@ If `Soduto Share` doesn't appear in the share menu, only when multiple files are
      ```
   3. Restart your Mac, then open Soduto. The extension should re-register automatically with the correct rules.
 
+### 2. SSL connection errors after re-pairing (error -9829)
+
+If you see errors like this in Console.app after re-pairing your device:
+```
+socketDidDisconnect(<<GCDAsyncSocket: 0x...>> withError:<Error Domain=kCFStreamErrorDomainSSL Code=-9829 "(null)" UserInfo={NSLocalizedRecoverySuggestion=Error code definition can be found in Apple's SecureTransport.h}>)
+```
+
+This is error code -9829 (`errSSLPeerCertUnknown`), which means the remote device is rejecting Soduto's certificate as "unknown."
+
+**When does this happen?**
+
+This occurs when Soduto's keychain entries are cleared (manually or by reinstalling) but the app's preferences remain. Soduto generates a new SSL certificate with the same device ID but different cryptographic content. The remote KDE Connect app has cached the old certificate and rejects the new one as a mismatch.
+
+**Symptoms:**
+- Device pairing appears to succeed
+- Main connection works initially
+- Secondary connections fail (file transfers, notification icons, etc.)
+- The paired device may disconnect and fail to reconnect after restarting Soduto
+
+**Why does this happen?**
+
+Soduto and KDE Connect use SSL/TLS with self-signed certificates to secure communications. Each device stores the other's certificate during pairing. KDE Connect on Android caches certificate data aggressively, and this cache persists even after unpairing. When Soduto presents a new certificate (same device ID, different key), KDE Connect's cached data causes validation to fail.
+
+**Solution:**
+
+1. Unpair the device from both Soduto (on Mac) and KDE Connect (on Android/Linux)
+2. On Android: Go to `Settings → Apps → KDE Connect → Storage → Clear Cache`
+   - Note: Clear **cache** only, not app data (clearing app data will remove all your KDE Connect settings)
+3. On Mac (optional): Remove Soduto's preferences to get a fresh device ID:
+   ```bash
+   defaults delete com.soduto.Soduto
+   ```
+4. Re-pair the devices
+
+After clearing the cache, the new certificate will be accepted and cached correctly.
+
 ---
 ## Get in touch
 To ask a question, offer suggestions or share an idea, please use the [discussions tab](https://github.com/sannidhyaroy/soduto/discussions) of this repository.
