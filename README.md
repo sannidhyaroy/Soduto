@@ -75,9 +75,6 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 >  ```
 >  *** Skipped downloading CocoaAsyncSocket binary due to the error:
 >      "Bad credentials"
->  *** Downloading binary-only framework Sparkle at "https://sparkle-project.org/Carthage/Sparkle.json"
->  *** Skipped downloading CocoaAsyncSocket binary due to the error:
->      "Bad credentials"
 >  ```
 >
 >  This is likely due to GitHub Rate Limits. You can create a [GitHub Token](https://github.com/settings/tokens) and export it as an environment variable (format: `ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`):
@@ -86,7 +83,7 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 >  ```
 
 * Open project `Soduto.xcodeproj` with Xcode (select the Soduto Application in Xcode Project Navigator).
-  - Swift Package dependencies (Citadel, swift-nio, swift-certificates, etc.) will resolve automatically on first build.
+  - Swift Package dependencies (Sparkle, Citadel, swift-certificates, etc.) will resolve automatically on first build.
 * Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `Signing` section, ensure your appropriate `Team` is selected.
 * Make sure you have the same `App Group key` for `Soduto Share` and also verify that the same `Team` is selected for each target.
 * Build target `Soduto`
