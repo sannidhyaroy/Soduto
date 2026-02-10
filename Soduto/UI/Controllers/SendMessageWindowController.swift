@@ -10,6 +10,7 @@ import Foundation
 import Cocoa
 import Contacts
 import os
+import UniformTypeIdentifiers
 
 class SendMessageWindowController: NSWindowController {
     
@@ -428,14 +429,14 @@ extension ContactPhoneNumber: NSPasteboardWriting {
     func writableTypes(for pasteboard: NSPasteboard) -> [NSPasteboard.PasteboardType] {
         return [
             ContactPhoneNumber.pboardType,
-            NSPasteboard.PasteboardType(rawValue: kUTTypeText as String) ]
+            NSPasteboard.PasteboardType(UTType.text.identifier) ]
     }
     
     func pasteboardPropertyList(forType type: NSPasteboard.PasteboardType) -> Any? {
         if type == ContactPhoneNumber.pboardType {
             return self.canonicalString
         }
-        else if type.rawValue == kUTTypeText as String {
+        else if type.rawValue == UTType.text.identifier {
             return self.canonicalString
         }
         else {

@@ -9,6 +9,7 @@
 import Foundation
 import Cocoa
 import os
+import UniformTypeIdentifiers
 import UserNotifications
 
 /// Service providing capability to send end receive files, links, etc
@@ -95,10 +96,10 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     public static let serviceId: Service.Id = "com.soduto.services.share"
     
     private static let dragTypes: [NSPasteboard.PasteboardType] = [
-        NSPasteboard.PasteboardType(rawValue: kUTTypeFileURL as String),
-        NSPasteboard.PasteboardType(rawValue: kUTTypeURL as String),
-        NSPasteboard.PasteboardType(rawValue: kUTTypeUTF8PlainText as String),
-        NSPasteboard.PasteboardType(rawValue: kUTTypeText as String)]
+        NSPasteboard.PasteboardType(UTType.fileURL.identifier),
+        NSPasteboard.PasteboardType(UTType.url.identifier),
+        NSPasteboard.PasteboardType(UTType.utf8PlainText.identifier),
+        NSPasteboard.PasteboardType(UTType.text.identifier)]
     
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.sharePacketType ])
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.sharePacketType ])
@@ -314,21 +315,21 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
             guard let type = item.availableType(from: types) else { continue }
             switch type.rawValue {
                 
-            case String(kUTTypeFileURL):
+            case UTType.fileURL.identifier:
                 guard let urlString = item.string(forType: type) else { break }
                 guard let url = URL(string: urlString) else { break }
                 guard let dataPacket = self.dataPacket(forFileUrl: url) else { break }
                 filePackets.append(dataPacket)
                 break
                 
-            case String(kUTTypeURL):
+            case UTType.url.identifier:
                 guard let urlString = item.string(forType: type) else { break }
                 guard let url = URL(string: urlString) else { break }
                 let dataPacket = self.dataPacket(forUrl: url)
                 urlPackets.append(dataPacket)
                 break
                 
-            case type.rawValue where UTTypeConformsTo(type.rawValue as CFString, kUTTypeText):
+            case type.rawValue where UTType(type.rawValue)?.conforms(to: .text) == true:
                 guard let text = item.string(forType: type) else { break }
                 if let url = URL(string: text), url.scheme != nil {
                     let dataPacket = self.dataPacket(forUrl: url)

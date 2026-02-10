@@ -257,35 +257,24 @@ public class CertificateUtils {
     }
     
     private class func generateRSAKeyPair(sizeInBits: Int, permanent: Bool, label: String) throws -> (SecKey, SecKey) {
-#if os(iOS)
-        let keyAttrs: [String: AnyObject] = [
-            kSecAttrIsPermanent as String: permanent as AnyObject,
-            kSecAttrLabel as String: label as AnyObject
-        ]
-        let pairAttrs: [String: AnyObject] = [
+        let attributes: [String: Any] = [
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrKeySizeInBits as String: sizeInBits as AnyObject,
-            kSecAttrLabel as String: label as AnyObject,
-            kSecPublicKeyAttrs as String: keyAttrs as AnyObject,
-            kSecPrivateKeyAttrs as String: keyAttrs as AnyObject
+            kSecAttrKeySizeInBits as String: sizeInBits,
+            kSecAttrLabel as String: label,
+            kSecAttrIsPermanent as String: permanent
         ]
-#else
-        let pairAttrs: [String: AnyObject] = [
-            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrKeySizeInBits as String: sizeInBits as AnyObject,
-            kSecAttrLabel as String: label as AnyObject,
-            kSecAttrIsPermanent as String: permanent as AnyObject
-        ]
-#endif
-        var publicKey: SecKey? = nil
-        var privateKey: SecKey? = nil
-        let status = SecKeyGeneratePair(pairAttrs as CFDictionary, &publicKey, &privateKey)
-        if status == noErr {
-            return (publicKey!, privateKey!)
-        }
-        else {
+        
+        var error: Unmanaged<CFError>?
+        guard let privateKey = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
+            let status = error.map { Int32(CFErrorGetCode($0.takeRetainedValue())) } ?? errSecInternalError
             throw CertificateError.generateRSAKeyPairFailure(status: status)
         }
+        
+        guard let publicKey = SecKeyCopyPublicKey(privateKey) else {
+            throw CertificateError.generateRSAKeyPairFailure(status: errSecInternalError)
+        }
+        
+        return (publicKey, privateKey)
     }
     
     public class func createIdentity(label: String, certCommonName: String, expirationInterval: TimeInterval) throws -> SecIdentity? {

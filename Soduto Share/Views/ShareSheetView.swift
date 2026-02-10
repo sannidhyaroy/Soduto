@@ -226,7 +226,7 @@ struct DeviceBubble: View {
         .onHover { hovering in
             isHovering = hovering
         }
-        .onChange(of: status) { newStatus in
+        .onChange(of: status) { oldStatus, newStatus in
             switch newStatus {
             case .transferring:
                 showFlashOverlay = false

@@ -9,6 +9,7 @@
 import Foundation
 import os
 import Cocoa
+import UniformTypeIdentifiers
 
 class SftpFileSystem: NSObject, FileSystem, NMSSHSessionDelegate {
     private let thumbnailConcurrentOprationCount = 16
@@ -662,8 +663,8 @@ extension FileItem {
         if sftpFile.isDirectory { flags.insert(.isDirectory) }
         if name.hasPrefix(".") { flags.insert(.isHidden) }
         
-        let fileType: String = flags.contains(.isDirectory) ? String(kUTTypeDirectory) : url.pathExtension
-        let icon = flags.contains(.isDirectory) ? NSWorkspace.shared.icon(forFileType: kUTTypeFolder as String) : NSWorkspace.shared.icon(forFileType: fileType)
+        let fileType = flags.contains(.isDirectory) ? UTType.folder : UTType(filenameExtension: url.pathExtension) ?? .data
+        let icon = NSWorkspace.shared.icon(for: fileType)
         
         let fileSize = sftpFile.fileSize?.int64Value ?? 0
         

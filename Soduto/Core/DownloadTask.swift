@@ -200,7 +200,8 @@ public class DownloadTask: NSObject, GCDAsyncSocketDelegate {
     }
     
     private func shoulTrustPeer(_ trust: SecTrust) -> Bool {
-        guard let peerCertificate = SecTrustGetCertificateAtIndex(trust, 0) else { return false }
+        guard let certificateChain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
+              let peerCertificate = certificateChain.first else { return false }
         return self.connection.shouldTrustPeerCertificate(peerCertificate)
     }
 }
