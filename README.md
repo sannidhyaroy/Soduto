@@ -44,16 +44,16 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 ---
 ## Building
 
-* Clone this repo and update submodules
+* Clone this repo:
 
   ```bash
-  git clone --recurse-submodules git@github.com:sannidhyaroy/Soduto.git Soduto && cd Soduto
+  git clone git@github.com:sannidhyaroy/Soduto.git Soduto && cd Soduto
   ```
   <details><summary>Clone using HTTPS? 👀</summary>
 
   Run this command, instead of the above one:
     ```bash
-    git clone --recurse-submodules https://github.com/sannidhyaroy/Soduto.git Soduto && cd Soduto
+    git clone https://github.com/sannidhyaroy/Soduto.git Soduto && cd Soduto
     ```
 
   </details> 
@@ -85,13 +85,8 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 >  export GITHUB_ACCESS_TOKEN=<INSERT YOUR TOKEN HERE>
 >  ```
 
-* Compile universal openssl and libssh2 library using [iSSH2](https://github.com/sannidhyaroy/iSSH2):
-
-    ```bash
-    ./build_lib.sh
-    ```
-
-* Open project `Soduto.xcodeproj` with XCode (select the Soduto Application in Xcode Project Navigator).
+* Open project `Soduto.xcodeproj` with Xcode (select the Soduto Application in Xcode Project Navigator).
+  - Swift Package dependencies (Citadel, swift-nio, swift-certificates, etc.) will resolve automatically on first build.
 * Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `Signing` section, ensure your appropriate `Team` is selected.
 * Make sure you have the same `App Group key` for `Soduto Share` and also verify that the same `Team` is selected for each target.
 * Build target `Soduto`
