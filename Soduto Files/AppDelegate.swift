@@ -51,14 +51,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
         return NSApp.keyWindow?.windowController as? BrowserWindowController
     }
     
-    override init() {
-#if DEBUG
-        NMSSHLogger.shared().logLevel = .verbose
-#else
-        NMSSHLogger.shared().logLevel = .error
-#endif
-    }
-    
     
     // MARK: NSApplicationDelegate
     
@@ -202,13 +194,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, BrowserWindowControllerDeleg
             let name = url.fragment ?? host
             let port: UInt16? = (url.port != nil) ? UInt16(url.port!) : nil
             let path = url.path
-            guard let fs = try? SftpFileSystem(name: name, host: host, port: port, user: user, password: password, path: path) else {
-                var urlWithouPassword = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                urlWithouPassword?.password = nil
-                Logger.general.info("Failed to connect to SFTP at URL [\(urlWithouPassword?.string ?? "", privacy: .public)]");
-                return
+            
+            // Create SFTP file system asynchronously
+            Task { @MainActor in
+                do {
+                    let fs = try await SftpFileSystem(name: name, host: host, port: port, user: user, password: password, path: path)
+                    self.newBrowserWindow(with: fs)
+                } catch {
+                    var urlWithoutPassword = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                    urlWithoutPassword?.password = nil
+                    Logger.general.error("Failed to connect to SFTP at URL [\(urlWithoutPassword?.string ?? "", privacy: .public)]: \(error.localizedDescription, privacy: .public)")
+                }
             }
-            newBrowserWindow(with: fs)
         default:
             Logger.general.info("Unsupported URL scheme: \(scheme, privacy: .public)")
         }

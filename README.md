@@ -44,16 +44,16 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 ---
 ## Building
 
-* Clone this repo and update submodules
+* Clone this repo:
 
   ```bash
-  git clone --recurse-submodules git@github.com:sannidhyaroy/Soduto.git Soduto && cd Soduto
+  git clone git@github.com:sannidhyaroy/Soduto.git Soduto && cd Soduto
   ```
   <details><summary>Clone using HTTPS? 👀</summary>
 
   Run this command, instead of the above one:
     ```bash
-    git clone --recurse-submodules https://github.com/sannidhyaroy/Soduto.git Soduto && cd Soduto
+    git clone https://github.com/sannidhyaroy/Soduto.git Soduto && cd Soduto
     ```
 
   </details> 
@@ -78,38 +78,15 @@ Do note that currently there's no Homebrew formulae for my forked version and th
 >  *** Downloading binary-only framework Sparkle at "https://sparkle-project.org/Carthage/Sparkle.json"
 >  *** Skipped downloading CocoaAsyncSocket binary due to the error:
 >      "Bad credentials"
->  *** Skipped downloading NMSSH binary due to the error:
->      "Bad credentials"
->  *** Skipped downloading Reachability.swift binary due to the error:
->      "Bad credentials"
 >  ```
 >
 >  This is likely due to GitHub Rate Limits. You can create a [GitHub Token](https://github.com/settings/tokens) and export it as an environment variable (format: `ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`):
 >  ```bash
 >  export GITHUB_ACCESS_TOKEN=<INSERT YOUR TOKEN HERE>
 >  ```
-        
 
->  [!TIP]
->  If you get an error in Xcode that says:
->
->  `While building for macOS, no library for this platform was found in '/path/to/NMSSH.xcframework'.`
->
->  This means the NMSSH framework was built for iOS instead of macOS. To fix this, temporarily rename the Examples workspace and rebuild NMSSH:
->
->  ```bash
->  mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak
->  XCODE_XCCONFIG_FILE="./carthage.xcconfig" carthage build NMSSH --platform macOS --use-xcframeworks --no-use-binaries
->  mv Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace.bak Carthage/Checkouts/NMSSH/Examples/Examples.xcworkspace
->  ```
-
-* Compile universal openssl and libssh2 library using [iSSH2](https://github.com/sannidhyaroy/iSSH2):
-
-    ```bash
-    ./build_lib.sh
-    ```
-
-* Open project `Soduto.xcodeproj` with XCode (select the Soduto Application in Xcode Project Navigator).
+* Open project `Soduto.xcodeproj` with Xcode (select the Soduto Application in Xcode Project Navigator).
+  - Swift Package dependencies (Citadel, swift-nio, swift-certificates, etc.) will resolve automatically on first build.
 * Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `Signing` section, ensure your appropriate `Team` is selected.
 * Make sure you have the same `App Group key` for `Soduto Share` and also verify that the same `Team` is selected for each target.
 * Build target `Soduto`
@@ -275,6 +252,42 @@ If `Soduto Share` doesn't appear in the share menu, only when multiple files are
      pluginkit -r "<path shown in the output>"
      ```
   3. Restart your Mac, then open Soduto. The extension should re-register automatically with the correct rules.
+
+### 2. SSL connection errors after re-pairing (error -9829)
+
+If you see errors like this in Console.app after re-pairing your device:
+```
+socketDidDisconnect(<<GCDAsyncSocket: 0x...>> withError:<Error Domain=kCFStreamErrorDomainSSL Code=-9829 "(null)" UserInfo={NSLocalizedRecoverySuggestion=Error code definition can be found in Apple's SecureTransport.h}>)
+```
+
+This is error code -9829 (`errSSLPeerCertUnknown`), which means the remote device is rejecting Soduto's certificate as "unknown."
+
+**When does this happen?**
+
+This occurs when Soduto's keychain entries are cleared (manually or by reinstalling) but the app's preferences remain. Soduto generates a new SSL certificate with the same device ID but different cryptographic content. The remote KDE Connect app has cached the old certificate and rejects the new one as a mismatch.
+
+**Symptoms:**
+- Device pairing appears to succeed
+- Main connection works initially
+- Secondary connections fail (file transfers, notification icons, etc.)
+- The paired device may disconnect and fail to reconnect after restarting Soduto
+
+**Why does this happen?**
+
+Soduto and KDE Connect use SSL/TLS with self-signed certificates to secure communications. Each device stores the other's certificate during pairing. KDE Connect on Android caches certificate data aggressively, and this cache persists even after unpairing. When Soduto presents a new certificate (same device ID, different key), KDE Connect's cached data causes validation to fail.
+
+**Solution:**
+
+1. Unpair the device from both Soduto (on Mac) and KDE Connect (on Android/Linux)
+2. On Android: Go to `Settings → Apps → KDE Connect → Storage → Clear Cache`
+   - Note: Clear **cache** only, not app data (clearing app data will remove all your KDE Connect settings)
+3. On Mac (optional): Remove Soduto's preferences to get a fresh device ID:
+   ```bash
+   defaults delete com.soduto.Soduto
+   ```
+4. Re-pair the devices
+
+After clearing the cache, the new certificate will be accepted and cached correctly.
 
 ---
 ## Get in touch

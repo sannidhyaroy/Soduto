@@ -33,6 +33,8 @@
 		312674C92F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312674C82F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift */; };
 		312674CD2F2CE5C700D68B2C /* DeviceScrubberItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */; };
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
+		313416CA2F381D44007E7640 /* X509 in Frameworks */ = {isa = PBXBuildFile; productRef = 313416C92F381D44007E7640 /* X509 */; };
+		313416CD2F3856C0007E7640 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 313416CC2F3856C0007E7640 /* Citadel */; };
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
@@ -49,12 +51,7 @@
 		31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */; };
 		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareExtensionController.swift */; };
-		761FBEF3293211C50034FD44 /* NMSSH.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		761FBEF5293212580034FD44 /* CocoaAsyncSocket.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		76A5B0D029320D230061BF0B /* NMSSH.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B5805D2930EF31003453FD /* NMSSH.xcframework */; settings = {ATTRIBUTES = (Required, ); }; };
-		76B580582930EE1B003453FD /* libcrypto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580552930EE1B003453FD /* libcrypto.a */; };
-		76B580592930EE1B003453FD /* libssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580562930EE1B003453FD /* libssl.a */; };
-		76B5805A2930EE1B003453FD /* libssh2.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76B580572930EE1B003453FD /* libssh2.a */; };
 		840538201ED62282003798AA /* WelcomeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8405381F1ED62282003798AA /* WelcomeWindowController.swift */; };
 		840FC2F91DEF6AF400AC4824 /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */; };
 		84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */; };
@@ -116,14 +113,12 @@
 		849927801E6C5CA600AF8CF4 /* IconItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8499277E1E6C5CA600AF8CF4 /* IconItem.swift */; };
 		849927811E6C5CA600AF8CF4 /* IconItem.xib in Resources */ = {isa = PBXBuildFile; fileRef = 8499277F1E6C5CA600AF8CF4 /* IconItem.xib */; };
 		849927831E6C5CD600AF8CF4 /* FileItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 849927821E6C5CD600AF8CF4 /* FileItem.swift */; };
-		849961B91D5726B0002B893A /* MYAnonymousIdentity.m in Sources */ = {isa = PBXBuildFile; fileRef = 849961B61D5726B0002B893A /* MYAnonymousIdentity.m */; };
 		849961C11D57287F002B893A /* CollectionUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 849961BC1D57287F002B893A /* CollectionUtils.m */; };
 		849961C31D57287F002B893A /* Test.m in Sources */ = {isa = PBXBuildFile; fileRef = 849961C01D57287F002B893A /* Test.m */; };
 		849961C61D5728B2002B893A /* ExceptionUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 849961C51D5728B2002B893A /* ExceptionUtils.m */; };
 		8499620E1D5728EE002B893A /* Test_Assertions.m in Sources */ = {isa = PBXBuildFile; fileRef = 849961F31D5728EE002B893A /* Test_Assertions.m */; };
 		849962131D572B1F002B893A /* Logging.m in Sources */ = {isa = PBXBuildFile; fileRef = 849962121D572B1F002B893A /* Logging.m */; };
 		84A16BE01E9EBADD00DE2C0B /* Sequence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84A16BDF1E9EBADD00DE2C0B /* Sequence.swift */; };
-		84B933EF1E281AB40071DEFF /* CertificateUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 84B933EE1E281AB40071DEFF /* CertificateUtils.m */; };
 		84C545E01EABC14E005A8107 /* SftpFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */; };
 		84C613E31DECBF6C00CE7F7A /* UploadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C613E21DECBF6B00CE7F7A /* UploadTask.swift */; };
 		84D071681EB91F5D004D383A /* Soduto Files.app in Embed Helper Executables */ = {isa = PBXBuildFile; fileRef = 845BC70A1E69F00E00DC9B81 /* Soduto Files.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -173,17 +168,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		023BD5A2204AEE270045B5F9 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				761FBEF3293211C50034FD44 /* NMSSH.xcframework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		31F3A15D293B5EA300550088 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -278,11 +262,7 @@
 		31F3A153293B5EA300550088 /* ShareExtensionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionController.swift; sourceTree = "<group>"; };
 		31F3A158293B5EA300550088 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		31F3A159293B5EA300550088 /* Soduto_Share.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto_Share.entitlements; sourceTree = "<group>"; };
-		76B580552930EE1B003453FD /* libcrypto.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libcrypto.a; path = Libraries/lib/libcrypto.a; sourceTree = "<group>"; };
-		76B580562930EE1B003453FD /* libssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssl.a; path = Libraries/lib/libssl.a; sourceTree = "<group>"; };
-		76B580572930EE1B003453FD /* libssh2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssh2.a; path = Libraries/lib/libssh2.a; sourceTree = "<group>"; };
 		76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CocoaAsyncSocket.xcframework; path = Carthage/Build/CocoaAsyncSocket.xcframework; sourceTree = "<group>"; };
-		76B5805D2930EF31003453FD /* NMSSH.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = NMSSH.xcframework; path = Carthage/Build/NMSSH.xcframework; sourceTree = "<group>"; };
 		8405381F1ED62282003798AA /* WelcomeWindowController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WelcomeWindowController.swift; sourceTree = "<group>"; };
 		840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ClipboardService.swift; sourceTree = "<group>"; };
 		841E814C1D809C360096A846 /* Soduto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto.entitlements; sourceTree = "<group>"; };
@@ -355,8 +335,6 @@
 		8499277F1E6C5CA600AF8CF4 /* IconItem.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = IconItem.xib; sourceTree = "<group>"; };
 		849927821E6C5CD600AF8CF4 /* FileItem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileItem.swift; sourceTree = "<group>"; };
 		849961B41D5726B0002B893A /* LICENSE.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = LICENSE.txt; path = MYUtilities/LICENSE.txt; sourceTree = "<group>"; };
-		849961B51D5726B0002B893A /* MYAnonymousIdentity.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = MYAnonymousIdentity.h; path = MYUtilities/MYAnonymousIdentity.h; sourceTree = "<group>"; };
-		849961B61D5726B0002B893A /* MYAnonymousIdentity.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = MYAnonymousIdentity.m; path = MYUtilities/MYAnonymousIdentity.m; sourceTree = "<group>"; };
 		849961BB1D57287F002B893A /* CollectionUtils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CollectionUtils.h; path = MYUtilities/CollectionUtils.h; sourceTree = "<group>"; };
 		849961BC1D57287F002B893A /* CollectionUtils.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = CollectionUtils.m; path = MYUtilities/CollectionUtils.m; sourceTree = "<group>"; };
 		849961BF1D57287F002B893A /* Test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Test.h; path = MYUtilities/Test.h; sourceTree = "<group>"; };
@@ -367,10 +345,7 @@
 		849962111D572B1F002B893A /* Logging.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Logging.h; path = MYUtilities/Logging.h; sourceTree = "<group>"; };
 		849962121D572B1F002B893A /* Logging.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = Logging.m; path = MYUtilities/Logging.m; sourceTree = "<group>"; };
 		84A16BDF1E9EBADD00DE2C0B /* Sequence.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Sequence.swift; sourceTree = "<group>"; };
-		84B933EE1E281AB40071DEFF /* CertificateUtils.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CertificateUtils.m; sourceTree = "<group>"; };
-		84B9340D1E2A56EA0071DEFF /* CertificateUtils.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CertificateUtils.h; sourceTree = "<group>"; };
 		84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SftpFileSystem.swift; sourceTree = "<group>"; };
-		84C545F71EABECDE005A8107 /* Soduto-Files-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Soduto-Files-Bridging-Header.h"; sourceTree = "<group>"; };
 		84C613E21DECBF6B00CE7F7A /* UploadTask.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UploadTask.swift; sourceTree = "<group>"; };
 		84D903A11DC696A600E61DA7 /* CertificateUtils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CertificateUtils.swift; sourceTree = "<group>"; };
 		84FA45CF1DDDCB3D00EF3992 /* Connection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
@@ -406,10 +381,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				76B580582930EE1B003453FD /* libcrypto.a in Frameworks */,
-				76B580592930EE1B003453FD /* libssl.a in Frameworks */,
+				313416CA2F381D44007E7640 /* X509 in Frameworks */,
 				31B189B729ED73A1001C8735 /* Sparkle.framework in Frameworks */,
-				76B5805A2930EE1B003453FD /* libssh2.a in Frameworks */,
 				843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -425,7 +398,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				76A5B0D029320D230061BF0B /* NMSSH.xcframework in Frameworks */,
+				313416CD2F3856C0007E7640 /* Citadel in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -684,7 +657,6 @@
 				8440FD061E6CA6CA00E5BFA9 /* LocalFileSystem.swift */,
 				845BC7101E69F00E00DC9B81 /* MainMenu.xib */,
 				84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */,
-				84C545F71EABECDE005A8107 /* Soduto-Files-Bridging-Header.h */,
 				8438ECE01EBA650A006CBB07 /* Soduto_Files.entitlements */,
 				845847201E75D0ED00EE5A09 /* Utils */,
 			);
@@ -742,8 +714,6 @@
 		8468BDFE1DEB7F5F003B9925 /* Utils */ = {
 			isa = PBXGroup;
 			children = (
-				84B9340D1E2A56EA0071DEFF /* CertificateUtils.h */,
-				84B933EE1E281AB40071DEFF /* CertificateUtils.m */,
 				843E170C1E25851D001D0444 /* IO.h */,
 				843E170D1E25851D001D0444 /* IO.m */,
 				3152C3F22F353AFA005152CB /* Logger+Categories.swift */,
@@ -777,8 +747,6 @@
 				849961C41D5728B2002B893A /* ExceptionUtils.h */,
 				849961C51D5728B2002B893A /* ExceptionUtils.m */,
 				849961B41D5726B0002B893A /* LICENSE.txt */,
-				849961B51D5726B0002B893A /* MYAnonymousIdentity.h */,
-				849961B61D5726B0002B893A /* MYAnonymousIdentity.m */,
 				849961F31D5728EE002B893A /* Test_Assertions.m */,
 				849961BF1D57287F002B893A /* Test.h */,
 				849961C01D57287F002B893A /* Test.m */,
@@ -791,10 +759,6 @@
 			children = (
 				31B189B529ED731B001C8735 /* Sparkle.framework */,
 				76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */,
-				76B5805D2930EF31003453FD /* NMSSH.xcframework */,
-				76B580552930EE1B003453FD /* libcrypto.a */,
-				76B580572930EE1B003453FD /* libssh2.a */,
-				76B580562930EE1B003453FD /* libssl.a */,
 				843E17881E26B56A001D0444 /* ServiceManagement.framework */,
 			);
 			name = Frameworks;
@@ -888,7 +852,6 @@
 				845BC7061E69F00E00DC9B81 /* Sources */,
 				845BC7071E69F00E00DC9B81 /* Frameworks */,
 				845BC7081E69F00E00DC9B81 /* Resources */,
-				023BD5A2204AEE270045B5F9 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -978,6 +941,10 @@
 				Base,
 			);
 			mainGroup = 843301571D2D8CB8008934BB;
+			packageReferences = (
+				313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */,
+				313416CB2F3856C0007E7640 /* XCRemoteSwiftPackageReference "Citadel" */,
+			);
 			productRefGroup = 843301611D2D8CB8008934BB /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -1092,7 +1059,6 @@
 				840FC2F91DEF6AF400AC4824 /* ClipboardService.swift in Sources */,
 				849962131D572B1F002B893A /* Logging.m in Sources */,
 				843107731E3D32A300AE96AB /* SendMessageWindowController.swift in Sources */,
-				849961B91D5726B0002B893A /* MYAnonymousIdentity.m in Sources */,
 				84FA45EA1DDF433400EF3992 /* Service.swift in Sources */,
 				8438A9261E45145F00922155 /* StatusBarApplication.swift in Sources */,
 				847E9D2B1DF5E2640042D3CE /* TelephonyService.swift in Sources */,
@@ -1108,7 +1074,6 @@
 				311BC28D2F2800D400E4A33F /* StableHashing.swift in Sources */,
 				02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */,
 				024F8B191F24FC7700D6E504 /* ServicePreferencesViewController.swift in Sources */,
-				84B933EF1E281AB40071DEFF /* CertificateUtils.m in Sources */,
 				849237A11DE224CF00D95BBA /* FindMyPhoneService.swift in Sources */,
 				84FA45E41DDDDB7F00EF3992 /* InterfaceElementTags.swift in Sources */,
 				849237A31DE4E76E00D95BBA /* UserNotificationManager.swift in Sources */,
@@ -1411,10 +1376,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				HEADER_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/Libraries/include/libssh2",
-					"$(PROJECT_DIR)/Libraries/include",
-				);
+				HEADER_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1468,10 +1430,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				HEADER_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/Libraries/include/libssh2",
-					"$(PROJECT_DIR)/Libraries/include",
-				);
+				HEADER_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
@@ -1504,16 +1463,13 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/Libraries/lib",
-				);
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 3.1.0;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.soduto.Soduto;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Soduto/OpenSSL/openssl/include";
+				SWIFT_INCLUDE_PATHS = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Soduto/Soduto-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
@@ -1545,16 +1501,13 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/Libraries/lib",
-				);
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 3.1.0;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.soduto.Soduto;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Soduto/OpenSSL/openssl/include";
+				SWIFT_INCLUDE_PATHS = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Soduto/Soduto-Bridging-Header.h";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
 				SWIFT_VERSION = 5.0;
@@ -1630,8 +1583,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.soduto.Soduto-Files";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Soduto/OpenSSL/openssl/include";
-				SWIFT_OBJC_BRIDGING_HEADER = "Soduto Files/Soduto-Files-Bridging-Header.h";
+				SWIFT_INCLUDE_PATHS = "";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
 				SWIFT_VERSION = 5.0;
 			};
@@ -1660,8 +1612,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.soduto.Soduto-Files";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Soduto/OpenSSL/openssl/include";
-				SWIFT_OBJC_BRIDGING_HEADER = "Soduto Files/Soduto-Files-Bridging-Header.h";
+				SWIFT_INCLUDE_PATHS = "";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
 				SWIFT_VERSION = 5.0;
 			};
@@ -1769,6 +1720,38 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-certificates.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.17.1;
+			};
+		};
+		313416CB2F3856C0007E7640 /* XCRemoteSwiftPackageReference "Citadel" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/orlandos-nl/Citadel";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.12.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		313416C92F381D44007E7640 /* X509 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */;
+			productName = X509;
+		};
+		313416CC2F3856C0007E7640 /* Citadel */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 313416CB2F3856C0007E7640 /* XCRemoteSwiftPackageReference "Citadel" */;
+			productName = Citadel;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 843301581D2D8CB8008934BB /* Project object */;
 }
