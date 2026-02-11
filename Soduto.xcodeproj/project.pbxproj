@@ -47,6 +47,7 @@
 		31A0A3C02F2C118F00CDA243 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */; };
 		31A0A3C52F2C7C6100CDA243 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */; };
 		31DB2F072F3BE86300654096 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F062F3BE86300654096 /* Sparkle */; };
+		31DB2F0F2F3CEE8D00654096 /* NIOSSL in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F0E2F3CEE8D00654096 /* NIOSSL */; };
 		31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */; };
 		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareExtensionController.swift */; };
@@ -378,6 +379,7 @@
 			files = (
 				313416CA2F381D44007E7640 /* X509 in Frameworks */,
 				31DB2F072F3BE86300654096 /* Sparkle in Frameworks */,
+				31DB2F0F2F3CEE8D00654096 /* NIOSSL in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -937,6 +939,7 @@
 				313416C82F381D44007E7640 /* XCRemoteSwiftPackageReference "swift-certificates" */,
 				313416CB2F3856C0007E7640 /* XCRemoteSwiftPackageReference "Citadel" */,
 				31DB2F052F3BE86300654096 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				31DB2F0D2F3CEE8D00654096 /* XCRemoteSwiftPackageReference "swift-nio-ssl" */,
 			);
 			productRefGroup = 843301611D2D8CB8008934BB /* Products */;
 			projectDirPath = "";
@@ -1739,6 +1742,14 @@
 				minimumVersion = 2.8.1;
 			};
 		};
+		31DB2F0D2F3CEE8D00654096 /* XCRemoteSwiftPackageReference "swift-nio-ssl" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-nio-ssl.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.36.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1756,6 +1767,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 31DB2F052F3BE86300654096 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		31DB2F0E2F3CEE8D00654096 /* NIOSSL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 31DB2F0D2F3CEE8D00654096 /* XCRemoteSwiftPackageReference "swift-nio-ssl" */;
+			productName = NIOSSL;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
