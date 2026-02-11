@@ -75,7 +75,6 @@
 		843B670A1DF2CEC400289EC9 /* DownloadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843B67091DF2CEC400289EC9 /* DownloadTask.swift */; };
 		843B670C1DF3087800289EC9 /* URL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843B670B1DF3087800289EC9 /* URL.swift */; };
 		843E170E1E25851D001D0444 /* IO.m in Sources */ = {isa = PBXBuildFile; fileRef = 843E170D1E25851D001D0444 /* IO.m */; };
-		843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 843E17881E26B56A001D0444 /* ServiceManagement.framework */; settings = {ATTRIBUTES = (Required, ); }; };
 		8440FCF71E6CA68300E5BFA9 /* FileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8440FCF61E6CA68300E5BFA9 /* FileSystem.swift */; };
 		8440FD071E6CA6CA00E5BFA9 /* LocalFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8440FD061E6CA6CA00E5BFA9 /* LocalFileSystem.swift */; };
 		844AF28F1ED6185100422B7F /* DevicesList.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 844AF28E1ED6185100422B7F /* DevicesList.storyboard */; };
@@ -292,7 +291,6 @@
 		843B670B1DF3087800289EC9 /* URL.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = URL.swift; sourceTree = "<group>"; };
 		843E170C1E25851D001D0444 /* IO.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IO.h; sourceTree = "<group>"; };
 		843E170D1E25851D001D0444 /* IO.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = IO.m; sourceTree = "<group>"; };
-		843E17881E26B56A001D0444 /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
 		8440FCF61E6CA68300E5BFA9 /* FileSystem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileSystem.swift; sourceTree = "<group>"; };
 		8440FD061E6CA6CA00E5BFA9 /* LocalFileSystem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalFileSystem.swift; sourceTree = "<group>"; };
 		844AF28E1ED6185100422B7F /* DevicesList.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; path = DevicesList.storyboard; sourceTree = "<group>"; };
@@ -380,7 +378,6 @@
 			files = (
 				313416CA2F381D44007E7640 /* X509 in Frameworks */,
 				31DB2F072F3BE86300654096 /* Sparkle in Frameworks */,
-				843E17891E26B56A001D0444 /* ServiceManagement.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -755,7 +752,6 @@
 			isa = PBXGroup;
 			children = (
 				76B5805C2930EF31003453FD /* CocoaAsyncSocket.xcframework */,
-				843E17881E26B56A001D0444 /* ServiceManagement.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
