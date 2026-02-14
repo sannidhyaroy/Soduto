@@ -14,6 +14,13 @@ import Network
 import NIOCore
 import NIOPosix
 
+// MARK: - Feature Flag
+
+/// Feature flag to enable NIO TCP server implementation.
+/// Set to `true` to use SwiftNIO ServerBootstrap instead of GCDAsyncSocket for accepting connections.
+/// Note: Requires NIOConnection (Phase 4) to be complete for full functionality.
+private let USE_NIO_TCP_SERVER = false
+
 enum ConnectionProviderError: Error {
     case IdentityAbsent
 }
@@ -44,13 +51,19 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
     private var lastAnnouncementTime: TimeInterval = 0.0
     private var announcementTimer: Timer? = nil
     
-    // MARK: NIO UDP Properties
+    // MARK: NIO Properties
     
-    /// NIO event loop group for UDP operations.
+    /// NIO event loop group for network operations.
     private var nioEventLoopGroup: MultiThreadedEventLoopGroup?
     
     /// NIO UDP channel for receiving broadcasts.
     private var nioUdpChannel: Channel?
+    
+    /// NIO TCP server channel for accepting connections.
+    private var nioTcpServerChannel: Channel?
+    
+    /// The port the NIO TCP server is listening on.
+    private var nioTcpListeningPort: UInt16 = 0
     
     
     
@@ -87,15 +100,19 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         startNIOUdp()
         
         // Listen for connections on TCP
-        for port: UInt16 in ConnectionProvider.minTcpPort...ConnectionProvider.maxTcpPort {
-            do {
-                try self.tcpSocket.accept(onPort: port)
-                Logger.network.info("Listening for TCP connections on port \(self.tcpSocket.localPort, privacy: .public)")
+        if USE_NIO_TCP_SERVER {
+            startNIOTcpServer()
+        } else {
+            for port: UInt16 in ConnectionProvider.minTcpPort...ConnectionProvider.maxTcpPort {
+                do {
+                    try self.tcpSocket.accept(onPort: port)
+                    Logger.network.info("Listening for TCP connections on port \(self.tcpSocket.localPort, privacy: .public)")
+                }
+                catch {}
             }
-            catch {}
-        }
-        if self.tcpSocket.isDisconnected {
-            Logger.network.error("Failed to start listening TCP connections on ports in range \(ConnectionProvider.minTcpPort, privacy: .public)-\(ConnectionProvider.maxTcpPort, privacy: .public)")
+            if self.tcpSocket.isDisconnected {
+                Logger.network.error("Failed to start listening TCP connections on ports in range \(ConnectionProvider.minTcpPort, privacy: .public)-\(ConnectionProvider.maxTcpPort, privacy: .public)")
+            }
         }
         
         self.isStarted = true
@@ -115,7 +132,11 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         self.isStarted = false
         self.pathMonitor.cancel()
         stopNIOUdp()
-        self.tcpSocket.disconnect()
+        if USE_NIO_TCP_SERVER {
+            stopNIOTcpServer()
+        } else {
+            self.tcpSocket.disconnect()
+        }
     }
     
     public func restart() {
@@ -129,7 +150,17 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
     
     @objc public dynamic func broadcastAnnouncement() {
         guard self.isStarted else { return }
-        guard self.tcpSocket.localPort > 0 else { return }
+        
+        // Get the TCP port from the appropriate server
+        let tcpPort: UInt16
+        if USE_NIO_TCP_SERVER {
+            guard self.nioTcpListeningPort > 0 else { return }
+            tcpPort = self.nioTcpListeningPort
+        } else {
+            guard self.tcpSocket.localPort > 0 else { return }
+            tcpPort = self.tcpSocket.localPort
+        }
+        
         guard self.announcementTimer == nil else { return }
         
         if self.lastAnnouncementTime + ConnectionProvider.minAnnouncementInterval < CACurrentMediaTime() {
@@ -140,7 +171,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
             NetworkUtils.pingLocalNetwork()
             
             let properties: DataPacket.Body = [
-                DataPacket.IdentityProperty.tcpPort.rawValue: Int(self.tcpSocket.localPort) as AnyObject
+                DataPacket.IdentityProperty.tcpPort.rawValue: Int(tcpPort) as AnyObject
             ]
             let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
             sendBroadcast(packet: packet)
@@ -368,6 +399,69 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         }
     }
     
+    // MARK: - NIO TCP Server Implementation
+    
+    /// Starts the NIO TCP server for accepting incoming connections.
+    private func startNIOTcpServer() {
+        // Create event loop group if needed (shared with UDP)
+        if self.nioEventLoopGroup == nil {
+            self.nioEventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        }
+        
+        guard let group = self.nioEventLoopGroup else {
+            Logger.network.error("Failed to create NIO event loop group for TCP server")
+            return
+        }
+        
+        let bootstrap = ServerBootstrap(group: group)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .withChildTCPKeepalive()
+            .childChannelInitializer { [weak self] channel in
+                guard let self = self else {
+                    return channel.eventLoop.makeSucceededVoidFuture()
+                }
+                // For now, just add a handler that notifies us of new connections
+                // Full connection handling will be implemented with NIOConnection
+                let handler = NIOTcpConnectionHandler(connectionProvider: self, config: self.config)
+                return channel.pipeline.addHandler(handler)
+            }
+        
+        // Try to bind to a port in the KDE Connect range
+        for port in ConnectionProvider.minTcpPort...ConnectionProvider.maxTcpPort {
+            do {
+                let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(port)).wait()
+                self.nioTcpServerChannel = channel
+                self.nioTcpListeningPort = port
+                Logger.network.info("Listening for TCP connections on port \(port, privacy: .public)")
+                return
+            } catch {
+                // Port in use, try next
+                continue
+            }
+        }
+        
+        Logger.network.error("Failed to start TCP server on ports \(ConnectionProvider.minTcpPort, privacy: .public)-\(ConnectionProvider.maxTcpPort, privacy: .public)")
+    }
+    
+    /// Stops the NIO TCP server.
+    private func stopNIOTcpServer() {
+        self.nioTcpServerChannel?.close(promise: nil)
+        self.nioTcpServerChannel = nil
+        self.nioTcpListeningPort = 0
+    }
+    
+    /// Handles a new TCP connection accepted by the NIO server.
+    fileprivate func handleTcpConnection(channel: Channel, remoteAddress: NIOCore.SocketAddress) {
+        Logger.network.debug("TCP accepted connection from \(String(describing: remoteAddress), privacy: .public)")
+        
+        // TODO: Create NIOConnection when Phase 4 is complete
+        // For now, we'll close the channel since Connection requires GCDAsyncSocket
+        // This is temporary until NIOConnection is implemented
+        Logger.network.info("NIO TCP server received connection but NIOConnection not yet implemented - closing")
+        channel.close(promise: nil)
+    }
+    
     // MARK: Private methrod
     
     private func becameReachable() {
@@ -411,5 +505,37 @@ private final class NIOUdpHandler: ChannelInboundHandler {
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
         Logger.network.error("UDP channel error: \(error, privacy: .public)")
+    }
+}
+
+// MARK: - NIO TCP Connection Handler
+
+/// Channel handler for TCP connections accepted by the NIO server.
+private final class NIOTcpConnectionHandler: ChannelInboundHandler {
+    typealias InboundIn = ByteBuffer
+    
+    private weak var connectionProvider: ConnectionProvider?
+    private let config: ConnectionConfiguration
+    
+    init(connectionProvider: ConnectionProvider, config: ConnectionConfiguration) {
+        self.connectionProvider = connectionProvider
+        self.config = config
+    }
+    
+    func channelActive(context: ChannelHandlerContext) {
+        // Notify the connection provider of the new connection
+        if let remoteAddress = context.remoteAddress {
+            connectionProvider?.handleTcpConnection(channel: context.channel, remoteAddress: remoteAddress)
+        }
+    }
+    
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        // Data handling will be implemented with NIOConnection
+        // For now, this is a placeholder
+    }
+    
+    func errorCaught(context: ChannelHandlerContext, error: Error) {
+        Logger.network.error("TCP channel error: \(error, privacy: .public)")
+        context.close(promise: nil)
     }
 }
