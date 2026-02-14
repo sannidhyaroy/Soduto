@@ -11,6 +11,14 @@ import Cocoa
 import CocoaAsyncSocket
 import os
 import Network
+import NIOCore
+import NIOPosix
+
+// MARK: - Feature Flag
+
+/// Feature flag to enable NIO UDP implementation.
+/// Set to `true` to use SwiftNIO for UDP broadcasts instead of GCDAsyncUdpSocket.
+private let USE_NIO_UDP = true
 
 enum ConnectionProviderError: Error {
     case IdentityAbsent
@@ -43,6 +51,14 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     private var lastAnnouncementTime: TimeInterval = 0.0
     private var announcementTimer: Timer? = nil
     
+    // MARK: NIO UDP Properties
+    
+    /// NIO event loop group for UDP operations.
+    private var nioEventLoopGroup: MultiThreadedEventLoopGroup?
+    
+    /// NIO UDP channel for receiving broadcasts.
+    private var nioUdpChannel: Channel?
+    
     
     
     init(config: ConnectionConfiguration) {
@@ -68,22 +84,29 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     deinit {
         self.pathMonitor.cancel()
         NotificationCenter.default.removeObserver(self)
+        
+        // Shutdown NIO event loop group
+        try? self.nioEventLoopGroup?.syncShutdownGracefully()
     }
     
     public func start() {
         
         // Listen for device announcement broadcasts
-        do { try self.udpSocket.enableBroadcast(true) }
-        catch { Logger.network.error("Could not enable broadcast for udp socket: \(error, privacy: .public)") }
-        do { try self.udpSocket.enableReusePort(true) }
-        catch { Logger.network.error("Could not enable port reuse for udp socket: \(error, privacy: .public)") }
-        do {
-            try self.udpSocket.bind(toPort: ConnectionProvider.udpPort)
-            try self.udpSocket.beginReceiving()
-            Logger.network.info("Listening for UDP broadcasts on port \(self.udpSocket.localPort(), privacy: .public)")
-        }
-        catch {
-            Logger.network.error("Could not start listening for self-announcement broadcasts: \(error, privacy: .public)")
+        if USE_NIO_UDP {
+            startNIOUdp()
+        } else {
+            do { try self.udpSocket.enableBroadcast(true) }
+            catch { Logger.network.error("Could not enable broadcast for udp socket: \(error, privacy: .public)") }
+            do { try self.udpSocket.enableReusePort(true) }
+            catch { Logger.network.error("Could not enable port reuse for udp socket: \(error, privacy: .public)") }
+            do {
+                try self.udpSocket.bind(toPort: ConnectionProvider.udpPort)
+                try self.udpSocket.beginReceiving()
+                Logger.network.info("Listening for UDP broadcasts on port \(self.udpSocket.localPort(), privacy: .public)")
+            }
+            catch {
+                Logger.network.error("Could not start listening for self-announcement broadcasts: \(error, privacy: .public)")
+            }
         }
         
         // Listen for connections on TCP
@@ -114,7 +137,13 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     public func stop() {
         self.isStarted = false
         self.pathMonitor.cancel()
-        self.udpSocket.close()
+        
+        if USE_NIO_UDP {
+            stopNIOUdp()
+        } else {
+            self.udpSocket.close()
+        }
+        
         self.tcpSocket.disconnect()
     }
     
@@ -143,27 +172,11 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
                 DataPacket.IdentityProperty.tcpPort.rawValue: Int(self.tcpSocket.localPort) as AnyObject
             ]
             let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
-            if let bytes = try? packet.serialize() {
-                let data = Data(bytes)
-                
-                var address = SocketAddress(ipv4: "255.255.255.255")!
-                address.port = ConnectionProvider.udpPort
-                self.udpSocket.send(data, toAddress: address.data, withTimeout: 120, tag: Int(packet.id))
-                
-                // send explicit announcements to known hardware addresses
-                let knownDeviceConfigs = self.config.knownDeviceConfigs()
-                let accessibleAddresses = (try? NetworkUtils.accessibleIPv4Addresses()) ?? []
-                for accessibleAddress in accessibleAddresses {
-                    guard let accessibleHwAddress = accessibleAddress.hwAddressString else { continue }
-                    for deviceConfig in knownDeviceConfigs {
-                        guard deviceConfig.hwAddresses.contains(accessibleHwAddress) else { continue }
-                        guard let deviceAddress = SocketAddress(ipv4: accessibleAddress.ipAddressString) else { continue }
-                        var mutableDeviceAddress = deviceAddress
-                        mutableDeviceAddress.port = ConnectionProvider.udpPort
-                        self.udpSocket.send(data, toAddress: mutableDeviceAddress.data, withTimeout: 120, tag: Int(packet.id))
-                        break
-                    }
-                }
+            
+            if USE_NIO_UDP {
+                broadcastAnnouncementNIO(packet: packet)
+            } else {
+                broadcastAnnouncementGCD(packet: packet)
             }
             
             self.lastAnnouncementTime = CACurrentMediaTime()
@@ -172,6 +185,74 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
             self.announcementTimer = Timer.compatScheduledTimer(withTimeInterval: ConnectionProvider.minAnnouncementInterval, repeats: false) { _ in
                 self.announcementTimer = nil
                 self.broadcastAnnouncement()
+            }
+        }
+    }
+    
+    /// Broadcasts announcement using GCDAsyncUdpSocket (legacy implementation).
+    private func broadcastAnnouncementGCD(packet: DataPacket) {
+        guard let bytes = try? packet.serialize() else { return }
+        let data = Data(bytes)
+        
+        var address = SocketAddress(ipv4: "255.255.255.255")!
+        address.port = ConnectionProvider.udpPort
+        self.udpSocket.send(data, toAddress: address.data, withTimeout: 120, tag: Int(packet.id))
+        
+        // send explicit announcements to known hardware addresses
+        let knownDeviceConfigs = self.config.knownDeviceConfigs()
+        let accessibleAddresses = (try? NetworkUtils.accessibleIPv4Addresses()) ?? []
+        for accessibleAddress in accessibleAddresses {
+            guard let accessibleHwAddress = accessibleAddress.hwAddressString else { continue }
+            for deviceConfig in knownDeviceConfigs {
+                guard deviceConfig.hwAddresses.contains(accessibleHwAddress) else { continue }
+                guard let deviceAddress = SocketAddress(ipv4: accessibleAddress.ipAddressString) else { continue }
+                var mutableDeviceAddress = deviceAddress
+                mutableDeviceAddress.port = ConnectionProvider.udpPort
+                self.udpSocket.send(data, toAddress: mutableDeviceAddress.data, withTimeout: 120, tag: Int(packet.id))
+                break
+            }
+        }
+    }
+    
+    /// Broadcasts announcement using SwiftNIO (new implementation).
+    private func broadcastAnnouncementNIO(packet: DataPacket) {
+        guard let channel = self.nioUdpChannel else {
+            Logger.network.error("NIO UDP channel not available for broadcast")
+            return
+        }
+        guard let bytes = try? packet.serialize() else { return }
+        
+        // Create ByteBuffer from packet bytes
+        var buffer = channel.allocator.buffer(capacity: bytes.count)
+        buffer.writeBytes(bytes)
+        
+        // Broadcast to 255.255.255.255
+        do {
+            let broadcastAddress = try NIOCore.SocketAddress(ipAddress: "255.255.255.255", port: Int(ConnectionProvider.udpPort))
+            let envelope = AddressedEnvelope(remoteAddress: broadcastAddress, data: buffer)
+            channel.writeAndFlush(envelope, promise: nil)
+            Logger.network.debug("Sent UDP broadcast via NIO")
+        } catch {
+            Logger.network.error("Failed to create broadcast address: \(error, privacy: .public)")
+        }
+        
+        // Send explicit announcements to known hardware addresses
+        let knownDeviceConfigs = self.config.knownDeviceConfigs()
+        let accessibleAddresses = (try? NetworkUtils.accessibleIPv4Addresses()) ?? []
+        for accessibleAddress in accessibleAddresses {
+            guard let accessibleHwAddress = accessibleAddress.hwAddressString else { continue }
+            for deviceConfig in knownDeviceConfigs {
+                guard deviceConfig.hwAddresses.contains(accessibleHwAddress) else { continue }
+                do {
+                    let deviceNIOAddress = try NIOCore.SocketAddress(ipAddress: accessibleAddress.ipAddressString, port: Int(ConnectionProvider.udpPort))
+                    var deviceBuffer = channel.allocator.buffer(capacity: bytes.count)
+                    deviceBuffer.writeBytes(bytes)
+                    let envelope = AddressedEnvelope(remoteAddress: deviceNIOAddress, data: deviceBuffer)
+                    channel.writeAndFlush(envelope, promise: nil)
+                } catch {
+                    Logger.network.error("Failed to send to known device: \(error, privacy: .public)")
+                }
+                break
             }
         }
     }
@@ -299,6 +380,96 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
     public func connectionCapacityChanged(_ connection: Connection) { }
     
     
+    // MARK: - NIO UDP Implementation
+    
+    /// Starts the NIO UDP channel for receiving and sending broadcasts.
+    private func startNIOUdp() {
+        // Create event loop group if needed
+        if self.nioEventLoopGroup == nil {
+            self.nioEventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        }
+        
+        guard let group = self.nioEventLoopGroup else {
+            Logger.network.error("Failed to create NIO event loop group")
+            return
+        }
+        
+        let bootstrap = DatagramBootstrap(group: group)
+            .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .channelOption(ChannelOptions.Types.SocketOption(level: SOL_SOCKET, name: SO_REUSEPORT), value: 1)
+            .channelOption(ChannelOptions.socketOption(.so_broadcast), value: 1)
+            .channelInitializer { [weak self] channel in
+                guard let self = self else {
+                    return channel.eventLoop.makeSucceededVoidFuture()
+                }
+                let handler = NIOUdpHandler(connectionProvider: self, config: self.config)
+                return channel.pipeline.addHandler(handler)
+            }
+        
+        do {
+            let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(ConnectionProvider.udpPort)).wait()
+            self.nioUdpChannel = channel
+            Logger.network.info("NIO UDP listening on port \(ConnectionProvider.udpPort, privacy: .public)")
+        } catch {
+            Logger.network.error("Failed to start NIO UDP: \(error, privacy: .public)")
+        }
+    }
+    
+    /// Stops the NIO UDP channel.
+    private func stopNIOUdp() {
+        self.nioUdpChannel?.close(promise: nil)
+        self.nioUdpChannel = nil
+    }
+    
+    /// Handles incoming UDP packet from NIO.
+    fileprivate func handleNIOUdpPacket(data: Data, remoteAddress: NIOCore.SocketAddress) {
+        guard let delegate = self.delegate else { return }
+        guard let packet = DataPacket(data: data) else { return }
+        guard let port = try? packet.getTCPPort() else { return }
+        guard let deviceId = try? packet.getDeviceId() else { return }
+        guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else { return }
+        
+#if DEBUG
+        Logger.network.debug("NIO UDP received packet from \(String(describing: remoteAddress), privacy: .public): \(packet, privacy: .public)")
+#else
+        Logger.network.debug("NIO UDP received packet from \(String(describing: remoteAddress), privacy: .public) deviceId: \(deviceId, privacy: .public)")
+#endif
+        
+        // Create a socket address for the connection
+        guard let connectionAddress = convertNIOAddressToSocketAddress(remoteAddress, port: UInt16(port)) else {
+            Logger.network.error("Failed to convert NIO address to SocketAddress")
+            return
+        }
+        
+        // Dispatch to main queue for connection creation (matches GCDAsyncUdpSocket behavior)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if let connection = Connection(address: connectionAddress, identityPacket: packet, config: self.config) {
+                connection.delegate = self
+                self.pendingConnections.insert(connection)
+                
+                // send initial identity packet
+                _ = connection.send(DataPacket.identityPacket(config: self.config))
+            }
+        }
+    }
+    
+    /// Converts a NIO SocketAddress to the legacy SocketAddress type.
+    private func convertNIOAddressToSocketAddress(_ nioAddress: NIOCore.SocketAddress, port: UInt16) -> SocketAddress? {
+        switch nioAddress {
+        case .v4(let addr):
+            var socketAddress = SocketAddress(addr: addr.address)
+            socketAddress.port = in_port_t(port)
+            return socketAddress
+        case .v6(let addr):
+            var socketAddress = SocketAddress(addr: addr.address)
+            socketAddress.port = in_port_t(port)
+            return socketAddress
+        default:
+            return nil
+        }
+    }
+    
     // MARK: Private methrod
     
     private func becameReachable() {
@@ -311,4 +482,36 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, GCDAsyncUdpSo
         Logger.network.debug("Became unreachable")
     }
     
+}
+
+// MARK: - NIO UDP Handler
+
+/// Channel handler for receiving UDP datagrams via SwiftNIO.
+private final class NIOUdpHandler: ChannelInboundHandler {
+    typealias InboundIn = AddressedEnvelope<ByteBuffer>
+    
+    private weak var connectionProvider: ConnectionProvider?
+    private let config: ConnectionConfiguration
+    
+    init(connectionProvider: ConnectionProvider, config: ConnectionConfiguration) {
+        self.connectionProvider = connectionProvider
+        self.config = config
+    }
+    
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let envelope = unwrapInboundIn(data)
+        let remoteAddress = envelope.remoteAddress
+        
+        // Convert ByteBuffer to Data
+        var buffer = envelope.data
+        guard let bytes = buffer.readBytes(length: buffer.readableBytes) else { return }
+        let packetData = Data(bytes)
+        
+        // Forward to connection provider
+        connectionProvider?.handleNIOUdpPacket(data: packetData, remoteAddress: remoteAddress)
+    }
+    
+    func errorCaught(context: ChannelHandlerContext, error: Error) {
+        Logger.network.error("NIO UDP error: \(error, privacy: .public)")
+    }
 }
