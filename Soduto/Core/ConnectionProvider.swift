@@ -18,11 +18,11 @@ import NIOPosix
 
 /// Feature flag to enable NIO TCP server implementation.
 /// Set to `true` to use SwiftNIO ServerBootstrap instead of GCDAsyncSocket for accepting connections.
-private let USE_NIO_TCP_SERVER = false
+private let USE_NIO_TCP_SERVER = true
 
 /// Feature flag to enable NIO for outgoing connections.
 /// Set to `true` to use NIOConnection with ClientBootstrap for connections initiated by us.
-private let USE_NIO_OUTGOING = false
+private let USE_NIO_OUTGOING = true
 
 enum ConnectionProviderError: Error {
     case IdentityAbsent
