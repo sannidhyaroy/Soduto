@@ -385,9 +385,12 @@ public class NIOUploadTask {
         
         UploadTask.releasePort(self.listeningPort)
         
+        // Capture delegate before close() clears it
+        let delegate = self.delegate
+        
         self.delegateQueue.async { [weak self] in
             guard let self = self else { return }
-            self.delegate?.nioUploadTask(self, finishedWithSuccess: success)
+            delegate?.nioUploadTask(self, finishedWithSuccess: success)
         }
         
         self.close()
