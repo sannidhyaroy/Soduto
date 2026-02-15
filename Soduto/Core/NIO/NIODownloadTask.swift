@@ -167,22 +167,24 @@ public class NIODownloadTask {
         // Create and retain trust handler
         self.trustHandler = NIOPayloadClientTrustHandler(expectedCertificate: self.expectedPeerCertificate)
         
-        let sslHandler = try NIOSSLClientHandler(
-            context: sslContext,
-            serverHostname: nil,
-            customVerificationCallback: self.trustHandler!.verificationCallback
-        )
-        
-        let downloadHandler = NIODownloadHandler(downloadTask: self)
-        
         let bootstrap = ClientBootstrap(group: self.eventLoopGroup)
             .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .channelOption(ChannelOptions.connectTimeout, value: NIODownloadTask.downloadTimeout)
             .withTCPKeepalive()
             .channelInitializer { channel in
-                // Add SSL handler first, then our download handler
-                channel.pipeline.addHandler(sslHandler).flatMap {
-                    channel.pipeline.addHandler(downloadHandler)
+                do {
+                    let sslHandler = try NIOSSLClientHandler(
+                        context: sslContext,
+                        serverHostname: nil,
+                        customVerificationCallback: self.trustHandler!.verificationCallback
+                    )
+                    let downloadHandler = NIODownloadHandler(downloadTask: self)
+                    // Add SSL handler first, then our download handler
+                    try channel.pipeline.syncOperations.addHandler(sslHandler)
+                    try channel.pipeline.syncOperations.addHandler(downloadHandler)
+                    return channel.eventLoop.makeSucceededVoidFuture()
+                } catch {
+                    return channel.eventLoop.makeFailedFuture(error)
                 }
             }
         

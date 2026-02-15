@@ -96,16 +96,8 @@ final class STARTTLSHandler: ChannelDuplexHandler, RemovableChannelHandler {
             
             // Add SSL handler at the front of the pipeline (before all other handlers)
             // This ensures all traffic is encrypted/decrypted at the lowest level
-            context.pipeline.addHandler(sslHandler, position: .first).whenComplete { [weak self] result in
-                switch result {
-                case .success:
-                    // The promise will be fulfilled when handshake completes via userInboundEventTriggered
-                    break
-                case .failure(let error):
-                    Logger.network.error("Failed to add TLS handler: \(error, privacy: .public)")
-                    self?.upgradePromise?.fail(error)
-                }
-            }
+            try context.pipeline.syncOperations.addHandler(sslHandler, position: .first)
+            // The promise will be fulfilled when handshake completes via userInboundEventTriggered
         } catch {
             Logger.network.error("Failed to create SSL handler: \(error, privacy: .public)")
             promise.fail(error)

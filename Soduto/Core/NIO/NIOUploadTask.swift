@@ -441,21 +441,19 @@ private final class SSLInserterHandler: ChannelInboundHandler, RemovableChannelH
         }
         inserted = true
         
-        // Insert SSL handler at the front of the pipeline
-        context.pipeline.addHandler(sslHandler, position: .first).whenComplete { [weak self] result in
-            switch result {
-            case .success:
-                // Now safe to close the server channel
-                self?.serverChannel?.close(promise: nil)
-                self?.serverChannel = nil
-                // Remove ourselves from the pipeline
-                context.pipeline.removeHandler(context: context, promise: nil)
-                // Fire channelActive to downstream handlers
-                context.fireChannelActive()
-            case .failure(let error):
-                Logger.network.error("UploadTask: failed to insert SSL handler: \(error, privacy: .public)")
-                context.close(promise: nil)
-            }
+        do {
+            // Insert SSL handler at the front of the pipeline
+            try context.pipeline.syncOperations.addHandler(sslHandler, position: .first)
+            // Now safe to close the server channel
+            self.serverChannel?.close(promise: nil)
+            self.serverChannel = nil
+            // Remove ourselves from the pipeline
+            _ = context.pipeline.syncOperations.removeHandler(context: context)
+            // Fire channelActive to downstream handlers
+            context.fireChannelActive()
+        } catch {
+            Logger.network.error("UploadTask: failed to insert SSL handler: \(error, privacy: .public)")
+            context.close(promise: nil)
         }
     }
     

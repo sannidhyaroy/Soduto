@@ -501,11 +501,14 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         let encoder = MessageToByteHandler(RawDataEncoder())
         self.connectionHandler = NIOConnectionHandler(connection: self)
         
-        // Add handlers to pipeline
-        return channel.pipeline.addHandler(decoder).flatMap {
-            return channel.pipeline.addHandler(encoder)
-        }.flatMap {
-            return channel.pipeline.addHandler(self.connectionHandler!)
+        // Add handlers to pipeline.
+        do {
+            try channel.pipeline.syncOperations.addHandler(decoder)
+            try channel.pipeline.syncOperations.addHandler(encoder)
+            try channel.pipeline.syncOperations.addHandler(self.connectionHandler!)
+            return channel.eventLoop.makeSucceededVoidFuture()
+        } catch {
+            return channel.eventLoop.makeFailedFuture(error)
         }
     }
     
@@ -528,22 +531,17 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         // Create trust handler
         self.trustHandler = NIOTrustHandler(isPaired: isPaired)
         
-        do {
-            let sslHandler = try self.createSSLHandler(role: role)
+        channel.eventLoop.execute { [weak self, weak channel] in
+            guard let self = self, let channel = channel else { return }
             
-            // Add SSL handler at the front of the pipeline
-            channel.pipeline.addHandler(sslHandler, position: .first).whenComplete { [weak self] result in
-                switch result {
-                case .success:
-                    break
-                case .failure(let error):
-                    Logger.network.error("Failed to add TLS handler: \(error, privacy: .public)")
-                    self?.state = .Closed
-                }
+            do {
+                let sslHandler = try self.createSSLHandler(role: role)
+                // Add SSL handler at the front of the pipeline.
+                try channel.pipeline.syncOperations.addHandler(sslHandler, position: .first)
+            } catch {
+                Logger.network.error("Failed to add/create TLS handler: \(error, privacy: .public)")
+                self.state = .Closed
             }
-        } catch {
-            Logger.network.error("Failed to create SSL handler: \(error, privacy: .public)")
-            self.state = .Closed
         }
     }
     
