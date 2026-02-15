@@ -28,6 +28,23 @@ public protocol NIOUploadTaskDelegate: AnyObject {
 /// 3. Perform TLS handshake as server with client authentication
 /// 4. Stream the payload data to the connected client
 /// 5. Close the connection when complete
+///
+/// ## Buffer Strategy
+///
+/// The legacy UploadTask used a 32MB buffer citing "SSD optimization" from a 2014 article.
+/// However, that recommendation was about SSD erase block sizes at the hardware level,
+/// not socket/file buffer sizes.
+///
+/// This implementation uses a 1MB buffer based on research:
+/// - For socket writes, 256KB-1MB achieves optimal throughput
+/// - For large file reads (100+ MB), 512KB-1MB is optimal per .NET FileStream benchmarks
+/// - Unlike NIODownloadTask, we cannot use NIO's adaptive allocator here because
+///   InputStream.read() requires a pre-allocated buffer (pull-based API)
+///
+/// Modern macOS (APFS, NVMe firmware) handles SSD optimization at lower layers.
+///
+/// - SeeAlso: https://www.evanjones.ca/read-write-buffer-size.html
+/// - SeeAlso: https://github.com/dotnet/runtime/discussions/74405
 public class NIOUploadTask {
     
     // MARK: Types
@@ -50,7 +67,7 @@ public class NIOUploadTask {
     
     private static let startPort: UInt16 = 1739
     private static let endPort: UInt16 = 1764
-    private static let maxBufferSize = 1024 * 1024 * 32 // 32MB - optimized for SSD
+    private static let maxBufferSize = 1024 * 1024 // 1MB - optimal for socket writes
     private static let uploadTimeout: TimeAmount = .seconds(30)
     private static let listenTimeout: TimeAmount = .seconds(30)
     

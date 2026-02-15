@@ -28,6 +28,23 @@ public protocol NIODownloadTaskDelegate: AnyObject {
 /// 3. Receive payload data from the server
 /// 4. Write data to the provided OutputStream
 /// 5. Close when complete or payload size reached
+///
+/// ## Buffer Strategy
+///
+/// The legacy DownloadTask used an explicit 32MB buffer citing "SSD optimization" from a
+/// 2014 article. However, that recommendation was about SSD erase block sizes at the
+/// hardware level, not socket buffer sizes.
+///
+/// This implementation uses NIO's adaptive receive buffer allocator instead. Research shows:
+/// - For TCP socket reads, 32KB-64KB achieves ~95% of maximum throughput
+/// - Beyond 256KB, performance gains are minimal and can decrease due to CPU cache effects
+/// - macOS kernel, APFS, and NVMe firmware handle SSD write optimization transparently
+///
+/// Modern systems (macOS 14+, Apple Silicon NVMe) handle SSD optimization at lower layers
+/// automatically, so explicit large buffers are unnecessary.
+///
+/// - SeeAlso: https://www.evanjones.ca/read-write-buffer-size.html
+/// - SeeAlso: http://codecapsule.com/2014/02/12/coding-for-ssds-part-6-a-summary-what-every-programmer-should-know-about-solid-state-drives/
 public class NIODownloadTask {
     
     // MARK: Types
