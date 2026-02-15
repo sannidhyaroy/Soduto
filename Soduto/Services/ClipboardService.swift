@@ -40,14 +40,22 @@ public class ClipboardService: Service {
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.clipboardPacketType ])
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.clipboardPacketType ])
     
+    /// NIO-compatible packet handler.
+    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
+    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isClipboardPacket else { return false }
         guard let contents = try? dataPacket.getContent() else { return true }
         
         self.lastExternalChangeDevice = device
         self.lastExternalChangeCount = NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([ contents as NSString ])
+        NSPasteboard.general.writeObjects([contents as NSString])
         
         return true
     }

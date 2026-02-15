@@ -69,18 +69,25 @@ public class BatteryService: Service {
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.batteryPacketType, DataPacket.batteryRequestPacketType ])
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.batteryPacketType, DataPacket.batteryRequestPacketType ])
     
+    /// NIO-compatible packet handler.
+    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
+    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isBatteryPacket || dataPacket.isBatteryRequestPacket else { return false }
         
         do {
-            if dataPacket.isBatteryRequestPacket{
+            if dataPacket.isBatteryRequestPacket {
                 try handle(requestPacket: dataPacket, fromDevice: device)
-            }
-            else {
+            } else {
                 try handle(statusPacket: dataPacket, fromDevice: device)
             }
-        }
-        catch {
+        } catch {
             Logger.services.error("Error handling battery packet: \(error, privacy: .public)")
         }
         

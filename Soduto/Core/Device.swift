@@ -41,13 +41,32 @@ public protocol DeviceDelegate: AnyObject {
 
 /// Functionality for handling incoming data packets from devices.
 public protocol DeviceDataPacketHandler: AnyObject {
-    func handleDataPacket(_ dataPacket:DataPacket, fromDevice device:Device, onConnection connection:Connection) -> Bool
+    /// Handle a packet received on a legacy Connection.
+    func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool
+    
+    /// Handle a packet received on any connection type.
+    /// Default implementation wraps Connection calls for backward compatibility.
+    func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool
+}
+
+/// Default implementation for AnyBaseConnection that calls the legacy Connection method.
+public extension DeviceDataPacketHandler {
+    func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
+        // Try to get the underlying Connection for backward compatibility
+        if let legacyConnection = connection.asConnection {
+            return handleDataPacket(dataPacket, fromDevice: device, onConnection: legacyConnection)
+        }
+        // For NIOConnection, services that need Connection-specific features won't work
+        // This is expected during the migration - services should be updated to use device.send()
+        // instead of connection-specific operations
+        return false
+    }
 }
 
 
 /// Device class represents a remote device. Multiple connections to the device may be used,
 /// but only one of the same kind (LAN, Bluetooth, etc.)
-public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStringConvertible {
+public class Device: ConnectionDelegate, NIOConnectionDelegate, PairableDelegate, NIOPairableDelegate, Pairable, CustomStringConvertible {
     
     // MARK: Types
     
@@ -73,7 +92,8 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     
     public var peerCertificate: SecCertificate? {
         if let certificate = self.connections.first?.peerCertificate { return certificate }
-        else { return self.config.certificate }
+        if let certificate = self.nioConnections.first?.peerCertificate { return certificate }
+        return self.config.certificate
     }
     public var hostCertificate: SecCertificate? {
         return self.config.hostCertificate?.certificate
@@ -87,8 +107,10 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         }
     }
     
-    private var connections: [Connection] = [] // Active connections
+    private var connections: [Connection] = [] // Active connections (legacy GCDAsyncSocket)
+    private var nioConnections: [NIOConnection] = [] // Active NIO connections
     private var lingeringConnections: [Connection] = [] // Dismissed connections, waiting to finish its work and completely close
+    private var lingeringNIOConnections: [NIOConnection] = [] // Dismissed NIO connections
     private var packetHandlers: [DeviceDataPacketHandler] = []
     private var pendingPackets: [PendingDataPacket] = []
     
@@ -139,6 +161,35 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         self.pairingStatus = self.config.isPaired ? .Paired : .Unpaired
     }
     
+    /// Initialize Device with NIOConnection object. Device properties are initialized with connection
+    /// identity property values.
+    ///
+    /// - parameters:
+    ///     - connection: Fully initialized (i.e. in Open state) NIOConnection to the device.
+    ///     - config: Configuration instance for particular device
+    ///
+    /// - throws:
+    ///     `DeviceError.InvalidConnection` if connection state is not `.Open` or identity property is nil.
+    ///     `DataPacket.IdentityError` if connections identity property is invalid.
+    public init(connection: NIOConnection, config: DeviceConfiguration) throws {
+        guard connection.state == .Open else { throw DeviceError.InvalidConnection }
+        guard let identity = connection.identity else { throw DeviceError.InvalidConnection }
+        
+        self.id = try identity.getDeviceId()
+        self.name = try identity.getDeviceName()
+        self.type = DeviceType(rawValue: try identity.getDeviceType()) ?? DeviceType.Unknown
+        self.incomingCapabilities = try identity.getIncomingCapabilities()
+        self.outgoingCapabilities = try identity.getOutgoingCapabilities()
+        self.config = config
+        self.pairingStatus = self.config.isPaired ? .Paired : .Unpaired
+        
+        self.addConnection(connection)
+        
+        // update config with latest device name and type
+        config.name = self.name
+        config.type = self.type
+    }
+    
     deinit {
         self.discardPendingPackets()
     }
@@ -164,6 +215,30 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         if let index = index {
             let dismissedConnection = self.connections.remove(at: index)
             self.lingeringConnections.append(dismissedConnection)
+            dismissedConnection.closeAfterWriting()
+        }
+        
+        self.updatePairingStatus()
+        self.updateReachabilityStatus()
+    }
+    
+    /// Add additional NIOConnection to the device. If the device has already contained an NIOConnection,
+    /// the old one is removed.
+    ///
+    /// - Parameter connection: Fully initialized (i.e. in Open state) NIOConnection to the device.
+    public func addConnection(_ connection: NIOConnection) {
+        connection.delegate = self
+        connection.pairingDelegate = self
+        self.nioConnections.append(connection)
+        
+        // remove connection of the same type if present
+        let index = self.nioConnections.firstIndex { c in
+            guard c !== connection else { return false }
+            return true // NIOConnections are of the same type
+        }
+        if let index = index {
+            let dismissedConnection = self.nioConnections.remove(at: index)
+            self.lingeringNIOConnections.append(dismissedConnection)
             dismissedConnection.closeAfterWriting()
         }
         
@@ -209,8 +284,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
                 let pendingPacket = PendingDataPacket(packet: packet, completionHandler: whenCompleted)
                 self.pendingPackets.insert(pendingPacket, at: 0)
             }
-        }
-        else {
+        } else {
             whenCompleted?(false, false)
         }
     }
@@ -271,6 +345,47 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     }
     
     
+    // MARK: NIOConnectionDelegate
+    
+    public func nioConnection(_ connection: NIOConnection, didSwitchToState state: NIOConnection.State) {
+        Logger.device.debug("nioConnection(<\(String(describing: connection), privacy: .public)> didSwitchToState:<\(String(describing: state), privacy: .public)>)")
+        switch state {
+        case .Closed:
+            if let index = self.nioConnections.firstIndex(of: connection) {
+                let connection = self.nioConnections.remove(at: index)
+                self.reclaimUnsentPackets(from: connection)
+                self.updateReachabilityStatus()
+            }
+            else if let index = self.lingeringNIOConnections.firstIndex(of: connection) {
+                let connection = self.lingeringNIOConnections.remove(at: index)
+                self.reclaimUnsentPackets(from: connection)
+            }
+            else {
+                assertionFailure("NIOConnection not found in device connections list")
+            }
+        default:
+            assertionFailure("Unexpected NIOConnection state switch: \(connection) -> \(state)")
+        }
+    }
+    
+    public func nioConnection(_ connection: NIOConnection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
+        // Forward to handlers that support NIO connections
+        for handler in packetHandlers {
+            if let nioDelegate = handler as? NIOConnectionDelegate {
+                nioDelegate.nioConnection(connection, didSendPacket: packet, uploadedPayload: uploadedPayload)
+            }
+        }
+    }
+    
+    public func nioConnection(_ connection: NIOConnection, didReadPacket packet: DataPacket) {
+        self.handle(packet: packet, onNIOConnection: connection)
+    }
+    
+    public func nioConnectionCapacityChanged(_ connection: NIOConnection) {
+        self.sendPendingPackets()
+    }
+    
+    
     // MARK: PairableDelegate
     
     public func pairable(_ pairable:Pairable, receivedRequest request:PairingRequest) {
@@ -282,6 +397,27 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     }
     
     public func pairable(_ pairable:Pairable, statusChanged status:PairingStatus) {
+        self.updatePairingStatus()
+    }
+    
+    
+    // MARK: NIOPairableDelegate
+    
+    public func nioConnection(_ connection: NIOConnection, receivedPairingRequest request: NIOPairingRequest) {
+        // Convert NIOPairingRequest to PairingRequest for the delegate
+        // Note: This is a temporary bridge - once NIOConnection is the only implementation,
+        // we'll update DeviceDelegate to use NIOPairingRequest directly
+        Logger.device.debug("NIOConnection received pairing request from \(connection.peerAddress.description, privacy: .public)")
+        // For now, we need to notify the delegate somehow - the delegate expects PairingRequest with Connection
+        // We'll update the pairing status and let the delegate handle it
+        self.updatePairingStatus()
+    }
+    
+    public func nioConnection(_ connection: NIOConnection, pairingFailed error: Error) {
+        Logger.device.debug("NIOConnection pairing failed: \(error, privacy: .public)")
+    }
+    
+    public func nioConnection(_ connection: NIOConnection, pairingStatusChanged status: PairingStatus) {
         self.updatePairingStatus()
     }
     
@@ -303,8 +439,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         if let connection = self.connectionForPairing() {
             if connection.pairingStatus == .RequestedByPeer {
                 connection.acceptPairing()
-            }
-            else {
+            } else {
                 connection.requestPairing()
             }
         }
@@ -318,6 +453,18 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     
     public func declinePairing() {
         for connection in self.connections {
+            switch connection.pairingStatus {
+            case .RequestedByPeer:
+                connection.declinePairing()
+                break
+            case .Paired, .Requested:
+                connection.unpair()
+                break
+            default:
+                break
+            }
+        }
+        for connection in self.nioConnections {
             switch connection.pairingStatus {
             case .RequestedByPeer:
                 connection.declinePairing()
@@ -344,6 +491,18 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
                 break
             }
         }
+        for connection in self.nioConnections {
+            switch connection.pairingStatus {
+            case .Paired, .Requested:
+                connection.unpair()
+                break
+            case .RequestedByPeer:
+                connection.declinePairing()
+                break
+            default:
+                break
+            }
+        }
         
         // Device might be unavailable and no connections present - update status once more to be sure
         self.updatePairingStatus(globalStatus: .Unpaired)
@@ -351,6 +510,9 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     
     public func updatePairingStatus(globalStatus: PairingStatus) {
         for connection in self.connections {
+            connection.updatePairingStatus(globalStatus: globalStatus)
+        }
+        for connection in self.nioConnections {
             connection.updatePairingStatus(globalStatus: globalStatus)
         }
         self.config.isPaired = globalStatus == .Paired
@@ -371,12 +533,15 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     // MARK: Private
     
     private func updateReachabilityStatus() {
-        self.isReachable = self.connections.count != 0
+        self.isReachable = self.connections.count != 0 || self.nioConnections.count != 0
     }
     
     private func updatePairingStatus() {
         var status: PairingStatus = .Unpaired
-        if self.connections.count > 0 {
+        let hasConnections = self.connections.count > 0 || self.nioConnections.count > 0
+        
+        if hasConnections {
+            // Check legacy connections
             for connection in self.connections {
                 if connection.pairingStatus == .Paired {
                     status = connection.pairingStatus
@@ -387,41 +552,78 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
                     status = connection.pairingStatus
                 }
             }
-        }
-        else {
+            // Check NIO connections if no status found yet
+            if status == .Unpaired {
+                for connection in self.nioConnections {
+                    if connection.pairingStatus == .Paired {
+                        status = connection.pairingStatus
+                        break
+                    }
+                    if (connection.pairingStatus == .Requested || connection.pairingStatus == .RequestedByPeer) &&
+                        status == .Unpaired {
+                        status = connection.pairingStatus
+                    }
+                }
+            }
+        } else {
             status = self.config.isPaired ? .Paired : .Unpaired
         }
         
         self.updatePairingStatus(globalStatus: status)
     }
     
-    /// Choose a connection most appropriate for pairing. Return `nil` if pairing seems inapprorpiate.
-    private func connectionForPairing() -> Connection? {
-        var bestConnection: Connection? = nil
+    /// Choose a connection most appropriate for pairing. Return `nil` if pairing seems inappropriate.
+    private func connectionForPairing() -> AnyBaseConnection? {
+        var bestConnection: AnyBaseConnection? = nil
+        
+        // Check legacy connections
         for connection in self.connections {
             switch connection.pairingStatus {
             case .Unpaired:
                 if bestConnection == nil {
-                    bestConnection = connection
+                    bestConnection = AnyBaseConnection(connection)
                 }
-                break
             case .RequestedByPeer:
-                return connection
+                return AnyBaseConnection(connection)
             case .Requested:
                 return nil
             case .Paired:
                 return nil
             }
         }
+        
+        // Check NIO connections
+        for connection in self.nioConnections {
+            switch connection.pairingStatus {
+            case .Unpaired:
+                if bestConnection == nil {
+                    bestConnection = AnyBaseConnection(connection)
+                }
+            case .RequestedByPeer:
+                return AnyBaseConnection(connection)
+            case .Requested:
+                return nil
+            case .Paired:
+                return nil
+            }
+        }
+        
         return bestConnection
     }
     
     /// Choose a connection most appropriate for sending packets. Connection may be chosen
     /// according its availability, reliability, speed, etc.
-    private func connectionForSending() -> Connection? {
+    private func connectionForSending() -> AnyBaseConnection? {
+        // Prefer legacy connections (for now)
         for connection in self.connections {
             if connection.pairingStatus == .Paired {
-                return connection
+                return AnyBaseConnection(connection)
+            }
+        }
+        // Fall back to NIO connections
+        for connection in self.nioConnections {
+            if connection.pairingStatus == .Paired {
+                return AnyBaseConnection(connection)
             }
         }
         return nil
@@ -438,11 +640,26 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         }
     }
     
+    /// Pass received data packet from NIOConnection to handlers.
+    /// Uses the new AnyBaseConnection-based handler method which all services implement via default extension.
+    private func handle(packet: DataPacket, onNIOConnection connection: NIOConnection) {
+        let anyConnection = AnyBaseConnection(connection)
+        for handler in self.packetHandlers {
+            let handled = handler.handleDataPacket(packet, fromDevice: self, onAnyConnection: anyConnection)
+            if handled {
+                return
+            }
+        }
+    }
+    
     /// Try sending packets from pendingPackets list, send as many as possible until no connection accepts any.
     private func sendPendingPackets() {
         while let pendingPacket = self.pendingPackets.popLast() {
-            let connection = self.connectionForSending()
-            let accepted = connection?.send(pendingPacket.packet, whenCompleted: pendingPacket.completionHandler) ?? false
+            guard let connection = self.connectionForSending() else {
+                self.pendingPackets.append(pendingPacket)
+                break
+            }
+            let accepted = connection.send(pendingPacket.packet, whenCompleted: pendingPacket.completionHandler)
             if !accepted {
                 self.pendingPackets.append(pendingPacket)
                 break
@@ -453,6 +670,19 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     /// Take unsent packets from a closed connection, put them into pendingPackets list and try resend them if possible.
     private func reclaimUnsentPackets(from connection: Connection) {
         assert(connection.state == .Closed, "Connection needs to be closed in order to reclaim its packets: \(connection)")
+        
+        let unsentPackets = connection.reclaimUnsentPackets()
+        for unsentPacket in unsentPackets {
+            let pendingPacket = PendingDataPacket(packet: unsentPacket.dataPacket, completionHandler: unsentPacket.completionHandler)
+            self.pendingPackets.append(pendingPacket)
+        }
+        
+        self.sendPendingPackets()
+    }
+    
+    /// Take unsent packets from a closed NIOConnection, put them into pendingPackets list and try resend them if possible.
+    private func reclaimUnsentPackets(from connection: NIOConnection) {
+        assert(connection.state == .Closed, "NIOConnection needs to be closed in order to reclaim its packets: \(connection)")
         
         let unsentPackets = connection.reclaimUnsentPackets()
         for unsentPacket in unsentPackets {

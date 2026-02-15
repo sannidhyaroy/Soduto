@@ -44,6 +44,7 @@
 		31366D432F4131470013911D /* NIOFoundationCompat in Frameworks */ = {isa = PBXBuildFile; productRef = 31366D422F4131470013911D /* NIOFoundationCompat */; };
 		31366D452F41337E0013911D /* NIOTLS in Frameworks */ = {isa = PBXBuildFile; productRef = 31366D442F41337E0013911D /* NIOTLS */; };
 		31366D472F4143F60013911D /* NIOConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D462F4143F60013911D /* NIOConnection.swift */; };
+		31366D492F414D6F0013911D /* BaseConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D482F414D6F0013911D /* BaseConnection.swift */; };
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
@@ -259,6 +260,7 @@
 		31366D392F412C7E0013911D /* TLSTrustHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSTrustHandler.swift; sourceTree = "<group>"; };
 		31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChannelOptions+Keepalive.swift"; sourceTree = "<group>"; };
 		31366D462F4143F60013911D /* NIOConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOConnection.swift; sourceTree = "<group>"; };
+		31366D482F414D6F0013911D /* BaseConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseConnection.swift; sourceTree = "<group>"; };
 		3152C3F22F353AFA005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F42F353B1E005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F72F368F7B005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
@@ -456,11 +458,11 @@
 		31366D342F412BB80013911D /* NIO */ = {
 			isa = PBXGroup;
 			children = (
-				31366D462F4143F60013911D /* NIOConnection.swift */,
+				31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */,
 				31366D352F412C4A0013911D /* KDEConnectPacketCodec.swift */,
+				31366D462F4143F60013911D /* NIOConnection.swift */,
 				31366D372F412C6F0013911D /* STARTTLSHandler.swift */,
 				31366D392F412C7E0013911D /* TLSTrustHandler.swift */,
-				31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */,
 			);
 			path = NIO;
 			sourceTree = "<group>";
@@ -638,6 +640,7 @@
 				02EC48A91F2296C600C9370F /* Configuration */,
 				31366D342F412BB80013911D /* NIO */,
 				8468BDFE1DEB7F5F003B9925 /* Utils */,
+				31366D482F414D6F0013911D /* BaseConnection.swift */,
 				84D903A11DC696A600E61DA7 /* CertificateUtils.swift */,
 				84FA45CF1DDDCB3D00EF3992 /* Connection.swift */,
 				84FA45D01DDDCB3D00EF3992 /* ConnectionProvider.swift */,
@@ -1125,6 +1128,7 @@
 				0223974F1F0908FB00B0C70A /* TextFieldWithLinks.swift in Sources */,
 				3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */,
 				8499620E1D5728EE002B893A /* Test_Assertions.m in Sources */,
+				31366D492F414D6F0013911D /* BaseConnection.swift in Sources */,
 				8421A8E71D761409008AC833 /* PreferencesWindowController.swift in Sources */,
 				849237991DE06EBC00D95BBA /* ServiceAction.swift in Sources */,
 				31366D3C2F412C8D0013911D /* ChannelOptions+Keepalive.swift in Sources */,

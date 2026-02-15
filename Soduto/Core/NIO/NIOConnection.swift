@@ -752,13 +752,11 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         }
         
         let data = Data(bytes)
-        var buffer = channel.allocator.buffer(capacity: data.count)
-        buffer.writeBytes(data)
-        
         let info = DataPacketSendingInfo(dataPacket: packet, uploadTask: nil, completionHandler: whenCompleted)
         self.packetsSending.append(info)
         
-        channel.writeAndFlush(buffer).whenComplete { [weak self] result in
+        // Write Data directly so RawDataEncoder can process it
+        channel.writeAndFlush(data).whenComplete { [weak self] result in
             switch result {
             case .success:
                 self?.handleWriteComplete(tag: Int(packet.id))

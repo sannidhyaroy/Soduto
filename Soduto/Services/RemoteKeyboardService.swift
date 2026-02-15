@@ -27,7 +27,16 @@ public class RemoteKeyboardService: Service {
     
     private var hasCheckedAccessibility = false
     
+    /// NIO-compatible packet handler.
+    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
+    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isRemoteKeyboardRequestPacket || dataPacket.isPresenterPacket else { return false }
         
         // Check accessibility permissions before processing keyboard input

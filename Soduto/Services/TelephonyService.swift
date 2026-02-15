@@ -64,12 +64,20 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     
     // MARK: Service methods
     
+    /// NIO-compatible packet handler.
+    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
+    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isTelephonyPacket else { return false }
         
 #if DEBUG
-        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)")
+        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
 #else
         Logger.services.debug("handleDataPacket(type: \(dataPacket.type, privacy: .public), id: \(dataPacket.id, privacy: .public)) from device: \(device.id, privacy: .public)")
 #endif
@@ -101,7 +109,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         catch {
             Logger.services.error("Error while handling telephony packet: \(error, privacy: .public)")
         }
-        
+
         return true
     }
     

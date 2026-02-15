@@ -118,11 +118,19 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     
     // MARK: Service methods
     
+    /// NIO-compatible packet handler.
+    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
+    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isMprisPacket else { return false }
         
-        Logger.services.debug("MPRIS::handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)")
+        Logger.services.debug("MPRIS::handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
         
         do {
             if let playerList = try dataPacket.getPlayerList() {

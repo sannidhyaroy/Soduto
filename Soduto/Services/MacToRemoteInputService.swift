@@ -55,6 +55,12 @@ public class MacToRemoteInputService: Service {
     
     // MARK: - Service Methods
     
+    /// NIO-compatible packet handler.
+    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
+        // This service doesn't handle incoming packets
+        return false
+    }
+    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
         // This service doesn't handle incoming packets
         return false

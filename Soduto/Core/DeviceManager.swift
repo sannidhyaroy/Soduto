@@ -113,6 +113,29 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
         }
     }
     
+    public func connectionProvider(_ provider: ConnectionProvider, didCreateNIOConnection connection: NIOConnection) {
+        Logger.device.debug("connectionProvider(<\(provider, privacy: .public)> didCreateNIOConnection:<\(connection, privacy: .public)>)")
+        
+        assert(connection.state == .Open, "NIOConnection from connection provider expected to be in open state")
+        assert(connection.identity != nil, "NIOConnection identity expected to be not nil")
+        
+        do {
+            let deviceId = try connection.identity!.getDeviceId() as Device.Id
+            if let device = self.devices[deviceId] {
+                device.addConnection(connection)
+            }
+            else if let device = self.recentDevices.removeValue(forKey: deviceId)?.device {
+                self.readdDevice(device, nioConnection: connection)
+            }
+            else {
+                try self.addNewDevice(withId: deviceId, nioConnection: connection)
+            }
+        }
+        catch {
+            Logger.device.error("Error adding new NIOConnection: \(error, privacy: .public)")
+        }
+    }
+    
     
     // MARK: Public methods
     
@@ -182,6 +205,17 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
         self.device(device, didChangeReachabilityStatus: device.isReachable)
     }
     
+    private func addNewDevice(withId id: Device.Id, nioConnection connection: NIOConnection) throws {
+        let device = try Device(connection: connection, config: self.config.deviceConfig(for: id))
+        device.delegate = self
+        
+        let services: [DeviceDataPacketHandler] = self.serviceManager.services(supportingIncomingCapabilities: device.outgoingCapabilities)
+        device.addDataPacketHandlers(services)
+        
+        self.devices[device.id] = device
+        self.device(device, didChangeReachabilityStatus: device.isReachable)
+    }
+    
     private func removeDevice(_ device: Device) {
         // Probably the only delegate event that can be called is `device(:didChangeReachabilityStatus:)`, but precisely this one
         // we want to handle specially - without calling self.serviceManager.setup(for:)
@@ -198,6 +232,13 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     }
     
     private func readdDevice(_ device: Device, connection: Connection) {
+        device.addConnection(connection)
+        device.delegate = self // this goes after connection adding intentionally - we handle event specially
+        self.devices[device.id] = device
+        self.device(device, didChangeReachabilityStatus: device.isReachable)
+    }
+    
+    private func readdDevice(_ device: Device, nioConnection connection: NIOConnection) {
         device.addConnection(connection)
         device.delegate = self // this goes after connection adding intentionally - we handle event specially
         self.devices[device.id] = device

@@ -18,12 +18,10 @@ import NIOPosix
 
 /// Feature flag to enable NIO TCP server implementation.
 /// Set to `true` to use SwiftNIO ServerBootstrap instead of GCDAsyncSocket for accepting connections.
-/// Note: Device integration pending - NIOConnection works but can't be passed to Device yet.
 private let USE_NIO_TCP_SERVER = false
 
 /// Feature flag to enable NIO for outgoing connections.
 /// Set to `true` to use NIOConnection with ClientBootstrap for connections initiated by us.
-/// Note: Device integration pending - NIOConnection works but can't be passed to Device yet.
 private let USE_NIO_OUTGOING = false
 
 enum ConnectionProviderError: Error {
@@ -33,6 +31,7 @@ enum ConnectionProviderError: Error {
 public protocol ConnectionProviderDelegate: AnyObject {
     func isNewConnectionNeeded(byProvider provider: ConnectionProvider, deviceId: String) -> Bool
     func connectionProvider(_ provider: ConnectionProvider, didCreateConnection: Connection)
+    func connectionProvider(_ provider: ConnectionProvider, didCreateNIOConnection: NIOConnection)
 }
 
 public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDelegate, NIOConnectionDelegate {
@@ -323,13 +322,14 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         case .Closed:
             self.pendingNIOConnections.remove(connection)
         case .Open:
-            // TODO: Integrate with delegate when Device supports NIOConnection
-            // For now, NIOConnection can't be passed to the delegate since it expects Connection
-            // Keep connection in pendingNIOConnections to keep it alive until Device integration
-            Logger.network.info("NIOConnection is open - keeping alive for testing (Device integration pending)")
-            connection.readPackets()
-            // Note: NOT removing from pendingNIOConnections - this keeps the connection alive
-            // Once Device supports NIOConnection, we'll remove it here and pass to delegate
+            if let delegate = self.delegate {
+                connection.readPackets()
+                self.pendingNIOConnections.remove(connection)
+                delegate.connectionProvider(self, didCreateNIOConnection: connection)
+            } else {
+                Logger.network.error("No connection provider delegate to take new NIOConnection - closing")
+                connection.close()
+            }
         default:
             break
         }

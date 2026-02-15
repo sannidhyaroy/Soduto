@@ -314,8 +314,17 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     // MARK: Service methods
     
+    /// NIO-compatible packet handler. Delegates to handleDataPacketCore since this service doesn't use Connection.
+    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        
+        return handleDataPacketCore(dataPacket, fromDevice: device)
+    }
+    
+    /// Core packet handling logic that doesn't depend on Connection type.
+    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isNotificationPacket else { return false }
         
         // Log the raw packet (enable only when debugging, as logs may leak sensitive info)
