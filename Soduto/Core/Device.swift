@@ -357,8 +357,14 @@ public class Device: ConnectionDelegate, NIOConnectionDelegate, PairableDelegate
                 self.updateReachabilityStatus()
             }
             else if let index = self.lingeringNIOConnections.firstIndex(of: connection) {
-                let connection = self.lingeringNIOConnections.remove(at: index)
-                self.reclaimUnsentPackets(from: connection)
+                // Don't remove if there are active uploads - keep connection alive until they complete
+                if connection.hasActiveUploadTasks {
+                    Logger.device.debug("Device: keeping closed lingering connection for active uploads")
+                    // The connection will be removed when uploads complete via nioUploadTask delegate
+                } else {
+                    let connection = self.lingeringNIOConnections.remove(at: index)
+                    self.reclaimUnsentPackets(from: connection)
+                }
             }
             else {
                 assertionFailure("NIOConnection not found in device connections list")
@@ -374,6 +380,12 @@ public class Device: ConnectionDelegate, NIOConnectionDelegate, PairableDelegate
             if let nioDelegate = handler as? NIOConnectionDelegate {
                 nioDelegate.nioConnection(connection, didSendPacket: packet, uploadedPayload: uploadedPayload)
             }
+        }
+        
+        // If this was a lingering connection and all uploads are now done, clean it up
+        if let index = self.lingeringNIOConnections.firstIndex(of: connection), !connection.hasActiveUploadTasks {
+            Logger.device.debug("Device: lingering connection uploads complete, removing")
+            self.lingeringNIOConnections.remove(at: index)
         }
     }
     

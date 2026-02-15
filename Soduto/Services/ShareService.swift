@@ -33,7 +33,7 @@ import UserNotifications
 /// Note:
 /// `ShareService` is not the primary `ConnectionDelegate`.
 /// Upload completion events are forwarded by `Device`, which owns the active connection lifecycle.
-public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadTaskDelegate, ConnectionDelegate, UserNotificationActionHandler, NSDraggingDestination {
+public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadTaskDelegate, ConnectionDelegate, NIOConnectionDelegate, UserNotificationActionHandler, NSDraggingDestination {
     
     let un = UNUserNotificationCenter.current()
     let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("AirDrop"))
@@ -268,6 +268,44 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
         } else {
             pendingExtensionUploads[deviceId] = tracking
         }
+    }
+    
+    
+    // MARK: NIOConnectionDelegate
+    
+    public func nioConnection(_ connection: NIOConnection, didSwitchToState state: NIOConnection.State) {
+        // No action needed for state changes
+    }
+    
+    public func nioConnection(_ connection: NIOConnection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
+        guard packet.hasPayload(), packet.type == DataPacket.sharePacketType else { return }
+        
+        self.showUploadFinishNotification(nioConnection: connection, succeeded: uploadedPayload)
+        
+        // Track extension-initiated uploads and report final status when all complete
+        guard let deviceId = try? connection.identity?.getDeviceId(), var tracking = pendingExtensionUploads[deviceId] else { return }
+        
+        if uploadedPayload {
+            tracking.succeeded += 1
+        } else {
+            tracking.failed += 1
+        }
+        
+        if tracking.succeeded + tracking.failed >= tracking.total {
+            pendingExtensionUploads.removeValue(forKey: deviceId)
+            let status = tracking.failed > 0 ? "failed" : "success"
+            Self.reportExtensionTransferStatus(deviceId: deviceId, status: status)
+        } else {
+            pendingExtensionUploads[deviceId] = tracking
+        }
+    }
+    
+    public func nioConnection(_ connection: NIOConnection, didReadPacket packet: DataPacket) {
+        // Packet reading is handled by Device, not here
+    }
+    
+    public func nioConnectionCapacityChanged(_ connection: NIOConnection) {
+        // No action needed for capacity changes
     }
     
     
@@ -680,6 +718,41 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
     }
     
     private func showUploadFinishNotification(connection: Connection, succeeded: Bool) {
+        let deviceName = (try? connection.identity?.getDeviceName()) ?? "Unknown Device"
+        let deviceId = (try? connection.identity?.getDeviceId()) ?? "unknown-device"
+        let title = deviceName
+        let subtitle = succeeded ? "Outbound Transfer Successful" : "Outbound Transfer Failed"
+        let body = succeeded ? "File sent to \(deviceName)" : "Failed to send file to \(deviceName)"
+        let notificationId = "\(self.id).upload.finish.\(deviceId)"
+        let notification = UNMutableNotificationContent()
+        notification.title = title
+        notification.subtitle = subtitle
+        notification.body = body
+        notification.sound = .default
+        notification.setUrgency(.active)
+        if let iconPath = self.notificationIconPath {
+            let notificationIconURL = URL(fileURLWithPath: iconPath)
+            do {
+                let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
+                notification.attachments = [attachment]
+            } catch {
+                print("Failed to attach upload icon: \(error.localizedDescription)")
+            }
+        }
+        
+        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+        un.add(request) { error in
+            if let error = error {
+                print("Failed to post upload notification: \(error.localizedDescription)")
+            }
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            self.un.removeNotification(withId: notificationId)
+        }
+    }
+    
+    private func showUploadFinishNotification(nioConnection connection: NIOConnection, succeeded: Bool) {
         let deviceName = (try? connection.identity?.getDeviceName()) ?? "Unknown Device"
         let deviceId = (try? connection.identity?.getDeviceId()) ?? "unknown-device"
         let title = deviceName

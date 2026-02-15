@@ -317,6 +317,8 @@ public class NIOUploadTask {
     }
     
     private func sendNextChunk(context: ChannelHandlerContext) {
+        Logger.network.debug("NIOUploadTask sendNextChunk: bytesSent=\(self.bytesSent, privacy: .public), payloadSize=\(self.payloadSize ?? -1, privacy: .public), hasBytesAvailable=\(self.payload.hasBytesAvailable, privacy: .public), streamStatus=\(self.payload.streamStatus.rawValue, privacy: .public)")
+        
         guard self.payload.hasBytesAvailable else {
             // All data sent
             Logger.network.debug("NIOUploadTask finished sending \(self.bytesSent, privacy: .public) bytes")
@@ -338,12 +340,14 @@ public class NIOUploadTask {
         }
         
         let read = self.payload.read(&self.readBuffer, maxLength: bytesToRead)
+        Logger.network.debug("NIOUploadTask read \(read, privacy: .public) bytes from stream")
         guard read > 0 else {
             if read < 0 {
-                Logger.network.error("NIOUploadTask: stream read error")
+                Logger.network.error("NIOUploadTask: stream read error (streamError=\(String(describing: self.payload.streamError), privacy: .public))")
                 context.close(promise: nil)
             } else {
                 // read == 0, stream ended
+                Logger.network.debug("NIOUploadTask: stream returned 0 bytes, closing")
                 context.close(promise: nil)
             }
             return
@@ -353,10 +357,12 @@ public class NIOUploadTask {
         buffer.writeBytes(self.readBuffer[0..<read])
         
         self.bytesSent += Int64(read)
+        Logger.network.debug("NIOUploadTask writing \(read, privacy: .public) bytes, total sent=\(self.bytesSent, privacy: .public)")
         
         context.writeAndFlush(NIOAny(buffer)).whenComplete { [weak self] result in
             switch result {
             case .success:
+                Logger.network.debug("NIOUploadTask write succeeded")
                 // Continue sending on the event loop
                 context.eventLoop.execute {
                     self?.handleWriteComplete(context: context)

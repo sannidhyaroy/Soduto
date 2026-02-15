@@ -151,6 +151,9 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     /// Reference to the packet handler in the pipeline.
     private var connectionHandler: NIOConnectionHandler?
     
+    /// If true, connection will close after all pending uploads complete.
+    private var shouldCloseAfterUploads: Bool = false
+    
     // MARK: Initialization / Deinitialization
     
     /// Creates an outgoing connection to the specified address.
@@ -311,7 +314,44 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     }
     
     public func closeAfterWriting() {
-        self.channel?.close(mode: .output, promise: nil)
+        if self.hasActiveUploadTasks {
+            // Don't close yet - set flag to close after uploads complete
+            Logger.network.debug("NIOConnection: deferring close until uploads complete")
+            self.shouldCloseAfterUploads = true
+        } else {
+            self.channel?.close(mode: .output, promise: nil)
+        }
+    }
+    
+    /// Returns true if there are active upload tasks that haven't completed yet.
+    public var hasActiveUploadTasks: Bool {
+        return self.packetsSending.contains { info in
+            guard let uploadTask = info.nioUploadTask else { return false }
+            return uploadTask.isStarted && info.payloadSent == nil
+        }
+    }
+    
+    /// Extracts active upload tasks from this connection for transfer to another owner.
+    /// The tasks are removed from this connection and returned.
+    /// This prevents the upload tasks from being closed when this connection closes.
+    public func extractActiveUploadTasks() -> [NIOUploadTask] {
+        var activeTasks: [NIOUploadTask] = []
+        var indicesToRemove: [Int] = []
+        
+        for (index, info) in self.packetsSending.enumerated() {
+            if let uploadTask = info.nioUploadTask, uploadTask.isStarted && info.payloadSent == nil {
+                activeTasks.append(uploadTask)
+                indicesToRemove.append(index)
+            }
+        }
+        
+        // Remove extracted tasks from packetsSending (in reverse order to preserve indices)
+        for index in indicesToRemove.reversed() {
+            self.packetsSending.remove(at: index)
+        }
+        
+        Logger.network.debug("NIOConnection: extracted \(activeTasks.count, privacy: .public) active upload tasks")
+        return activeTasks
     }
     
     /// Helper function to validate peer certificate.
@@ -349,6 +389,12 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         if let packetSent = self.packetsSending[index].packetSent {
             let packetInfo = self.packetsSending.remove(at: index)
             self.finalizeSending(packet: packetInfo.dataPacket, completionHandler: packetInfo.completionHandler, packetSent: packetSent, payloadSent: payloadSent)
+        }
+        
+        // If we were waiting to close and no more active uploads, close now
+        if self.shouldCloseAfterUploads && !self.hasActiveUploadTasks {
+            Logger.network.debug("NIOConnection: all uploads complete, closing now")
+            self.channel?.close(mode: .output, promise: nil)
         }
     }
     
