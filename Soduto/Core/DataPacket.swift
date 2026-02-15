@@ -37,6 +37,7 @@ public struct DataPacket: CustomStringConvertible {
     var payloadSize: Int64? = nil
     var payloadInfo: PayloadInfo?
     var downloadTask: DownloadTask? = nil
+    var nioDownloadTask: NIODownloadTask? = nil
     
     public var description: String {
         do {
@@ -117,7 +118,7 @@ public struct DataPacket: CustomStringConvertible {
     }
     
     public func hasPayload() -> Bool {
-        return self.payload != nil || self.downloadTask != nil
+        return self.payload != nil || self.downloadTask != nil || self.nioDownloadTask != nil
     }
     
     

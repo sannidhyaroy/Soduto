@@ -577,19 +577,45 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     fileprivate func handleReceivedData(_ data: Data) {
         Logger.network.debug("NIOConnection received \(data.count, privacy: .public) bytes")
         
-        guard let packet = DataPacket(data: data) else {
+        guard var mutablePacket = DataPacket(data: data) else {
             Logger.network.error("Could not deserialize received data packet")
             return
         }
         
-        if packet.payloadInfo != nil {
-            // TODO: DownloadTask integration requires Connection type
-            // For now, payload downloads are not supported with NIOConnection
-            // This will be addressed when DownloadTask is migrated to support NIOConnection
-            Logger.network.debug("Packet has payload but NIOConnection doesn't support DownloadTask yet")
+        if mutablePacket.payloadInfo != nil {
+            // Create NIODownloadTask for packets with payload
+            // Extract host IP from legacy SocketAddress
+            // IPv4 format: "ip:port", IPv6 format: "[ip]:port"
+            let peerHost: String
+            let addressDesc = self.peerAddress.description
+            if addressDesc.hasPrefix("[") {
+                // IPv6: extract between brackets
+                if let endBracket = addressDesc.firstIndex(of: "]") {
+                    peerHost = String(addressDesc[addressDesc.index(after: addressDesc.startIndex)..<endBracket])
+                } else {
+                    peerHost = addressDesc
+                }
+            } else {
+                // IPv4: extract before last colon
+                if let lastColon = addressDesc.lastIndex(of: ":") {
+                    peerHost = String(addressDesc[..<lastColon])
+                } else {
+                    peerHost = addressDesc
+                }
+            }
+            
+            mutablePacket.nioDownloadTask = NIODownloadTask(
+                packet: mutablePacket,
+                peerHost: peerHost,
+                hostIdentity: self.hostIdentity,
+                expectedPeerCertificate: self.peerCertificate,
+                eventLoopGroup: self.eventLoopGroup,
+                writeQueue: self.downloadQueue,
+                delegateQueue: .main
+            )
         }
         
-        self.handle(packet: packet)
+        self.handle(packet: mutablePacket)
         
         if self.packetsExpected > 0 {
             self.packetsExpected -= 1

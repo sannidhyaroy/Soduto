@@ -46,6 +46,7 @@
 		31366D472F4143F60013911D /* NIOConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D462F4143F60013911D /* NIOConnection.swift */; };
 		31366D492F414D6F0013911D /* BaseConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D482F414D6F0013911D /* BaseConnection.swift */; };
 		31366D4B2F415BB00013911D /* NIOUploadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D4A2F415BB00013911D /* NIOUploadTask.swift */; };
+		31366D4D2F41687B0013911D /* NIODownloadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D4C2F41687B0013911D /* NIODownloadTask.swift */; };
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
@@ -263,6 +264,7 @@
 		31366D462F4143F60013911D /* NIOConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOConnection.swift; sourceTree = "<group>"; };
 		31366D482F414D6F0013911D /* BaseConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseConnection.swift; sourceTree = "<group>"; };
 		31366D4A2F415BB00013911D /* NIOUploadTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOUploadTask.swift; sourceTree = "<group>"; };
+		31366D4C2F41687B0013911D /* NIODownloadTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIODownloadTask.swift; sourceTree = "<group>"; };
 		3152C3F22F353AFA005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F42F353B1E005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F72F368F7B005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
@@ -463,6 +465,7 @@
 				31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */,
 				31366D352F412C4A0013911D /* KDEConnectPacketCodec.swift */,
 				31366D462F4143F60013911D /* NIOConnection.swift */,
+				31366D4C2F41687B0013911D /* NIODownloadTask.swift */,
 				31366D4A2F415BB00013911D /* NIOUploadTask.swift */,
 				31366D372F412C6F0013911D /* STARTTLSHandler.swift */,
 				31366D392F412C7E0013911D /* TLSTrustHandler.swift */,
@@ -1085,6 +1088,7 @@
 				84C613E31DECBF6C00CE7F7A /* UploadTask.swift in Sources */,
 				F80E30722DBE0D880047D068 /* MacToRemoteInputService.swift in Sources */,
 				84FA45E81DDE088B00EF3992 /* ServiceManager.swift in Sources */,
+				31366D4D2F41687B0013911D /* NIODownloadTask.swift in Sources */,
 				F826E6CD2DB4F12500E736CE /* ModernUIStyleKit.swift in Sources */,
 				F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */,
 				0236B63C1F9936C80020DA9F /* AboutWindowController.swift in Sources */,
