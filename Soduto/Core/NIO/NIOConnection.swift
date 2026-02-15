@@ -65,7 +65,7 @@ public protocol NIOPairableDelegate: AnyObject {
 /// Note: This class does not conform to `Pairable` directly because it uses
 /// NIO-specific delegate types (`NIOPairableDelegate`). The pairing interface
 /// is identical but type-safe for NIO contexts.
-public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerDelegate, UploadTaskDelegate {
+public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerDelegate, NIOUploadTaskDelegate {
     
     // MARK: Types
     
@@ -87,16 +87,16 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     
     public struct DataPacketSendingInfo {
         let dataPacket: DataPacket
-        let uploadTask: UploadTask?
+        let nioUploadTask: NIOUploadTask?
         let completionHandler: SendingCompletionHandler?
         var packetSent: Bool? = nil
         var payloadSent: Bool? = nil
         
-        init(dataPacket: DataPacket, uploadTask: UploadTask?, completionHandler: SendingCompletionHandler?) {
+        init(dataPacket: DataPacket, nioUploadTask: NIOUploadTask?, completionHandler: SendingCompletionHandler?) {
             self.dataPacket = dataPacket
-            self.uploadTask = uploadTask
+            self.nioUploadTask = nioUploadTask
             self.completionHandler = completionHandler
-            if self.uploadTask == nil {
+            if self.nioUploadTask == nil {
                 self.payloadSent = false
             }
         }
@@ -337,12 +337,12 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         socket.startTLS(settings)
     }
     
-    // MARK: UploadTaskDelegate
+    // MARK: NIOUploadTaskDelegate
     
-    public func uploadTask(_ task: UploadTask, finishedWithSuccess payloadSent: Bool) {
-        Logger.network.debug("uploadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(payloadSent, privacy: .public)>)")
+    public func nioUploadTask(_ task: NIOUploadTask, finishedWithSuccess payloadSent: Bool) {
+        Logger.network.debug("nioUploadTask finishedWithSuccess:<\(payloadSent, privacy: .public)>")
         
-        guard let index = self.packetsSending.firstIndex(where: { $0.uploadTask === task }) else { return }
+        guard let index = self.packetsSending.firstIndex(where: { $0.nioUploadTask === task }) else { return }
         
         self.packetsSending[index].payloadSent = payloadSent
         
@@ -752,7 +752,7 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         }
         
         let data = Data(bytes)
-        let info = DataPacketSendingInfo(dataPacket: packet, uploadTask: nil, completionHandler: whenCompleted)
+        let info = DataPacketSendingInfo(dataPacket: packet, nioUploadTask: nil, completionHandler: whenCompleted)
         self.packetsSending.append(info)
         
         // Write Data directly so RawDataEncoder can process it
@@ -774,11 +774,57 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
             return true
         }
         
-        // TODO: UploadTask integration requires Connection type
-        // For now, payload uploads are not supported with NIOConnection
-        // This will be addressed when UploadTask is migrated to support NIOConnection
-        Logger.network.error("NIOConnection doesn't support payload uploads yet - packet type: \(packet.type, privacy: .public)")
-        self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
+        // Get the peer certificate for verification during payload transfer
+        let peerCertificate: SecCertificate?
+        if let deviceId = try? self.identity?.getDeviceId() {
+            peerCertificate = self.config.deviceConfig(for: deviceId).certificate
+        } else {
+            peerCertificate = nil
+        }
+        
+        // Create NIO upload task
+        guard let uploadTask = NIOUploadTask(
+            packet: packet,
+            hostIdentity: self.hostIdentity,
+            expectedPeerCertificate: peerCertificate,
+            eventLoopGroup: self.eventLoopGroup,
+            delegateQueue: .main
+        ) else {
+            Logger.network.error("Failed to create NIOUploadTask for packet type: \(packet.type, privacy: .public)")
+            self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
+            return true
+        }
+        
+        uploadTask.delegate = self
+        
+        // Add payload info to the packet
+        var payloadPacket = packet
+        payloadPacket.payloadInfo = uploadTask.payloadInfo
+        
+        // Serialize and send the packet
+        guard let bytes = try? payloadPacket.serialize() else {
+            Logger.network.error("Failed to serialize payload packet type: \(packet.type, privacy: .public)")
+            uploadTask.close()
+            self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
+            return true
+        }
+        
+        let data = Data(bytes)
+        let info = DataPacketSendingInfo(dataPacket: payloadPacket, nioUploadTask: uploadTask, completionHandler: whenCompleted)
+        self.packetsSending.append(info)
+        
+        Logger.network.debug("Sending payload packet type: \(packet.type, privacy: .public) with payload on port \(uploadTask.payloadInfo["port"] as? UInt16 ?? 0, privacy: .public)")
+        
+        self.channel!.writeAndFlush(data).whenComplete { [weak self] result in
+            switch result {
+            case .success:
+                self?.handleWriteComplete(tag: Int(payloadPacket.id))
+            case .failure(let error):
+                Logger.network.error("Failed to write payload packet: \(error, privacy: .public)")
+                uploadTask.close()
+            }
+        }
+        
         return true
     }
     
@@ -822,14 +868,14 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     private func discardUnsentPackets(silently: Bool) -> [(dataPacket: DataPacket, completionHandler: SendingCompletionHandler?)] {
         var results: [(dataPacket: DataPacket, completionHandler: SendingCompletionHandler?)] = []
         for info in self.packetsSending {
-            guard info.packetSent == nil && info.uploadTask?.isStarted != true else { continue }
-            info.uploadTask?.close()
+            guard info.packetSent == nil && info.nioUploadTask?.isStarted != true else { continue }
+            info.nioUploadTask?.close()
             if !silently {
                 self.finalizeSending(packet: info.dataPacket, completionHandler: info.completionHandler, packetSent: false, payloadSent: false)
             }
             results.append((dataPacket: info.dataPacket, completionHandler: info.completionHandler))
         }
-        self.packetsSending = self.packetsSending.filter { $0.packetSent != nil || $0.uploadTask?.isStarted == true }
+        self.packetsSending = self.packetsSending.filter { $0.packetSent != nil || $0.nioUploadTask?.isStarted == true }
         return results
     }
     

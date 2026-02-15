@@ -45,6 +45,7 @@
 		31366D452F41337E0013911D /* NIOTLS in Frameworks */ = {isa = PBXBuildFile; productRef = 31366D442F41337E0013911D /* NIOTLS */; };
 		31366D472F4143F60013911D /* NIOConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D462F4143F60013911D /* NIOConnection.swift */; };
 		31366D492F414D6F0013911D /* BaseConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D482F414D6F0013911D /* BaseConnection.swift */; };
+		31366D4B2F415BB00013911D /* NIOUploadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D4A2F415BB00013911D /* NIOUploadTask.swift */; };
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
@@ -261,6 +262,7 @@
 		31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChannelOptions+Keepalive.swift"; sourceTree = "<group>"; };
 		31366D462F4143F60013911D /* NIOConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOConnection.swift; sourceTree = "<group>"; };
 		31366D482F414D6F0013911D /* BaseConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseConnection.swift; sourceTree = "<group>"; };
+		31366D4A2F415BB00013911D /* NIOUploadTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOUploadTask.swift; sourceTree = "<group>"; };
 		3152C3F22F353AFA005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F42F353B1E005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F72F368F7B005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
@@ -461,6 +463,7 @@
 				31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */,
 				31366D352F412C4A0013911D /* KDEConnectPacketCodec.swift */,
 				31366D462F4143F60013911D /* NIOConnection.swift */,
+				31366D4A2F415BB00013911D /* NIOUploadTask.swift */,
 				31366D372F412C6F0013911D /* STARTTLSHandler.swift */,
 				31366D392F412C7E0013911D /* TLSTrustHandler.swift */,
 			);
@@ -1108,6 +1111,7 @@
 				024F8B191F24FC7700D6E504 /* ServicePreferencesViewController.swift in Sources */,
 				849237A11DE224CF00D95BBA /* FindMyPhoneService.swift in Sources */,
 				84FA45E41DDDDB7F00EF3992 /* InterfaceElementTags.swift in Sources */,
+				31366D4B2F415BB00013911D /* NIOUploadTask.swift in Sources */,
 				849237A31DE4E76E00D95BBA /* UserNotificationManager.swift in Sources */,
 				845BE2E21EC246EE00F3BD62 /* LoadingWindowController.swift in Sources */,
 				84651A761E5AEBE100D17601 /* SftpService.swift in Sources */,
