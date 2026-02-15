@@ -43,6 +43,7 @@
 		31366D412F4130750013911D /* NIOPosix in Frameworks */ = {isa = PBXBuildFile; productRef = 31366D402F4130750013911D /* NIOPosix */; };
 		31366D432F4131470013911D /* NIOFoundationCompat in Frameworks */ = {isa = PBXBuildFile; productRef = 31366D422F4131470013911D /* NIOFoundationCompat */; };
 		31366D452F41337E0013911D /* NIOTLS in Frameworks */ = {isa = PBXBuildFile; productRef = 31366D442F41337E0013911D /* NIOTLS */; };
+		31366D472F4143F60013911D /* NIOConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D462F4143F60013911D /* NIOConnection.swift */; };
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
@@ -257,6 +258,7 @@
 		31366D372F412C6F0013911D /* STARTTLSHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = STARTTLSHandler.swift; sourceTree = "<group>"; };
 		31366D392F412C7E0013911D /* TLSTrustHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSTrustHandler.swift; sourceTree = "<group>"; };
 		31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChannelOptions+Keepalive.swift"; sourceTree = "<group>"; };
+		31366D462F4143F60013911D /* NIOConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOConnection.swift; sourceTree = "<group>"; };
 		3152C3F22F353AFA005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F42F353B1E005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F72F368F7B005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
@@ -454,6 +456,7 @@
 		31366D342F412BB80013911D /* NIO */ = {
 			isa = PBXGroup;
 			children = (
+				31366D462F4143F60013911D /* NIOConnection.swift */,
 				31366D352F412C4A0013911D /* KDEConnectPacketCodec.swift */,
 				31366D372F412C6F0013911D /* STARTTLSHandler.swift */,
 				31366D392F412C7E0013911D /* TLSTrustHandler.swift */,
@@ -1108,6 +1111,7 @@
 				84FA45D71DDDCB3D00EF3992 /* Connection.swift in Sources */,
 				84FFDA2A1E1D8D370069AC9A /* SimplePing.m in Sources */,
 				311BC28F2F2865A200E4A33F /* UserNotificationHelper.swift in Sources */,
+				31366D472F4143F60013911D /* NIOConnection.swift in Sources */,
 				849961C61D5728B2002B893A /* ExceptionUtils.m in Sources */,
 				F826E6C72DB302F000E736CE /* RunCommandService.swift in Sources */,
 				8456F4AA1D7DEA47006EFE19 /* DefaultPairingHandler.swift in Sources */,
