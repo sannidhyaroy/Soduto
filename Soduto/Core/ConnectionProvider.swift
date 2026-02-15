@@ -18,7 +18,7 @@ import NIOPosix
 
 /// Feature flag to enable NIO TCP server implementation.
 /// Set to `true` to use SwiftNIO ServerBootstrap instead of GCDAsyncSocket for accepting connections.
-/// Note: Requires NIOConnection (Phase 4) to be complete for full functionality.
+/// Note: Device integration pending - NIOConnection works but can't be passed to Device yet.
 private let USE_NIO_TCP_SERVER = false
 
 enum ConnectionProviderError: Error {
@@ -30,7 +30,7 @@ public protocol ConnectionProviderDelegate: AnyObject {
     func connectionProvider(_ provider: ConnectionProvider, didCreateConnection: Connection)
 }
 
-public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDelegate {
+public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDelegate, NIOConnectionDelegate {
     
     static public let udpPort: UInt16 = 1716
     static public let minTcpPort: UInt16 = 1716
@@ -47,6 +47,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
     private let pathMonitorQueue: DispatchQueue = DispatchQueue(label: "com.soduto.NetworkMonitor")
     private let tcpSocket: GCDAsyncSocket = GCDAsyncSocket(delegate: nil, delegateQueue: DispatchQueue.main)
     private var pendingConnections: Set<Connection> = Set<Connection>()
+    private var pendingNIOConnections: Set<NIOConnection> = Set<NIOConnection>()
     private var isStarted: Bool = false
     private var lastAnnouncementTime: TimeInterval = 0.0
     private var announcementTimer: Timer? = nil
@@ -309,6 +310,75 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
     public func connectionCapacityChanged(_ connection: Connection) { }
     
     
+    // MARK: NIOConnectionDelegate
+    
+    public func nioConnection(_ connection: NIOConnection, didSwitchToState state: NIOConnection.State) {
+        Logger.network.debug("nioConnection(<\(String(describing: connection), privacy: .public)> switchedToState:<\(String(describing: state), privacy: .public)>)")
+        switch state {
+        case .Closed:
+            self.pendingNIOConnections.remove(connection)
+        case .Open:
+            // TODO: Integrate with delegate when Device supports NIOConnection
+            // For now, NIOConnection can't be passed to the delegate since it expects Connection
+            // Keep connection in pendingNIOConnections to keep it alive until Device integration
+            Logger.network.info("NIOConnection is open - keeping alive for testing (Device integration pending)")
+            connection.readPackets()
+            // Note: NOT removing from pendingNIOConnections - this keeps the connection alive
+            // Once Device supports NIOConnection, we'll remove it here and pass to delegate
+        default:
+            break
+        }
+    }
+    
+    public func nioConnection(_ connection: NIOConnection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
+        Logger.network.debug("nioConnection(<\(connection, privacy: .public)> didSendPacket:<\(packet, privacy: .public)>)")
+        
+        // After sending identity packet (outgoing connection), secure as server
+        do {
+            guard let identity = connection.identity else { throw ConnectionProviderError.IdentityAbsent }
+            let protocolVersion = try identity.getProtocolVersion()
+            if protocolVersion >= ConnectionProvider.minVersionWithSSLSupport {
+                // Beware that securing as server while connection initiated by self
+                connection.secureServer()
+            }
+            connection.finishInitialization()
+        }
+        catch {
+            Logger.network.error("Failed to initialize NIOConnection: \(error, privacy: .public)")
+            connection.close()
+        }
+    }
+    
+    public func nioConnection(_ connection: NIOConnection, didReadPacket packet: DataPacket) {
+        Logger.network.debug("nioConnection(<\(connection, privacy: .public)> didReadPacket:<\(packet.type, privacy: .public)>)")
+        
+        // Only process identity packet during initialization
+        guard connection.state == .Initializing else {
+            // Connection already initialized - packet would normally go to Device
+            // For now, just log it since Device integration is pending
+            Logger.network.debug("Received \(packet.type, privacy: .public) packet on open NIOConnection (Device integration pending)")
+            return
+        }
+        
+        // The only packet we are waiting for is first identity packet to initialize connection with
+        do {
+            try connection.applyIdentity(packet: packet)
+            let protocolVersion = try packet.getProtocolVersion()
+            if protocolVersion >= ConnectionProvider.minVersionWithSSLSupport {
+                // Beware that securing as client while connection initiated by the peer
+                connection.secureClient()
+            }
+            connection.finishInitialization()
+        }
+        catch {
+            Logger.network.error("Failed to initialize NIOConnection: \(error, privacy: .public)")
+            connection.close()
+        }
+    }
+    
+    public func nioConnectionCapacityChanged(_ connection: NIOConnection) { }
+    
+    
     // MARK: - NIO UDP Implementation
     
     /// Starts the NIO UDP channel for receiving and sending broadcasts.
@@ -455,11 +525,25 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
     fileprivate func handleTcpConnection(channel: Channel, remoteAddress: NIOCore.SocketAddress) {
         Logger.network.debug("TCP accepted connection from \(String(describing: remoteAddress), privacy: .public)")
         
-        // TODO: Create NIOConnection when Phase 4 is complete
-        // For now, we'll close the channel since Connection requires GCDAsyncSocket
-        // This is temporary until NIOConnection is implemented
-        Logger.network.info("NIO TCP server received connection but NIOConnection not yet implemented - closing")
-        channel.close(promise: nil)
+        guard let group = self.nioEventLoopGroup else {
+            Logger.network.error("No event loop group available for NIOConnection")
+            channel.close(promise: nil)
+            return
+        }
+        
+        // Create NIOConnection from the accepted channel
+        if let connection = NIOConnection(channel: channel, config: self.config, eventLoopGroup: group) {
+            Logger.network.debug("Created NIOConnection, adding to pending set")
+            connection.delegate = self
+            self.pendingNIOConnections.insert(connection)
+            Logger.network.debug("Pending NIOConnections count: \(self.pendingNIOConnections.count, privacy: .public)")
+            
+            // Read initial identity packet
+            connection.readOnePacket()
+        } else {
+            Logger.network.error("Failed to create NIOConnection from channel")
+            channel.close(promise: nil)
+        }
     }
     
     // MARK: Private methrod
@@ -511,7 +595,9 @@ private final class NIOUdpHandler: ChannelInboundHandler {
 // MARK: - NIO TCP Connection Handler
 
 /// Channel handler for TCP connections accepted by the NIO server.
-private final class NIOTcpConnectionHandler: ChannelInboundHandler {
+/// This handler simply notifies ConnectionProvider and then removes itself,
+/// allowing NIOConnection to take over the channel pipeline.
+private final class NIOTcpConnectionHandler: ChannelInboundHandler, RemovableChannelHandler {
     typealias InboundIn = ByteBuffer
     
     private weak var connectionProvider: ConnectionProvider?
@@ -527,11 +613,15 @@ private final class NIOTcpConnectionHandler: ChannelInboundHandler {
         if let remoteAddress = context.remoteAddress {
             connectionProvider?.handleTcpConnection(channel: context.channel, remoteAddress: remoteAddress)
         }
+        
+        // Remove ourselves from the pipeline - NIOConnection will add its own handlers
+        context.pipeline.removeHandler(self, promise: nil)
     }
     
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        // Data handling will be implemented with NIOConnection
-        // For now, this is a placeholder
+        // Should not receive data - we remove ourselves immediately
+        // Forward to next handler if somehow called
+        context.fireChannelRead(data)
     }
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {

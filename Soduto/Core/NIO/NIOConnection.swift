@@ -217,10 +217,14 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         super.init()
         
         // Set up the channel pipeline
-        self.setupChannelPipeline(channel: channel)
+        self.setupChannelPipeline(channel: channel).whenFailure { [weak self] error in
+            Logger.network.error("Failed to set up NIOConnection pipeline: \(error, privacy: .public)")
+            self?.close()
+        }
     }
     
     deinit {
+        Logger.network.debug("NIOConnection deinit called")
         NotificationCenter.default.removeObserver(self)
         self.state = .Closed
         self.channel?.close(promise: nil)
@@ -448,6 +452,8 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     
     @discardableResult
     private func setupChannelPipeline(channel: Channel) -> EventLoopFuture<Void> {
+        Logger.network.debug("Setting up NIOConnection pipeline for channel: \(String(describing: channel), privacy: .public)")
+        
         // Create handlers - wrap decoder/encoder protocols in their handler types
         let decoder = ByteToMessageHandler(KDEConnectPacketDecoder())
         let encoder = MessageToByteHandler(RawDataEncoder())
@@ -455,9 +461,13 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         
         // Add handlers to pipeline
         return channel.pipeline.addHandler(decoder).flatMap {
-            channel.pipeline.addHandler(encoder)
+            Logger.network.debug("Added packet decoder to pipeline")
+            return channel.pipeline.addHandler(encoder)
         }.flatMap {
-            channel.pipeline.addHandler(self.connectionHandler!)
+            Logger.network.debug("Added packet encoder to pipeline")
+            return channel.pipeline.addHandler(self.connectionHandler!)
+        }.map {
+            Logger.network.debug("NIOConnection pipeline setup complete")
         }
     }
     
@@ -565,6 +575,8 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     // MARK: Private - Packet Handling
     
     fileprivate func handleReceivedData(_ data: Data) {
+        Logger.network.debug("NIOConnection received \(data.count, privacy: .public) bytes")
+        
         guard let packet = DataPacket(data: data) else {
             Logger.network.error("Could not deserialize received data packet")
             return
@@ -591,13 +603,23 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         Logger.network.debug("handle(packet type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(self, privacy: .public)]")
 #endif
         
+        // During initialization, pass all packets to delegate (e.g., identity packet)
+        // The delegate (ConnectionProvider) will call applyIdentity() and finish initialization
+        if self.state == .Initializing {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.delegate?.nioConnection(self, didReadPacket: packet)
+            }
+            return
+        }
+        
         // Handle pairing packets directly
         if packet.isPairingPacket {
             self.handlePairingPacket(packet)
             return
         }
         
-        // If not paired, send unpair notification and don't process further
+        // If not paired (but connection is Open), send unpair notification and don't process further
         if self.pairingStatus != .Paired {
             if self.pairingStatus == .Unpaired {
                 _ = self.send(DataPacket.unpairPacket())
@@ -693,7 +715,7 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     }
     
     fileprivate func handleChannelInactive() {
-        Logger.network.debug("NIOConnection channel closed")
+        Logger.network.debug("NIOConnection channel closed - state was: \(String(describing: self.state), privacy: .public)")
         self.state = .Closed
         _ = self.discardUnsentPackets(silently: true)
     }
