@@ -335,7 +335,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
     // MARK: NIODownloadTaskDelegate
     
     public func nioDownloadTask(_ task: NIODownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("nioDownloadTask finishedWithSuccess:<\(success, privacy: .public)>")
+        Logger.services.debug("downloadTask(id:<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         guard let index = self.nioDownloadInfos.firstIndex(where: { $0.task === task }) else { return }
         let info = self.nioDownloadInfos.remove(at: index)
@@ -843,7 +843,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
         let title = "Remote Device"
         let subtitle = "Inbound Transfer in Progress"
         let body = "Receiving File"
-        let notificationId = "\(self.id).niodownload.\(task.id)"
+        let notificationId = "\(self.id).download.\(task.id)"
         
         let notification = UNMutableNotificationContent()
         notification.title = title
@@ -883,7 +883,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
         else {
             body = "File received"
         }
-        let notificationId = "\(self.id).niodownload.\(task.id)"
+        let notificationId = "\(self.id).download.\(task.id)"
         
         let notification = UNMutableNotificationContent()
         if let url = finalUrl {

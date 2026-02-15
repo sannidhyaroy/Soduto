@@ -99,12 +99,12 @@ public class NIODownloadTask {
         delegateQueue: DispatchQueue = .main
     ) {
         guard let payloadInfo = packet.payloadInfo else {
-            Logger.network.error("NIODownloadTask: packet has no payloadInfo")
+            Logger.network.error("DownloadTask: packet has no payloadInfo")
             return nil
         }
         
         guard let portNumber = payloadInfo[PayloadInfoProperty.port.rawValue] as? NSNumber else {
-            Logger.network.error("NIODownloadTask: payloadInfo missing port")
+            Logger.network.error("DownloadTask: payloadInfo missing port")
             return nil
         }
         
@@ -117,8 +117,6 @@ public class NIODownloadTask {
         self.eventLoopGroup = eventLoopGroup
         self.writeQueue = writeQueue
         self.delegateQueue = delegateQueue
-        
-        Logger.network.debug("NIODownloadTask initialized for port \(self.payloadPort, privacy: .public)")
     }
     
     deinit {
@@ -133,19 +131,16 @@ public class NIODownloadTask {
     public func start(withStream stream: OutputStream) {
         self.stream = stream
         
-        Logger.network.debug("NIODownloadTask starting download from \(self.peerHost, privacy: .public):\(self.payloadPort, privacy: .public)")
-        
         do {
             try self.connect()
         } catch {
-            Logger.network.error("NIODownloadTask failed to connect: \(error, privacy: .public)")
+            Logger.network.error("DownloadTask failed to connect: \(error, privacy: .public)")
             self.downloadFinished(success: false)
         }
     }
     
     /// Cancels the download.
     public func cancel() {
-        Logger.network.debug("NIODownloadTask cancelled")
         self.channel?.close(promise: nil)
     }
     
@@ -153,8 +148,6 @@ public class NIODownloadTask {
     public func close() {
         guard !isClosed else { return }
         isClosed = true
-        
-        Logger.network.debug("NIODownloadTask close()")
         
         self.delegate = nil
         self.channel?.close(promise: nil)
@@ -166,8 +159,6 @@ public class NIODownloadTask {
     private func connect() throws {
         // Create target address with the payload port
         let targetAddress = try NIOCore.SocketAddress(ipAddress: self.peerHost, port: Int(self.payloadPort))
-        
-        Logger.network.debug("NIODownloadTask connecting to \(String(describing: targetAddress), privacy: .public)")
         
         // Create TLS configuration
         let tlsConfig = try self.createTLSConfiguration()
@@ -199,10 +190,9 @@ public class NIODownloadTask {
         bootstrap.connect(to: targetAddress).whenComplete { [weak self] result in
             switch result {
             case .success(let channel):
-                Logger.network.debug("NIODownloadTask connected successfully")
                 self?.channel = channel
             case .failure(let error):
-                Logger.network.error("NIODownloadTask connection failed: \(error, privacy: .public)")
+                Logger.network.error("DownloadTask connection failed: \(error, privacy: .public)")
                 self?.downloadFinished(success: false)
             }
         }
@@ -250,13 +240,12 @@ public class NIODownloadTask {
     // MARK: Private - Data Handling
     
     fileprivate func handleTLSEstablished() {
-        Logger.network.debug("NIODownloadTask TLS handshake complete, ready to receive data")
         self.stream?.open()
     }
     
     fileprivate func handleDataReceived(_ data: Data) {
         guard let stream = self.stream, stream.hasSpaceAvailable else {
-            Logger.network.error("NIODownloadTask: stream not available for writing")
+            Logger.network.error("DownloadTask: stream not available for writing")
             self.channel?.close(promise: nil)
             return
         }
@@ -297,7 +286,6 @@ public class NIODownloadTask {
         
         // Check if we've received all expected data
         if let payloadSize = self.payloadSize, self.bytesReceived >= payloadSize {
-            Logger.network.debug("NIODownloadTask received all \(self.bytesReceived, privacy: .public) bytes")
             self.channel?.close(promise: nil)
         }
     }
@@ -317,14 +305,12 @@ public class NIODownloadTask {
     }
     
     fileprivate func handleError(_ error: Error) {
-        Logger.network.error("NIODownloadTask error: \(error, privacy: .public)")
+        Logger.network.error("DownloadTask error: \(error, privacy: .public)")
         self.downloadFinished(success: false)
     }
     
     private func downloadFinished(success: Bool) {
         guard !isClosed else { return }
-        
-        Logger.network.debug("NIODownloadTask finished (success: \(success, privacy: .public), bytes: \(self.bytesReceivedFromNetwork, privacy: .public))")
         
         // Capture delegate before close() clears it
         let delegate = self.delegate
@@ -394,7 +380,7 @@ private final class NIODownloadHandler: ChannelInboundHandler {
     }
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        Logger.network.error("NIODownloadTask error: \(error, privacy: .public)")
+        Logger.network.error("DownloadTask error: \(error, privacy: .public)")
         downloadTask?.handleError(error)
         context.close(promise: nil)
     }
@@ -416,27 +402,23 @@ private final class NIOPayloadClientTrustHandler {
     
     var verificationCallback: NIOSSLCustomVerificationCallback {
         return { [weak self] certificates, promise in
-            Logger.network.debug("NIODownloadTask verification callback called with \(certificates.count, privacy: .public) certificate(s)")
-            
             guard let expectedCert = self?.expectedCertificate else {
                 // No expected certificate - accept (for unpaired mode)
-                Logger.network.debug("NIODownloadTask: accepting server (no expected cert)")
                 promise.succeed(.certificateVerified)
                 return
             }
             
             guard let peerCert = certificates.first else {
-                Logger.network.error("NIODownloadTask: no server certificate received")
+                Logger.network.error("DownloadTask: no server certificate received")
                 promise.fail(NIODownloadTaskError.trustVerificationFailed)
                 return
             }
             
             // Compare certificates
             if NIOCertificateUtils.certificatesMatch(peerCert, expectedCert) {
-                Logger.network.debug("NIODownloadTask: server certificate verified")
                 promise.succeed(.certificateVerified)
             } else {
-                Logger.network.error("NIODownloadTask: server certificate mismatch")
+                Logger.network.error("DownloadTask: server certificate mismatch")
                 promise.fail(NIODownloadTaskError.trustVerificationFailed)
             }
         }

@@ -518,7 +518,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
     // MARK: NIODownloadTaskDelegate
     
     public func nioDownloadTask(_ task: NIODownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("nioDownloadTask finishedWithSuccess:<\(success, privacy: .public)>")
+        Logger.services.debug("downloadTask(id:<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         Task {
             guard let info = await self.iconState.removeNIODownloadInfo(for: task) else { return }
@@ -527,7 +527,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
                     // Sanitize the notification ID for use in filename (remove |, :, etc.)
                     let safeFileName = sanitizeForFilename(info.notificationId) + ".png"
                     let finalFileURL = try await self.iconState.renamePartFile(url: info.partFileURL, to: safeFileName)
-                    Logger.services.debug("nioDownloadTask saving icon to: \(finalFileURL.path, privacy: .public)")
+                    Logger.services.debug("downloadTask saving icon to: \(finalFileURL.path, privacy: .public)")
                     Logger.services.debug("Notification id: \(info.notificationId, privacy: .public)")
                     
                     await self.iconState.setDownloadedIconURL(finalFileURL, for: info.notificationId)

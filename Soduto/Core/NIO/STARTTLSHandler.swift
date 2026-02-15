@@ -99,8 +99,8 @@ final class STARTTLSHandler: ChannelDuplexHandler, RemovableChannelHandler {
             context.pipeline.addHandler(sslHandler, position: .first).whenComplete { [weak self] result in
                 switch result {
                 case .success:
-                    Logger.network.debug("TLS handler added to pipeline as \(role == .server ? "server" : "client", privacy: .public)")
                     // The promise will be fulfilled when handshake completes via userInboundEventTriggered
+                    break
                 case .failure(let error):
                     Logger.network.error("Failed to add TLS handler: \(error, privacy: .public)")
                     self?.upgradePromise?.fail(error)
@@ -134,11 +134,10 @@ final class STARTTLSHandler: ChannelDuplexHandler, RemovableChannelHandler {
         if let tlsEvent = event as? TLSUserEvent {
             switch tlsEvent {
             case .handshakeCompleted:
-                Logger.network.debug("TLS handshake completed successfully")
                 self.upgradePromise?.succeed(())
                 self.upgradePromise = nil
             case .shutdownCompleted:
-                Logger.network.debug("TLS shutdown completed")
+                break
             }
         }
         context.fireUserInboundEventTriggered(event)

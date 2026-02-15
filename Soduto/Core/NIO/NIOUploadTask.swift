@@ -105,11 +105,11 @@ public class NIOUploadTask {
         delegateQueue: DispatchQueue = .main
     ) {
         guard packet.hasPayload() else {
-            Logger.network.error("NIOUploadTask: packet has no payload")
+            Logger.network.error("UploadTask: packet has no payload")
             return nil
         }
         guard let payload = packet.payload else {
-            Logger.network.error("NIOUploadTask: packet payload is nil")
+            Logger.network.error("UploadTask: packet payload is nil")
             return nil
         }
         
@@ -122,11 +122,11 @@ public class NIOUploadTask {
         
         // Find and bind to an available port
         guard self.bindToAvailablePort() else {
-            Logger.network.error("NIOUploadTask: no available port")
+            Logger.network.error("UploadTask: no available port")
             return nil
         }
         
-        Logger.network.debug("NIOUploadTask initialized on port \(self.listeningPort, privacy: .public)")
+        Logger.network.debug("Providing payload on port \(self.listeningPort, privacy: .public)")
     }
     
     deinit {
@@ -139,7 +139,7 @@ public class NIOUploadTask {
         guard !isClosed else { return }
         isClosed = true
         
-        Logger.network.debug("NIOUploadTask close() on port \(self.listeningPort, privacy: .public)")
+        Logger.network.debug("UploadTask closing on port \(self.listeningPort, privacy: .public)")
         
         self.delegate = nil
         self.listenTimeoutTask?.cancel()
@@ -176,7 +176,6 @@ public class NIOUploadTask {
                 channel.pipeline.addHandler(ServerErrorHandler())
             }
             .childChannelInitializer { [weak self] channel in
-                Logger.network.debug("NIOUploadTask childChannelInitializer called, channel.isActive=\(channel.isActive, privacy: .public)")
                 guard let self = self else {
                     return channel.eventLoop.makeFailedFuture(NIOUploadTaskError.taskDeallocated)
                 }
@@ -215,11 +214,9 @@ public class NIOUploadTask {
         let eventLoop = self.serverChannel!.eventLoop
         self.listenTimeoutTask = eventLoop.scheduleTask(in: NIOUploadTask.listenTimeout) { [weak self] in
             guard let self = self, self.uploadChannel == nil else { return }
-            Logger.network.info("NIOUploadTask listen timeout on port \(self.listeningPort, privacy: .public)")
+            Logger.network.info("UploadTask listen timeout on port \(self.listeningPort, privacy: .public)")
             self.uploadFinished(success: false)
         }
-        
-        Logger.network.debug("NIOUploadTask server listening on port \(port, privacy: .public)")
     }
     
     private func setupClientChannel(_ channel: Channel) -> EventLoopFuture<Void> {
@@ -229,13 +226,10 @@ public class NIOUploadTask {
         
         // Only accept one connection
         guard self.uploadChannel == nil else {
-            Logger.network.debug("NIOUploadTask rejecting additional connection")
             return channel.close()
         }
         
         self.uploadChannel = channel
-        
-        Logger.network.debug("NIOUploadTask accepted connection from \(String(describing: channel.remoteAddress), privacy: .public)")
         
         // Set up handlers - add SSL handler dynamically after channel is active
         // Note: We cannot close the server channel here as it causes the child channel to close
@@ -250,11 +244,9 @@ public class NIOUploadTask {
             try channel.pipeline.syncOperations.addHandler(sslInserter)
             try channel.pipeline.syncOperations.addHandler(uploadHandler)
             
-            Logger.network.debug("NIOUploadTask pipeline setup complete")
-            
             return channel.eventLoop.makeSucceededVoidFuture()
         } catch {
-            Logger.network.error("NIOUploadTask failed to set up pipeline: \(error, privacy: .public)")
+            Logger.network.error("UploadTask failed to set up pipeline: \(error, privacy: .public)")
             return channel.eventLoop.makeFailedFuture(error)
         }
     }
@@ -262,11 +254,8 @@ public class NIOUploadTask {
     // MARK: Private - TLS
     
     private func createSSLHandler() throws -> NIOSSLServerHandler {
-        Logger.network.debug("NIOUploadTask creating TLS configuration")
         let tlsConfig = try self.createTLSConfiguration()
-        Logger.network.debug("NIOUploadTask creating SSL context")
         let sslContext = try NIOSSLContext(configuration: tlsConfig)
-        Logger.network.debug("NIOUploadTask SSL context created successfully")
         
         // Create and retain trust handler for client certificate verification
         self.trustHandler = NIOPayloadTrustHandler(expectedCertificate: self.expectedPeerCertificate)
@@ -275,7 +264,6 @@ public class NIOUploadTask {
             context: sslContext,
             customVerificationCallback: self.trustHandler!.verificationCallback
         )
-        Logger.network.debug("NIOUploadTask SSL server handler created")
         return handler
     }
     
@@ -315,16 +303,12 @@ public class NIOUploadTask {
         config.certificateVerification = .noHostnameVerification
         config.minimumTLSVersion = .tlsv12
         
-        // Log configuration for debugging
-        Logger.network.debug("NIOUploadTask TLS config: cert verification=noHostnameVerification, minVersion=TLS1.2")
-        
         return config
     }
     
     // MARK: Private - Data Transfer
     
     fileprivate func handleTLSEstablished(context: ChannelHandlerContext) {
-        Logger.network.debug("NIOUploadTask TLS handshake complete, starting data transfer")
         self.payload.open()
         self.sendNextChunk(context: context)
     }
@@ -334,11 +318,8 @@ public class NIOUploadTask {
     }
     
     private func sendNextChunk(context: ChannelHandlerContext) {
-        Logger.network.debug("NIOUploadTask sendNextChunk: bytesSent=\(self.bytesSent, privacy: .public), payloadSize=\(self.payloadSize ?? -1, privacy: .public), hasBytesAvailable=\(self.payload.hasBytesAvailable, privacy: .public), streamStatus=\(self.payload.streamStatus.rawValue, privacy: .public)")
-        
         guard self.payload.hasBytesAvailable else {
             // All data sent
-            Logger.network.debug("NIOUploadTask finished sending \(self.bytesSent, privacy: .public) bytes")
             context.close(promise: nil)
             return
         }
@@ -351,22 +332,16 @@ public class NIOUploadTask {
         }
         
         guard bytesToRead > 0 else {
-            Logger.network.debug("NIOUploadTask: no more bytes to read")
             context.close(promise: nil)
             return
         }
         
         let read = self.payload.read(&self.readBuffer, maxLength: bytesToRead)
-        Logger.network.debug("NIOUploadTask read \(read, privacy: .public) bytes from stream")
         guard read > 0 else {
             if read < 0 {
-                Logger.network.error("NIOUploadTask: stream read error (streamError=\(String(describing: self.payload.streamError), privacy: .public))")
-                context.close(promise: nil)
-            } else {
-                // read == 0, stream ended
-                Logger.network.debug("NIOUploadTask: stream returned 0 bytes, closing")
-                context.close(promise: nil)
+                Logger.network.error("UploadTask: stream read error (streamError=\(String(describing: self.payload.streamError), privacy: .public))")
             }
+            context.close(promise: nil)
             return
         }
         
@@ -374,18 +349,16 @@ public class NIOUploadTask {
         buffer.writeBytes(self.readBuffer[0..<read])
         
         self.bytesSent += Int64(read)
-        Logger.network.debug("NIOUploadTask writing \(read, privacy: .public) bytes, total sent=\(self.bytesSent, privacy: .public)")
         
         context.writeAndFlush(NIOAny(buffer)).whenComplete { [weak self] result in
             switch result {
             case .success:
-                Logger.network.debug("NIOUploadTask write succeeded")
                 // Continue sending on the event loop
                 context.eventLoop.execute {
                     self?.handleWriteComplete(context: context)
                 }
             case .failure(let error):
-                Logger.network.error("NIOUploadTask write error: \(error, privacy: .public)")
+                Logger.network.error("UploadTask write error: \(error, privacy: .public)")
                 context.close(promise: nil)
             }
         }
@@ -397,14 +370,14 @@ public class NIOUploadTask {
     }
     
     fileprivate func handleError(_ error: Error) {
-        Logger.network.error("NIOUploadTask error: \(error, privacy: .public)")
+        Logger.network.error("UploadTask error: \(error, privacy: .public)")
         self.uploadFinished(success: false)
     }
     
     private func uploadFinished(success: Bool) {
         guard !isClosed else { return }
         
-        Logger.network.debug("NIOUploadTask finished (success: \(success, privacy: .public)) on port \(self.listeningPort, privacy: .public)")
+        Logger.network.debug("uploadFinished(<\(success, privacy: .public)>)")
         
         UploadTask.releasePort(self.listeningPort)
         
@@ -436,7 +409,7 @@ private final class ServerErrorHandler: ChannelInboundHandler {
     typealias InboundIn = Channel
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        Logger.network.error("NIOUploadTask server error: \(error, privacy: .public)")
+        Logger.network.error("UploadTask server error: \(error, privacy: .public)")
         context.close(promise: nil)
     }
 }
@@ -468,13 +441,10 @@ private final class SSLInserterHandler: ChannelInboundHandler, RemovableChannelH
         }
         inserted = true
         
-        Logger.network.debug("NIOUploadTask: inserting SSL handler")
-        
         // Insert SSL handler at the front of the pipeline
         context.pipeline.addHandler(sslHandler, position: .first).whenComplete { [weak self] result in
             switch result {
             case .success:
-                Logger.network.debug("NIOUploadTask: SSL handler inserted, closing server channel")
                 // Now safe to close the server channel
                 self?.serverChannel?.close(promise: nil)
                 self?.serverChannel = nil
@@ -483,7 +453,7 @@ private final class SSLInserterHandler: ChannelInboundHandler, RemovableChannelH
                 // Fire channelActive to downstream handlers
                 context.fireChannelActive()
             case .failure(let error):
-                Logger.network.error("NIOUploadTask: failed to insert SSL handler: \(error, privacy: .public)")
+                Logger.network.error("UploadTask: failed to insert SSL handler: \(error, privacy: .public)")
                 context.close(promise: nil)
             }
         }
@@ -494,7 +464,7 @@ private final class SSLInserterHandler: ChannelInboundHandler, RemovableChannelH
     }
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        Logger.network.error("NIOUploadTask SSL inserter error: \(error, privacy: .public)")
+        Logger.network.error("UploadTask SSL inserter error: \(error, privacy: .public)")
         context.fireErrorCaught(error)
     }
 }
@@ -528,7 +498,7 @@ private final class NIOUploadHandler: ChannelInboundHandler {
     }
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        Logger.network.error("NIOUploadTask error: \(error, privacy: .public)")
+        Logger.network.error("UploadTask error: \(error, privacy: .public)")
         uploadTask?.handleError(error)
         context.close(promise: nil)
     }
@@ -550,27 +520,23 @@ private final class NIOPayloadTrustHandler {
     
     var verificationCallback: NIOSSLCustomVerificationCallback {
         return { [weak self] certificates, promise in
-            Logger.network.debug("NIOUploadTask verification callback called with \(certificates.count, privacy: .public) certificate(s)")
-            
             guard let expectedCert = self?.expectedCertificate else {
                 // No expected certificate - accept (for unpaired mode)
-                Logger.network.debug("NIOUploadTask: accepting client (no expected cert)")
                 promise.succeed(.certificateVerified)
                 return
             }
             
             guard let peerCert = certificates.first else {
-                Logger.network.error("NIOUploadTask: no client certificate received")
+                Logger.network.error("UploadTask: no client certificate received")
                 promise.fail(NIOUploadTaskError.trustVerificationFailed)
                 return
             }
             
             // Compare certificates
             if NIOCertificateUtils.certificatesMatch(peerCert, expectedCert) {
-                Logger.network.debug("NIOUploadTask: client certificate verified")
                 promise.succeed(.certificateVerified)
             } else {
-                Logger.network.error("NIOUploadTask: client certificate mismatch")
+                Logger.network.error("UploadTask: client certificate mismatch")
                 promise.fail(NIOUploadTaskError.trustVerificationFailed)
             }
         }

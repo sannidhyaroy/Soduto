@@ -317,7 +317,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
     // MARK: NIOConnectionDelegate
     
     public func nioConnection(_ connection: NIOConnection, didSwitchToState state: NIOConnection.State) {
-        Logger.network.debug("nioConnection(<\(String(describing: connection), privacy: .public)> switchedToState:<\(String(describing: state), privacy: .public)>)")
+        Logger.network.debug("connection(<\(String(describing: connection), privacy: .public)> switchedToState:<\(String(describing: state), privacy: .public)>)")
         switch state {
         case .Closed:
             self.pendingNIOConnections.remove(connection)
@@ -327,7 +327,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
                 self.pendingNIOConnections.remove(connection)
                 delegate.connectionProvider(self, didCreateNIOConnection: connection)
             } else {
-                Logger.network.error("No connection provider delegate to take new NIOConnection - closing")
+                Logger.network.error("No connection provider delegate to take new connection - closing")
                 connection.close()
             }
         default:
@@ -336,7 +336,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
     }
     
     public func nioConnection(_ connection: NIOConnection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
-        Logger.network.debug("nioConnection(<\(connection, privacy: .public)> didSendPacket:<\(packet, privacy: .public)>)")
+        Logger.network.debug("connection(<\(connection, privacy: .public)> didSendPacket:<\(packet, privacy: .public)>)")
         
         // After sending identity packet (outgoing connection), secure as server
         do {
@@ -349,19 +349,19 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
             connection.finishInitialization()
         }
         catch {
-            Logger.network.error("Failed to initialize NIOConnection: \(error, privacy: .public)")
+            Logger.network.error("Failed to initialize connection: \(error, privacy: .public)")
             connection.close()
         }
     }
     
     public func nioConnection(_ connection: NIOConnection, didReadPacket packet: DataPacket) {
-        Logger.network.debug("nioConnection(<\(connection, privacy: .public)> didReadPacket:<\(packet.type, privacy: .public)>)")
+        Logger.network.debug("connection(<\(connection, privacy: .public)> didReadPacket:<\(packet.type, privacy: .public)>)")
         
         // Only process identity packet during initialization
         guard connection.state == .Initializing else {
             // Connection already initialized - packet would normally go to Device
             // For now, just log it since Device integration is pending
-            Logger.network.debug("Received \(packet.type, privacy: .public) packet on open NIOConnection (Device integration pending)")
+            Logger.network.debug("Received \(packet.type, privacy: .public) packet on open connection (Device integration pending)")
             return
         }
         
@@ -376,7 +376,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
             connection.finishInitialization()
         }
         catch {
-            Logger.network.error("Failed to initialize NIOConnection: \(error, privacy: .public)")
+            Logger.network.error("Failed to initialize connection: \(error, privacy: .public)")
             connection.close()
         }
     }
@@ -394,7 +394,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         }
         
         guard let group = self.nioEventLoopGroup else {
-            Logger.network.error("Failed to create NIO event loop group")
+            Logger.network.error("Failed to create event loop group")
             return
         }
         
@@ -415,7 +415,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
             self.nioUdpChannel = channel
             Logger.network.info("Listening for UDP broadcasts on port \(ConnectionProvider.udpPort, privacy: .public)")
         } catch {
-            Logger.network.error("Failed to start NIO UDP: \(error, privacy: .public)")
+            Logger.network.error("Failed to start UDP: \(error, privacy: .public)")
         }
     }
     
@@ -441,7 +441,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         
         // Create a socket address for the connection
         guard let connectionAddress = convertNIOAddressToSocketAddress(remoteAddress, port: UInt16(port)) else {
-            Logger.network.error("Failed to convert NIO address to SocketAddress")
+            Logger.network.error("Failed to convert address to SocketAddress")
             return
         }
         
@@ -465,22 +465,22 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         }
     }
     
-    /// Creates an outgoing NIOConnection to the specified address.
+    /// Creates an outgoing connection to the specified address.
     private func createNIOOutgoingConnection(address: SocketAddress, identityPacket packet: DataPacket) {
         guard let group = self.nioEventLoopGroup else {
-            Logger.network.error("No event loop group available for outgoing NIOConnection")
+            Logger.network.error("No event loop group available for outgoing connection")
             return
         }
         
         if let connection = NIOConnection(address: address, identityPacket: packet, config: self.config, eventLoopGroup: group) {
-            Logger.network.debug("Created outgoing NIOConnection to \(address.description, privacy: .public)")
+            Logger.network.debug("Created outgoing connection to \(address.description, privacy: .public)")
             connection.delegate = self
             self.pendingNIOConnections.insert(connection)
             
             // Send initial identity packet
             _ = connection.send(DataPacket.identityPacket(config: self.config))
         } else {
-            Logger.network.error("Failed to create outgoing NIOConnection")
+            Logger.network.error("Failed to create outgoing connection")
         }
     }
     
@@ -510,7 +510,7 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         }
         
         guard let group = self.nioEventLoopGroup else {
-            Logger.network.error("Failed to create NIO event loop group for TCP server")
+            Logger.network.error("Failed to create event loop group for TCP server")
             return
         }
         
@@ -557,22 +557,20 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         Logger.network.debug("TCP accepted connection from \(String(describing: remoteAddress), privacy: .public)")
         
         guard let group = self.nioEventLoopGroup else {
-            Logger.network.error("No event loop group available for NIOConnection")
+            Logger.network.error("No event loop group available for connection")
             channel.close(promise: nil)
             return
         }
         
-        // Create NIOConnection from the accepted channel
+        // Create connection from the accepted channel
         if let connection = NIOConnection(channel: channel, config: self.config, eventLoopGroup: group) {
-            Logger.network.debug("Created NIOConnection, adding to pending set")
             connection.delegate = self
             self.pendingNIOConnections.insert(connection)
-            Logger.network.debug("Pending NIOConnections count: \(self.pendingNIOConnections.count, privacy: .public)")
             
             // Read initial identity packet
             connection.readOnePacket()
         } else {
-            Logger.network.error("Failed to create NIOConnection from channel")
+            Logger.network.error("Failed to create connection from channel")
             channel.close(promise: nil)
         }
     }

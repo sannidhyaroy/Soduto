@@ -114,10 +114,10 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     }
     
     public func connectionProvider(_ provider: ConnectionProvider, didCreateNIOConnection connection: NIOConnection) {
-        Logger.device.debug("connectionProvider(<\(provider, privacy: .public)> didCreateNIOConnection:<\(connection, privacy: .public)>)")
+        Logger.device.debug("connectionProvider(<\(provider, privacy: .public)> didCreateConnection:<\(connection, privacy: .public)>)")
         
-        assert(connection.state == .Open, "NIOConnection from connection provider expected to be in open state")
-        assert(connection.identity != nil, "NIOConnection identity expected to be not nil")
+        assert(connection.state == .Open, "Connection from connection provider expected to be in open state")
+        assert(connection.identity != nil, "Connection identity expected to be not nil")
         
         do {
             let deviceId = try connection.identity!.getDeviceId() as Device.Id
@@ -132,7 +132,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
             }
         }
         catch {
-            Logger.device.error("Error adding new NIOConnection: \(error, privacy: .public)")
+            Logger.device.error("Error adding new connection: \(error, privacy: .public)")
         }
     }
     

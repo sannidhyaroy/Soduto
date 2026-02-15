@@ -297,10 +297,10 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
     // MARK: NIODownloadTaskDelegate
     
     public func nioDownloadTask(_ task: NIODownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("MPRIS::nioDownloadTask finishedWithSuccess:<\(success, privacy: .public)>")
+        Logger.services.debug("MPRIS::downloadTask(id:<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         guard let index = self.nioAlbumArtDownloadInfos.firstIndex(where: { $0.task === task }) else {
-            Logger.services.error("MPRIS::NIO download task not found in tracking list")
+            Logger.services.error("MPRIS::download task not found in tracking list")
             return
         }
         let info = self.nioAlbumArtDownloadInfos.remove(at: index)
@@ -760,7 +760,7 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
         
         // Check if we already have a download in progress for this album art
         if nioAlbumArtDownloadInfos.contains(where: { $0.albumArtUrl == albumArtUrl && $0.playerIdentity == player }) {
-            Logger.services.debug("MPRIS::NIO album art download already in progress for \(albumArtUrl, privacy: .public)")
+            Logger.services.debug("MPRIS::album art download already in progress for \(albumArtUrl, privacy: .public)")
             return
         }
         

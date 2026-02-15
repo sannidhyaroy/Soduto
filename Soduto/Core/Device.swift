@@ -367,10 +367,10 @@ public class Device: ConnectionDelegate, NIOConnectionDelegate, PairableDelegate
                 }
             }
             else {
-                assertionFailure("NIOConnection not found in device connections list")
+                assertionFailure("Connection not found in device connections list")
             }
         default:
-            assertionFailure("Unexpected NIOConnection state switch: \(connection) -> \(state)")
+            assertionFailure("Unexpected connection state switch: \(connection) -> \(state)")
         }
     }
     
@@ -419,14 +419,14 @@ public class Device: ConnectionDelegate, NIOConnectionDelegate, PairableDelegate
         // Convert NIOPairingRequest to PairingRequest for the delegate
         // Note: This is a temporary bridge - once NIOConnection is the only implementation,
         // we'll update DeviceDelegate to use NIOPairingRequest directly
-        Logger.device.debug("NIOConnection received pairing request from \(connection.peerAddress.description, privacy: .public)")
+        Logger.device.debug("Connection received pairing request from \(connection.peerAddress.description, privacy: .public)")
         // For now, we need to notify the delegate somehow - the delegate expects PairingRequest with Connection
         // We'll update the pairing status and let the delegate handle it
         self.updatePairingStatus()
     }
     
     public func nioConnection(_ connection: NIOConnection, pairingFailed error: Error) {
-        Logger.device.debug("NIOConnection pairing failed: \(error, privacy: .public)")
+        Logger.device.debug("Connection pairing failed: \(error, privacy: .public)")
     }
     
     public func nioConnection(_ connection: NIOConnection, pairingStatusChanged status: PairingStatus) {
@@ -692,9 +692,9 @@ public class Device: ConnectionDelegate, NIOConnectionDelegate, PairableDelegate
         self.sendPendingPackets()
     }
     
-    /// Take unsent packets from a closed NIOConnection, put them into pendingPackets list and try resend them if possible.
+    /// Take unsent packets from a closed connection, put them into pendingPackets list and try resend them if possible.
     private func reclaimUnsentPackets(from connection: NIOConnection) {
-        assert(connection.state == .Closed, "NIOConnection needs to be closed in order to reclaim its packets: \(connection)")
+        assert(connection.state == .Closed, "Connection needs to be closed in order to reclaim its packets: \(connection)")
         
         let unsentPackets = connection.reclaimUnsentPackets()
         for unsentPacket in unsentPackets {

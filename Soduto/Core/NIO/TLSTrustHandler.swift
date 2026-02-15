@@ -44,10 +44,6 @@ final class NIOTrustHandler {
     /// Certificates are stored for reference but validation is deferred.
     var verificationCallback: NIOSSLCustomVerificationCallback {
         return { [weak self] certificates, promise in
-            let count = certificates.count
-            let paired = self?.isPaired ?? false
-            Logger.network.debug("TLS verification: \(count, privacy: .public) cert(s), paired=\(paired, privacy: .public)")
-            
             // Store certificates
             self?.peerCertificates = certificates
             
@@ -114,9 +110,7 @@ struct PostHandshakeValidator {
         }
         
         let matches = NIOCertificateUtils.certificatesMatch(peerCert, expectedCertificate)
-        if matches {
-            Logger.network.debug("Post-handshake certificate validation succeeded")
-        } else {
+        if !matches {
             Logger.network.error("Post-handshake certificate validation failed")
         }
         return matches

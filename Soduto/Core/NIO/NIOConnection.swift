@@ -221,13 +221,12 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         
         // Set up the channel pipeline
         self.setupChannelPipeline(channel: channel).whenFailure { [weak self] error in
-            Logger.network.error("Failed to set up NIOConnection pipeline: \(error, privacy: .public)")
+            Logger.network.error("Failed to set up connection pipeline: \(error, privacy: .public)")
             self?.close()
         }
     }
     
     deinit {
-        Logger.network.debug("NIOConnection deinit called")
         NotificationCenter.default.removeObserver(self)
         self.state = .Closed
         self.channel?.close(promise: nil)
@@ -316,7 +315,7 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     public func closeAfterWriting() {
         if self.hasActiveUploadTasks {
             // Don't close yet - set flag to close after uploads complete
-            Logger.network.debug("NIOConnection: deferring close until uploads complete")
+            Logger.network.debug("Connection: deferring close until uploads complete")
             self.shouldCloseAfterUploads = true
         } else {
             self.channel?.close(mode: .output, promise: nil)
@@ -350,7 +349,6 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
             self.packetsSending.remove(at: index)
         }
         
-        Logger.network.debug("NIOConnection: extracted \(activeTasks.count, privacy: .public) active upload tasks")
         return activeTasks
     }
     
@@ -380,7 +378,7 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     // MARK: NIOUploadTaskDelegate
     
     public func nioUploadTask(_ task: NIOUploadTask, finishedWithSuccess payloadSent: Bool) {
-        Logger.network.debug("nioUploadTask finishedWithSuccess:<\(payloadSent, privacy: .public)>")
+        Logger.network.debug("uploadTask finishedWithSuccess:<\(payloadSent, privacy: .public)>")
         
         guard let index = self.packetsSending.firstIndex(where: { $0.nioUploadTask === task }) else { return }
         
@@ -393,7 +391,7 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         
         // If we were waiting to close and no more active uploads, close now
         if self.shouldCloseAfterUploads && !self.hasActiveUploadTasks {
-            Logger.network.debug("NIOConnection: all uploads complete, closing now")
+            Logger.network.debug("Connection: all uploads complete, closing now")
             self.channel?.close(mode: .output, promise: nil)
         }
     }
@@ -480,7 +478,7 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
             }
             nioAddress = try NIOCore.SocketAddress(ipAddress: ipString, port: Int(address.port))
         } catch {
-            Logger.network.error("Failed to create NIO address: \(error, privacy: .public)")
+            Logger.network.error("Failed to create address: \(error, privacy: .public)")
             return
         }
         
@@ -488,9 +486,9 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
             switch result {
             case .success(let channel):
                 self?.channel = channel
-                Logger.network.debug("NIOConnection connected to \(String(describing: channel.remoteAddress), privacy: .public)")
+                Logger.network.debug("Connection connected to \(String(describing: channel.remoteAddress), privacy: .public)")
             case .failure(let error):
-                Logger.network.error("NIOConnection failed to connect: \(error, privacy: .public)")
+                Logger.network.error("Connection failed to connect: \(error, privacy: .public)")
                 self?.state = .Closed
             }
         }
@@ -498,8 +496,6 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     
     @discardableResult
     private func setupChannelPipeline(channel: Channel) -> EventLoopFuture<Void> {
-        Logger.network.debug("Setting up NIOConnection pipeline for channel: \(String(describing: channel), privacy: .public)")
-        
         // Create handlers - wrap decoder/encoder protocols in their handler types
         let decoder = ByteToMessageHandler(KDEConnectPacketDecoder())
         let encoder = MessageToByteHandler(RawDataEncoder())
@@ -507,13 +503,9 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
         
         // Add handlers to pipeline
         return channel.pipeline.addHandler(decoder).flatMap {
-            Logger.network.debug("Added packet decoder to pipeline")
             return channel.pipeline.addHandler(encoder)
         }.flatMap {
-            Logger.network.debug("Added packet encoder to pipeline")
             return channel.pipeline.addHandler(self.connectionHandler!)
-        }.map {
-            Logger.network.debug("NIOConnection pipeline setup complete")
         }
     }
     
@@ -543,7 +535,7 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
             channel.pipeline.addHandler(sslHandler, position: .first).whenComplete { [weak self] result in
                 switch result {
                 case .success:
-                    Logger.network.debug("TLS handler added as \(role == .server ? "server" : "client", privacy: .public)")
+                    break
                 case .failure(let error):
                     Logger.network.error("Failed to add TLS handler: \(error, privacy: .public)")
                     self?.state = .Closed
@@ -621,8 +613,6 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     // MARK: Private - Packet Handling
     
     fileprivate func handleReceivedData(_ data: Data) {
-        Logger.network.debug("NIOConnection received \(data.count, privacy: .public) bytes")
-        
         guard var mutablePacket = DataPacket(data: data) else {
             Logger.network.error("Could not deserialize received data packet")
             return
@@ -761,7 +751,6 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     }
     
     fileprivate func handleTLSEstablished() {
-        Logger.network.debug("TLS handshake completed")
         self.waitingToSecure = false
         
         // Perform post-handshake certificate validation
@@ -787,7 +776,6 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     }
     
     fileprivate func handleChannelInactive() {
-        Logger.network.debug("NIOConnection channel closed - state was: \(String(describing: self.state), privacy: .public)")
         self.state = .Closed
         _ = self.discardUnsentPackets(silently: true)
     }
@@ -862,7 +850,7 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
             eventLoopGroup: self.eventLoopGroup,
             delegateQueue: .main
         ) else {
-            Logger.network.error("Failed to create NIOUploadTask for packet type: \(packet.type, privacy: .public)")
+            Logger.network.error("Failed to create upload task for packet type: \(packet.type, privacy: .public)")
             self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
             return true
         }
@@ -990,7 +978,7 @@ private final class NIOConnectionHandler: ChannelInboundHandler {
     }
     
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        Logger.network.error("NIOConnection error: \(error, privacy: .public)")
+        Logger.network.error("Connection error: \(error, privacy: .public)")
         context.close(promise: nil)
     }
 }
