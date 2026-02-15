@@ -14,12 +14,17 @@ import Network
 import NIOCore
 import NIOPosix
 
-// MARK: - Feature Flag
+// MARK: - Feature Flags
 
 /// Feature flag to enable NIO TCP server implementation.
 /// Set to `true` to use SwiftNIO ServerBootstrap instead of GCDAsyncSocket for accepting connections.
 /// Note: Device integration pending - NIOConnection works but can't be passed to Device yet.
 private let USE_NIO_TCP_SERVER = false
+
+/// Feature flag to enable NIO for outgoing connections.
+/// Set to `true` to use NIOConnection with ClientBootstrap for connections initiated by us.
+/// Note: Device integration pending - NIOConnection works but can't be passed to Device yet.
+private let USE_NIO_OUTGOING = false
 
 enum ConnectionProviderError: Error {
     case IdentityAbsent
@@ -443,13 +448,39 @@ public class ConnectionProvider: NSObject, GCDAsyncSocketDelegate, ConnectionDel
         // Dispatch to main queue for connection creation
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            if let connection = Connection(address: connectionAddress, identityPacket: packet, config: self.config) {
-                connection.delegate = self
-                self.pendingConnections.insert(connection)
-                
-                // send initial identity packet
-                _ = connection.send(DataPacket.identityPacket(config: self.config))
+            
+            if USE_NIO_OUTGOING {
+                // Use NIOConnection for outgoing connections
+                self.createNIOOutgoingConnection(address: connectionAddress, identityPacket: packet)
+            } else {
+                // Use legacy Connection
+                if let connection = Connection(address: connectionAddress, identityPacket: packet, config: self.config) {
+                    connection.delegate = self
+                    self.pendingConnections.insert(connection)
+                    
+                    // send initial identity packet
+                    _ = connection.send(DataPacket.identityPacket(config: self.config))
+                }
             }
+        }
+    }
+    
+    /// Creates an outgoing NIOConnection to the specified address.
+    private func createNIOOutgoingConnection(address: SocketAddress, identityPacket packet: DataPacket) {
+        guard let group = self.nioEventLoopGroup else {
+            Logger.network.error("No event loop group available for outgoing NIOConnection")
+            return
+        }
+        
+        if let connection = NIOConnection(address: address, identityPacket: packet, config: self.config, eventLoopGroup: group) {
+            Logger.network.debug("Created outgoing NIOConnection to \(address.description, privacy: .public)")
+            connection.delegate = self
+            self.pendingNIOConnections.insert(connection)
+            
+            // Send initial identity packet
+            _ = connection.send(DataPacket.identityPacket(config: self.config))
+        } else {
+            Logger.network.error("Failed to create outgoing NIOConnection")
         }
     }
     
