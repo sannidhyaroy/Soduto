@@ -56,10 +56,6 @@ final class NIOTrustHandler {
 // MARK: - Certificate Conversion Utilities
 
 /// Utilities for working with NIOSSLCertificate and SecCertificate.
-///
-/// Note: Direct conversion from NIOSSLCertificate to SecCertificate requires
-/// accessing internal BoringSSL APIs. For the migration, we use alternative
-/// approaches where possible.
 enum NIOCertificateUtils {
     
     /// Creates an NIOSSLCertificate from a SecCertificate.
@@ -69,6 +65,21 @@ enum NIOCertificateUtils {
     static func createNIOCertificate(from secCertificate: SecCertificate) throws -> NIOSSLCertificate {
         let derData = SecCertificateCopyData(secCertificate) as Data
         return try NIOSSLCertificate(bytes: Array(derData), format: .der)
+    }
+    
+    /// Creates a SecCertificate from an NIOSSLCertificate.
+    ///
+    /// Uses `toDERBytes()` available in swift-nio-ssl 2.23.0+ to extract DER bytes,
+    /// then creates a SecCertificate from those bytes.
+    static func createSecCertificate(from nioCertificate: NIOSSLCertificate) -> SecCertificate? {
+        do {
+            let derBytes = try nioCertificate.toDERBytes()
+            let derData = Data(derBytes) as CFData
+            return SecCertificateCreateWithData(nil, derData)
+        } catch {
+            Logger.network.error("Failed to convert NIOSSLCertificate to SecCertificate: \(error, privacy: .public)")
+            return nil
+        }
     }
     
     /// Compares an NIOSSLCertificate with a SecCertificate.

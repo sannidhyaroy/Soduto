@@ -13,6 +13,7 @@ import os
 public protocol DeviceManagerDelegate: AnyObject {
     func deviceManager(_ manager: DeviceManager, didChangeDeviceState device: Device)
     func deviceManager(_ manager: DeviceManager, didReceivePairingRequest request: PairingRequest, forDevice device: Device)
+    func deviceManager(_ manager: DeviceManager, didReceiveNIOPairingRequest request: NIOPairingRequest, forDevice device: Device)
 }
 
 public protocol DeviceDataSource: AnyObject {
@@ -162,6 +163,10 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     
     public func device(_ device: Device, didReceivePairingRequest request: PairingRequest) {
         self.delegate?.deviceManager(self, didReceivePairingRequest: request, forDevice: device)
+    }
+    
+    public func device(_ device: Device, didReceiveNIOPairingRequest request: NIOPairingRequest) {
+        self.delegate?.deviceManager(self, didReceiveNIOPairingRequest: request, forDevice: device)
     }
     
     

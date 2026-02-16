@@ -35,6 +35,7 @@ public enum DeviceError: Error {
 public protocol DeviceDelegate: AnyObject {
     func device(_ device: Device, didChangePairingStatus pairingStatus: PairingStatus)
     func device(_ device: Device, didReceivePairingRequest pairingRequest: PairingRequest)
+    func device(_ device: Device, didReceiveNIOPairingRequest pairingRequest: NIOPairingRequest)
     func device(_ device: Device, didChangeReachabilityStatus isReachable: Bool)
     func serviceActions(for device: Device) -> [ServiceAction]
 }
@@ -416,13 +417,9 @@ public class Device: ConnectionDelegate, NIOConnectionDelegate, PairableDelegate
     // MARK: NIOPairableDelegate
     
     public func nioConnection(_ connection: NIOConnection, receivedPairingRequest request: NIOPairingRequest) {
-        // Convert NIOPairingRequest to PairingRequest for the delegate
-        // Note: This is a temporary bridge - once NIOConnection is the only implementation,
-        // we'll update DeviceDelegate to use NIOPairingRequest directly
         Logger.device.debug("Connection received pairing request from \(connection.peerAddress.description, privacy: .public)")
-        // For now, we need to notify the delegate somehow - the delegate expects PairingRequest with Connection
-        // We'll update the pairing status and let the delegate handle it
         self.updatePairingStatus()
+        self.delegate?.device(self, didReceiveNIOPairingRequest: request)
     }
     
     public func nioConnection(_ connection: NIOConnection, pairingFailed error: Error) {
@@ -458,9 +455,16 @@ public class Device: ConnectionDelegate, NIOConnectionDelegate, PairableDelegate
     }
     
     public func acceptPairing() {
-        if let connection = self.connectionForPairing(), connection.pairingStatus == .RequestedByPeer {
-            connection.acceptPairing()
+        guard let connection = self.connectionForPairing() else {
+            Logger.device.error("acceptPairing: no connection found for pairing")
+            return
         }
+        guard connection.pairingStatus == .RequestedByPeer else {
+            Logger.device.error("acceptPairing: connection status is \(String(describing: connection.pairingStatus), privacy: .public), expected RequestedByPeer")
+            return
+        }
+        Logger.device.debug("acceptPairing: accepting pairing on connection")
+        connection.acceptPairing()
     }
     
     public func declinePairing() {

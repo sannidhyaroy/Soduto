@@ -136,7 +136,7 @@ public class DefaultPairingHandler: ConnectionDataPacketHandler, Pairable {
                 let timeoutInterval = DefaultPairingHandler.pairingTimoutInterval
                 self.pairingTimeout = Timer.compatScheduledTimer(withTimeInterval: timeoutInterval, repeats: false) { [weak self] (timer) in
                     guard let strongSelf = self else { return }
-                    // Every change to pairingStatus should invalidate previous timeout, 
+                    // Every change to pairingStatus should invalidate previous timeout,
                     // so if we are here, pairingStatus should still be the same
                     assert(strongSelf.pairingStatus == status, "pairingStatus expected to not be changed")
                     strongSelf.declinePairing()
@@ -175,7 +175,7 @@ public class DefaultPairingHandler: ConnectionDataPacketHandler, Pairable {
         }
         
         // We need to send pair packet before setting pairedStatus.
-        // Otherwise pairing status notifications might trigger other data packets to be sent and if 
+        // Otherwise pairing status notifications might trigger other data packets to be sent and if
         // such packets are sent befor pairing, they might be discarded or even cause other device to cancel pairing
         if self.canSetPaired() {
             _ = self.delegate?.send(DataPacket.pairPacket())
@@ -205,12 +205,19 @@ public class DefaultPairingHandler: ConnectionDataPacketHandler, Pairable {
         switch globalStatus {
         case .Paired:
             self.trySetPaired()
-            break
         case .Unpaired:
             self.pairingStatus = .Unpaired
-        default:
-            break
+        case .Requested:
+            self.pairingStatus = .Requested
+        case .RequestedByPeer:
+            self.pairingStatus = .RequestedByPeer
         }
+    }
+    
+    /// Direct status setter for NIOConnection to use during pairing transitions.
+    /// This triggers didSet observers like direct assignment would.
+    internal func setStatus(_ status: PairingStatus) {
+        self.pairingStatus = status
     }
     
     

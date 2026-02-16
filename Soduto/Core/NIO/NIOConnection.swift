@@ -409,22 +409,54 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     
     public func requestPairing() {
         assert(self.state == .Open, "Connection expected to be open")
+        let previousStatus = self.pairingHandler!.pairingStatus
         self.pairingHandler!.requestPairing()
+        
+        // Notify delegate about pairing status change
+        let newStatus = self.pairingHandler!.pairingStatus
+        if newStatus != previousStatus {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.pairingDelegate?.nioConnection(self, pairingStatusChanged: newStatus)
+            }
+        }
     }
     
     public func acceptPairing() {
         assert(self.state == .Open, "Connection expected to be open")
         self.pairingHandler!.acceptPairing()
+        
+        // Notify delegate about pairing status change
+        // (DefaultPairingHandler.pairingDelegate is nil for NIOConnection, so we handle it here)
+        if self.pairingHandler!.pairingStatus == .Paired {
+            self.rememberHwAddress()
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.pairingDelegate?.nioConnection(self, pairingStatusChanged: .Paired)
+            }
+        }
     }
     
     public func declinePairing() {
         assert(self.state == .Open, "Connection expected to be open")
         self.pairingHandler!.declinePairing()
+        
+        // Notify delegate about pairing status change
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.pairingDelegate?.nioConnection(self, pairingStatusChanged: .Unpaired)
+        }
     }
     
     public func unpair() {
         assert(self.state == .Open, "Connection expected to be open")
         self.pairingHandler!.unpair()
+        
+        // Notify delegate about pairing status change
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.pairingDelegate?.nioConnection(self, pairingStatusChanged: .Unpaired)
+        }
     }
     
     public func updatePairingStatus(globalStatus: PairingStatus) {
@@ -707,9 +739,12 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
                 switch pairingHandler.pairingStatus {
                 case .Unpaired:
                     // Peer initiates pairing - notify delegate with NIOPairingRequest
-                    pairingHandler.updatePairingStatus(globalStatus: .RequestedByPeer)
+                    pairingHandler.setStatus(.RequestedByPeer)
                     let request = NIOPairingRequest(connection: self)
-                    self.pairingDelegate?.nioConnection(self, receivedPairingRequest: request)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        self.pairingDelegate?.nioConnection(self, receivedPairingRequest: request)
+                    }
                     
                 case .Requested:
                     // Peer accepted our request - store certificate and set paired
@@ -719,12 +754,15 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
                             deviceConfig.certificate = self.peerCertificate
                         }
                     }
-                    pairingHandler.updatePairingStatus(globalStatus: .Paired)
+                    pairingHandler.setStatus(.Paired)
                     if pairingHandler.pairingStatus != .Paired {
                         _ = self.send(DataPacket.unpairPacket())
                     } else {
-                        self.pairingDelegate?.nioConnection(self, pairingStatusChanged: .Paired)
                         self.rememberHwAddress()
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self = self else { return }
+                            self.pairingDelegate?.nioConnection(self, pairingStatusChanged: .Paired)
+                        }
                     }
                     
                 case .Paired:
@@ -738,20 +776,35 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
             } else {
                 // Peer declined or unpaired
                 if pairingHandler.pairingStatus == .Requested {
-                    self.pairingDelegate?.nioConnection(self, pairingFailed: DefaultPairingHandler.Error.declinedByPeer)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        self.pairingDelegate?.nioConnection(self, pairingFailed: DefaultPairingHandler.Error.declinedByPeer)
+                    }
                 }
-                pairingHandler.updatePairingStatus(globalStatus: .Unpaired)
-                self.pairingDelegate?.nioConnection(self, pairingStatusChanged: .Unpaired)
+                pairingHandler.setStatus(.Unpaired)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.pairingDelegate?.nioConnection(self, pairingStatusChanged: .Unpaired)
+                }
             }
         } catch {
-            self.pairingDelegate?.nioConnection(self, pairingFailed: error)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.pairingDelegate?.nioConnection(self, pairingFailed: error)
+            }
         }
     }
     
     fileprivate func handleTLSEstablished() {
         self.waitingToSecure = false
         
-        // Perform post-handshake certificate validation
+        // Extract and store peer certificate for pairing
+        if let trustHandler = self.trustHandler,
+           let firstNIOCert = trustHandler.peerCertificates.first {
+            self.peerCertificate = NIOCertificateUtils.createSecCertificate(from: firstNIOCert)
+        }
+        
+        // Perform post-handshake certificate validation for paired devices
         if let trustHandler = self.trustHandler, self.pairingHandler?.pairingStatus == .Paired {
             if let deviceId = try? self.identity?.getDeviceId(),
                let savedCertificate = self.config.deviceConfig(for: deviceId).certificate {
@@ -763,10 +816,6 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
                 }
             }
         }
-        
-        // Store peer certificate for later use
-        // Note: We can't easily extract SecCertificate from NIOSSLCertificate
-        // The peer certificate validation is done via PostHandshakeValidator
         
         if self.shouldFinishIntializationWhenSecured {
             self.state = .Open
