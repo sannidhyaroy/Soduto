@@ -960,7 +960,7 @@ public class NIOConnection: NSObject, PayloadConnectionProvider, PairingHandlerD
     }
     
     private func observeNotifications() {
-        NotificationCenter.default.addObserver(forName: UploadTask.portReleaseNotification, object: nil, queue: nil) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: PayloadPortRegistry.portReleaseNotification, object: nil, queue: nil) { [weak self] _ in
             if let self = self {
                 DispatchQueue.main.async {
                     self.delegate?.nioConnectionCapacityChanged(self)

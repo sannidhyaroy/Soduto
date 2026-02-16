@@ -55,7 +55,7 @@ public class NIOUploadTask {
     
     // MARK: Properties
     
-    public static let portReleaseNotification: Notification.Name = UploadTask.portReleaseNotification
+    public static let portReleaseNotification: Notification.Name = PayloadPortRegistry.portReleaseNotification
     
     public weak var delegate: NIOUploadTaskDelegate?
     
@@ -152,12 +152,12 @@ public class NIOUploadTask {
     
     private func bindToAvailablePort() -> Bool {
         for port in NIOUploadTask.startPort...NIOUploadTask.endPort {
-            guard !UploadTask.isPortUsed(port) else { continue }
+            guard !PayloadPortRegistry.isPortUsed(port) else { continue }
             
             do {
                 try self.startServer(on: port)
                 self.listeningPort = port
-                UploadTask.usePort(port)
+                PayloadPortRegistry.usePort(port)
                 return true
             } catch {
                 // Port binding failed, try next port
@@ -379,7 +379,7 @@ public class NIOUploadTask {
         
         Logger.network.debug("uploadFinished(<\(success, privacy: .public)>)")
         
-        UploadTask.releasePort(self.listeningPort)
+        PayloadPortRegistry.releasePort(self.listeningPort)
         
         // Capture delegate before close() clears it
         let delegate = self.delegate
