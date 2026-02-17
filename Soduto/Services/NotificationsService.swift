@@ -1206,6 +1206,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
             return
         }
         
+        // If we didn't receive any notification IDs during the sync window, we won't make destructive assumptions
+        guard !receivedIds.isEmpty else {
+            Logger.services.debug("Finished sync window for \(device.name, privacy: .public): no notification packets received; skipping stale removal")
+            return
+        }
+        
         // Find local notifications that were NOT received from the device (i.e., dismissed on remote)
         let staleIds = localIds.subtracting(receivedIds)
         
