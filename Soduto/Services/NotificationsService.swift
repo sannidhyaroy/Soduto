@@ -235,29 +235,49 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
             guard isValidHash(fileHash) else { throw DataPacket.NotificationError.invalidPayloadHash }
             
             let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileHash).png.cache")
-            for _ in 1...10000 {
-                if !FileManager.default.fileExists(atPath: finalFileURL.path) {
-                    do {
-                        try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
-                        return finalFileURL
-                    } catch {}
-                }
+            if FileManager.default.fileExists(atPath: finalFileURL.path) {
+                Logger.services.debug("Cache icon already exists for hash \(fileHash, privacy: .public): \(finalFileURL.path, privacy: .public)")
+                return finalFileURL
             }
-            throw DataPacket.NotificationError.copyFileFailed
+            
+            do {
+                try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                return finalFileURL
+            } catch {
+                // Another task may have copied the same cache file first.
+                if isFileAlreadyExistsError(error) && FileManager.default.fileExists(atPath: finalFileURL.path) {
+                    Logger.services.debug("Cache icon copy raced but destination now exists for hash \(fileHash, privacy: .public): \(finalFileURL.path, privacy: .public)")
+                    return finalFileURL
+                }
+                Logger.services.error(
+                    "Failed to copy icon to cache for hash \(fileHash, privacy: .public). src=\(fileURL.path, privacy: .public) srcExists=\(FileManager.default.fileExists(atPath: fileURL.path), privacy: .public) dst=\(finalFileURL.path, privacy: .public) dstExists=\(FileManager.default.fileExists(atPath: finalFileURL.path), privacy: .public) error=\(error, privacy: .public)"
+                )
+                throw DataPacket.NotificationError.copyFileFailed
+            }
         }
         
         func copyFileFromCache(url fileURL: URL, notificationId: String) throws -> URL {
             let safeFileName = sanitize(notificationId) + ".png"
             let finalFileURL = fileURL.deletingLastPathComponent().appendingPathComponent(safeFileName)
-            for _ in 1...10000 {
-                if !FileManager.default.fileExists(atPath: finalFileURL.path) {
-                    do {
-                        try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
-                        return finalFileURL
-                    } catch {}
-                }
+            if FileManager.default.fileExists(atPath: finalFileURL.path) {
+                Logger.services.debug("Notification icon already exists for \(notificationId, privacy: .public): \(finalFileURL.path, privacy: .public)")
+                return finalFileURL
             }
-            throw DataPacket.NotificationError.copyFileFailed
+            
+            do {
+                try FileManager.default.copyItem(at: fileURL, to: finalFileURL)
+                return finalFileURL
+            } catch {
+                // Another task may have copied the same notification icon first.
+                if isFileAlreadyExistsError(error) && FileManager.default.fileExists(atPath: finalFileURL.path) {
+                    Logger.services.debug("Notification icon copy raced but destination now exists for \(notificationId, privacy: .public): \(finalFileURL.path, privacy: .public)")
+                    return finalFileURL
+                }
+                Logger.services.error(
+                    "Failed to copy icon from cache for notification \(notificationId, privacy: .public). src=\(fileURL.path, privacy: .public) srcExists=\(FileManager.default.fileExists(atPath: fileURL.path), privacy: .public) dst=\(finalFileURL.path, privacy: .public) dstExists=\(FileManager.default.fileExists(atPath: finalFileURL.path), privacy: .public) error=\(error, privacy: .public)"
+                )
+                throw DataPacket.NotificationError.copyFileFailed
+            }
         }
         
         private func isValidHash(_ hash: String) -> Bool {
@@ -268,6 +288,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
         private func sanitize(_ string: String) -> String {
             let invalidCharacters = CharacterSet(charactersIn: "/:|\\<>\"?*")
             return string.components(separatedBy: invalidCharacters).joined(separator: "_")
+        }
+        
+        private func isFileAlreadyExistsError(_ error: Error) -> Bool {
+            let nsError = error as NSError
+            return nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileWriteFileExistsError
         }
     }
     
