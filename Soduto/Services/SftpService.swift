@@ -47,16 +47,7 @@ public class SftpService: NSObject, Service, NSWindowDelegate {
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.sftpPacketType ])
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.sftpRequestPacketType ])
     
-    /// NIO-compatible packet handler.
-    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
-    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isSftpPacket else { return false }
         handleSftpPacket(dataPacket, from: device)
         return true

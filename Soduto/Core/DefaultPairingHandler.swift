@@ -17,8 +17,12 @@ public protocol PairingHandlerDelegate: AnyObject {
 }
 
 
-/// Implement default data packets based pairing functionality
-public class DefaultPairingHandler: ConnectionDataPacketHandler, Pairable {
+/// Pairing state machine for tracking and managing connection pairing status.
+///
+/// This class handles the pairing state transitions and certificate management.
+/// Connection uses this internally to track pairing state; all delegate callbacks
+/// are handled directly by Connection via PairableDelegate.
+public class DefaultPairingHandler: Pairable {
     
     // MARK: Types
     
@@ -33,11 +37,8 @@ public class DefaultPairingHandler: ConnectionDataPacketHandler, Pairable {
     
     static let pairingTimoutInterval: TimeInterval = 30.0
     
-    /// A delegate object providing needed services for this handler (like packets sendings)
+    /// A delegate object providing needed services for this handler (like packet sending)
     public weak var delegate: PairingHandlerDelegate? = nil
-    
-    /// Identity to be used when calling `pairingDelegate` functions. If nil - self would be used
-    public weak var impersonateAs: PairableClass? = nil
     
     private let config: DeviceConfiguration
     private var pairingTimeout: Timer? = nil
@@ -54,68 +55,12 @@ public class DefaultPairingHandler: ConnectionDataPacketHandler, Pairable {
     }
     
     
-    // MARK: DataPacketsHandler
-    
-    public func handleDataPacket(_ dataPacket:DataPacket, onConnection connection:Connection) -> Bool {
-        assert(self.delegate != nil, "Delegate required for \(type(of: self))")
-        
-        if dataPacket.isPairingPacket {
-            do {
-                let pairFlag = try dataPacket.getPairFlag()
-                if pairFlag {
-                    switch self.pairingStatus {
-                    case .Unpaired:
-                        // Peer initiates pairing
-                        self.pairingStatus = .RequestedByPeer
-                        let request = PairingRequest(connection: connection)
-                        self.pairingDelegate?.pairable(self.impersonateAs ?? self, receivedRequest: request)
-                        break
-                    case .Requested:
-                        // Peer has accepted our invite
-                        if self.config.certificate == nil {
-                            self.config.certificate = self.delegate!.peerCertificate
-                        }
-                        self.pairingStatus = .Paired
-                        if self.pairingStatus != .Paired {
-                            // Failed to set pairingStatus - unpair
-                            _ = self.delegate?.send(DataPacket.unpairPacket())
-                        }
-                        break
-                    case .Paired:
-                        // The peer does not know that we are already paired?
-                        self.acceptPairing()
-                        break
-                    case .RequestedByPeer:
-                        // Already waiting for response from pairing delegate
-                        break
-                    }
-                }
-                else {
-                    if self.pairingStatus == .Requested {
-                        self.pairingDelegate?.pairable(self.impersonateAs ?? self, failedWithError: Error.declinedByPeer)
-                    }
-                    self.pairingStatus = .Unpaired
-                }
-            }
-            catch {
-                self.pairingDelegate?.pairable(self.impersonateAs ?? self, failedWithError: error)
-            }
-        }
-        else if self.pairingStatus != .Paired {
-            // While not paired - accept only identity packets
-            // Also notify peer that we are unpaired if this is the case - we may be unpaired offline and peer might not know about it
-            if self.pairingStatus == .Unpaired {
-                _ = self.delegate!.send(DataPacket.unpairPacket())
-            }
-            return true
-        }
-        return false
-    }
-    
-    
     // MARK: Pairable
     
-    public weak var pairingDelegate: PairableDelegate? = nil
+    public var pairingDelegate: PairableDelegate? {
+        get { return nil }
+        set { /* Connection handles delegate callbacks directly */ }
+    }
     
     public private(set) var pairingStatus: PairingStatus {
         willSet {
@@ -142,8 +87,7 @@ public class DefaultPairingHandler: ConnectionDataPacketHandler, Pairable {
                     strongSelf.declinePairing()
                 }
             }
-            
-            self.pairingDelegate?.pairable(self.impersonateAs ?? self, statusChanged: self.pairingStatus)
+            // Note: Connection handles pairingDelegate callbacks directly via PairableDelegate
         }
     }
     
@@ -154,15 +98,11 @@ public class DefaultPairingHandler: ConnectionDataPacketHandler, Pairable {
         case .Unpaired:
             self.pairingStatus = .Requested
             _ = self.delegate!.send(DataPacket.pairPacket())
-            break
         case .RequestedByPeer:
             self.acceptPairing()
-            break
-        case .Requested:
-            self.pairingDelegate?.pairable(self.impersonateAs ?? self, failedWithError: Error.pairingAlreadyRequested)
-            break
-        case .Paired:
-            self.pairingDelegate?.pairable(self.impersonateAs ?? self, failedWithError: Error.alreadyPaired)
+        case .Requested, .Paired:
+            // Already requesting or paired - no action needed
+            // Connection handles error callbacks directly
             break
         }
     }
@@ -214,7 +154,7 @@ public class DefaultPairingHandler: ConnectionDataPacketHandler, Pairable {
         }
     }
     
-    /// Direct status setter for NIOConnection to use during pairing transitions.
+    /// Direct status setter for Connection to use during pairing transitions.
     /// This triggers didSet observers like direct assignment would.
     internal func setStatus(_ status: PairingStatus) {
         self.pairingStatus = status

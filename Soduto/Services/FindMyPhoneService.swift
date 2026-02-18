@@ -52,16 +52,7 @@ public class FindMyPhoneService: NSObject, Service {
     
     // MARK: Service methods
     
-    /// NIO-compatible packet handler.
-    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
-    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.type == DataPacket.findMyPhoneRequestPacketType else { return false }
         
         // Only process requests from paired devices
@@ -507,7 +498,7 @@ extension FindMyPhoneService {
     // Called when mouse enters the button area
     @objc public func mouseEntered(_ event: NSEvent) {
         if let button = self.hoverButton,
-            let userInfo = event.trackingArea?.userInfo as? [String: Any],
+           let userInfo = event.trackingArea?.userInfo as? [String: Any],
            let isDark = userInfo["isDark"] as? Bool {
             
             NSAnimationContext.runAnimationGroup({ context in

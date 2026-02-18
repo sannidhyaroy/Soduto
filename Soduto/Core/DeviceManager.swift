@@ -13,7 +13,6 @@ import os
 public protocol DeviceManagerDelegate: AnyObject {
     func deviceManager(_ manager: DeviceManager, didChangeDeviceState device: Device)
     func deviceManager(_ manager: DeviceManager, didReceivePairingRequest request: PairingRequest, forDevice device: Device)
-    func deviceManager(_ manager: DeviceManager, didReceiveNIOPairingRequest request: NIOPairingRequest, forDevice device: Device)
 }
 
 public protocol DeviceDataSource: AnyObject {
@@ -70,7 +69,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     private let config: DeviceManagerConfiguration
     private let serviceManager: ServiceManager
     private var devices: [Device.Id:Device] = [:] /// Reachable devices
-    private var recentDevices: [Device.Id:RecentDeviceInfo] = [:] /// Recently reachable devices that are no more - keeping references of them for a short time in case they became unavailable only transiently
+    private var recentDevices: [Device.Id:RecentDeviceInfo] = [:] /// Recently reachable devices
     
     private static let recentDevicesTimout: TimeInterval = 15.0
     
@@ -114,29 +113,6 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
         }
     }
     
-    public func connectionProvider(_ provider: ConnectionProvider, didCreateNIOConnection connection: NIOConnection) {
-        Logger.device.debug("connectionProvider(<\(provider, privacy: .public)> didCreateConnection:<\(connection, privacy: .public)>)")
-        
-        assert(connection.state == .Open, "Connection from connection provider expected to be in open state")
-        assert(connection.identity != nil, "Connection identity expected to be not nil")
-        
-        do {
-            let deviceId = try connection.identity!.getDeviceId() as Device.Id
-            if let device = self.devices[deviceId] {
-                device.addConnection(connection)
-            }
-            else if let device = self.recentDevices.removeValue(forKey: deviceId)?.device {
-                self.readdDevice(device, nioConnection: connection)
-            }
-            else {
-                try self.addNewDevice(withId: deviceId, nioConnection: connection)
-            }
-        }
-        catch {
-            Logger.device.error("Error adding new connection: \(error, privacy: .public)")
-        }
-    }
-    
     
     // MARK: Public methods
     
@@ -163,10 +139,6 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     
     public func device(_ device: Device, didReceivePairingRequest request: PairingRequest) {
         self.delegate?.deviceManager(self, didReceivePairingRequest: request, forDevice: device)
-    }
-    
-    public func device(_ device: Device, didReceiveNIOPairingRequest request: NIOPairingRequest) {
-        self.delegate?.deviceManager(self, didReceiveNIOPairingRequest: request, forDevice: device)
     }
     
     
@@ -210,20 +182,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
         self.device(device, didChangeReachabilityStatus: device.isReachable)
     }
     
-    private func addNewDevice(withId id: Device.Id, nioConnection connection: NIOConnection) throws {
-        let device = try Device(connection: connection, config: self.config.deviceConfig(for: id))
-        device.delegate = self
-        
-        let services: [DeviceDataPacketHandler] = self.serviceManager.services(supportingIncomingCapabilities: device.outgoingCapabilities)
-        device.addDataPacketHandlers(services)
-        
-        self.devices[device.id] = device
-        self.device(device, didChangeReachabilityStatus: device.isReachable)
-    }
-    
     private func removeDevice(_ device: Device) {
-        // Probably the only delegate event that can be called is `device(:didChangeReachabilityStatus:)`, but precisely this one
-        // we want to handle specially - without calling self.serviceManager.setup(for:)
         device.delegate = nil
         
         self.devices.removeValue(forKey: device.id)
@@ -238,14 +197,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     
     private func readdDevice(_ device: Device, connection: Connection) {
         device.addConnection(connection)
-        device.delegate = self // this goes after connection adding intentionally - we handle event specially
-        self.devices[device.id] = device
-        self.device(device, didChangeReachabilityStatus: device.isReachable)
-    }
-    
-    private func readdDevice(_ device: Device, nioConnection connection: NIOConnection) {
-        device.addConnection(connection)
-        device.delegate = self // this goes after connection adding intentionally - we handle event specially
+        device.delegate = self
         self.devices[device.id] = device
         self.device(device, didChangeReachabilityStatus: device.isReachable)
     }

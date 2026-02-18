@@ -27,7 +27,7 @@ import os
 /// - TLS encryption is established regardless
 /// - For paired devices, connection is closed if certificate doesn't match
 /// - This happens before any sensitive data is exchanged
-final class NIOTrustHandler {
+final class TrustHandler {
     
     /// The peer certificates received during handshake.
     private(set) var peerCertificates: [NIOSSLCertificate] = []
@@ -56,13 +56,13 @@ final class NIOTrustHandler {
 // MARK: - Certificate Conversion Utilities
 
 /// Utilities for working with NIOSSLCertificate and SecCertificate.
-enum NIOCertificateUtils {
+enum SSLCertificateUtils {
     
     /// Creates an NIOSSLCertificate from a SecCertificate.
     ///
     /// This direction (SecCertificate → NIOSSLCertificate) is straightforward
     /// because we can get DER bytes from SecCertificate.
-    static func createNIOCertificate(from secCertificate: SecCertificate) throws -> NIOSSLCertificate {
+    static func createSSLCertificate(from secCertificate: SecCertificate) throws -> NIOSSLCertificate {
         let derData = SecCertificateCopyData(secCertificate) as Data
         return try NIOSSLCertificate(bytes: Array(derData), format: .der)
     }
@@ -71,9 +71,9 @@ enum NIOCertificateUtils {
     ///
     /// Uses `toDERBytes()` available in swift-nio-ssl 2.23.0+ to extract DER bytes,
     /// then creates a SecCertificate from those bytes.
-    static func createSecCertificate(from nioCertificate: NIOSSLCertificate) -> SecCertificate? {
+    static func createSecCertificate(from sslCertificate: NIOSSLCertificate) -> SecCertificate? {
         do {
-            let derBytes = try nioCertificate.toDERBytes()
+            let derBytes = try sslCertificate.toDERBytes()
             let derData = Data(derBytes) as CFData
             return SecCertificateCreateWithData(nil, derData)
         } catch {
@@ -86,10 +86,10 @@ enum NIOCertificateUtils {
     ///
     /// Since we can easily convert SecCertificate to NIOSSLCertificate,
     /// we convert the stored certificate and use NIOSSLCertificate's Equatable.
-    static func certificatesMatch(_ nioCert: NIOSSLCertificate, _ secCert: SecCertificate) -> Bool {
+    static func certificatesMatch(_ sslCert: NIOSSLCertificate, _ secCert: SecCertificate) -> Bool {
         do {
-            let convertedNioCert = try createNIOCertificate(from: secCert)
-            return nioCert == convertedNioCert
+            let convertedCert = try createSSLCertificate(from: secCert)
+            return sslCert == convertedCert
         } catch {
             Logger.network.error("Failed to convert SecCertificate for comparison: \(error, privacy: .public)")
             return false
@@ -101,7 +101,7 @@ enum NIOCertificateUtils {
 
 /// Validates the peer certificate after TLS handshake completes.
 ///
-/// This is used with `NIOTrustHandler` to implement certificate pinning:
+/// This is used with `TrustHandler` to implement certificate pinning:
 /// 1. TLS handshake accepts all certificates
 /// 2. After handshake, this validator checks if the peer certificate matches
 /// 3. If validation fails, the connection should be closed
@@ -120,7 +120,7 @@ struct PostHandshakeValidator {
             return false
         }
         
-        let matches = NIOCertificateUtils.certificatesMatch(peerCert, expectedCertificate)
+        let matches = SSLCertificateUtils.certificatesMatch(peerCert, expectedCertificate)
         if !matches {
             Logger.network.error("Post-handshake certificate validation failed")
         }

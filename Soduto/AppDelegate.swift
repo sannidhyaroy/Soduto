@@ -101,11 +101,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         PairingInterfaceController.showPairingNotification(for: device)
     }
     
-    func deviceManager(_ manager: DeviceManager, didReceiveNIOPairingRequest request: NIOPairingRequest, forDevice device: Device) {
-        Logger.general.debug("deviceManager didReceiveNIOPairingRequest for device:<\(String(describing: device), privacy: .public)>")
-        PairingInterfaceController.showPairingNotification(for: device)
-    }
-    
     
     // MARK: Private
     

@@ -88,16 +88,7 @@ public class RunCommandService: Service {
     
     // MARK: Service methods
     
-    /// NIO-compatible packet handler.
-    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
-    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isRunCommandPacket || dataPacket.isRunCommandRequestPacket else { return false }
         
         do {

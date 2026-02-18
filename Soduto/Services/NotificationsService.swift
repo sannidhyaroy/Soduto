@@ -46,7 +46,7 @@ import UserNotifications
 ///
 /// Notification synchronization is best-effort and prioritizes local UI consistency.
 /// Due to KDE Connect protocol limitations, some remote notifications may not be mirrored.
-public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTaskDelegate, UserNotificationActionHandler {
+public class NotificationsService: Service, DownloadTaskDelegate, UserNotificationActionHandler {
     
     let un = UNUserNotificationCenter.current()
     
@@ -90,7 +90,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
         }
     }
     
-    /// Marked @unchecked Sendable because DownloadTask and Device are legacy classes that do not strictly conform to Sendable,
+    /// Marked @unchecked Sendable because DownloadTask and Device do not strictly conform to Sendable,
     /// but are used here in a thread-safe manner (DownloadTask is unique per request, Device is treated as reference).
     private struct DownloadInfo: @unchecked Sendable {
         let task: DownloadTask
@@ -101,20 +101,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
         let device: Device
     }
     
-    /// NIO version of DownloadInfo
-    private struct NIODownloadInfo: @unchecked Sendable {
-        let task: NIODownloadTask
-        let fileHash: String?
-        let notificationId: String
-        let partFileURL: URL
-        let dataPacket: DataPacket
-        let device: Device
-    }
-    
     /// Actor to manage icon download state and cache mappings safely off the main thread.
     private actor IconStateManager {
         var notificationIconDownloadInfos: [DownloadInfo] = []
-        var nioNotificationIconDownloadInfos: [NIODownloadInfo] = []
         var downloadedNotificationIconFileURLByNotificationId: [String: URL] = [:]
         var cachedDownloadedNotificationIconFileURLByHash: [String: URL] = [:]
         
@@ -147,18 +136,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
             notificationIconDownloadInfos.append(info)
         }
         
-        func addNIODownloadInfo(_ info: NIODownloadInfo) {
-            nioNotificationIconDownloadInfos.append(info)
-        }
-        
         func removeDownloadInfo(for task: DownloadTask) -> DownloadInfo? {
             guard let index = notificationIconDownloadInfos.firstIndex(where: { $0.task === task }) else { return nil }
             return notificationIconDownloadInfos.remove(at: index)
-        }
-        
-        func removeNIODownloadInfo(for task: NIODownloadTask) -> NIODownloadInfo? {
-            guard let index = nioNotificationIconDownloadInfos.firstIndex(where: { $0.task === task }) else { return nil }
-            return nioNotificationIconDownloadInfos.remove(at: index)
         }
         
         func setDownloadedIconURL(_ url: URL, for notificationId: String) {
@@ -367,17 +347,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
     
     // MARK: Service methods
     
-    /// NIO-compatible packet handler. Delegates to handleDataPacketCore since this service doesn't use Connection.
-    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
-    /// Core packet handling logic that doesn't depend on Connection type.
-    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isNotificationPacket else { return false }
         
         // Log the raw packet (enable only when debugging, as logs may leak sensitive info)
@@ -396,10 +366,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
                     if id != nil && dataPacket.downloadTask != nil {
                         let iconDownloadTask = dataPacket.downloadTask
                         await self.startIconDownloadTaskAndShowNotification(downloadTask: iconDownloadTask!, notificationId: id!, dataPacket: dataPacket, device: device)
-                    }
-                    else if id != nil && dataPacket.nioDownloadTask != nil {
-                        let iconDownloadTask = dataPacket.nioDownloadTask
-                        await self.startNIOIconDownloadTaskAndShowNotification(downloadTask: iconDownloadTask!, notificationId: id!, dataPacket: dataPacket, device: device)
                     }
                     else {
                         // No download task - try to find cached icon
@@ -540,42 +506,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
     /// Note: This is called on the Main Thread (default delegate queue for DownloadTask).
     /// We offload the processing to a Task to interact with the internal actors safely.
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("downloadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
+        Logger.services.debug("downloadTask(<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         Task {
             guard let info = await self.iconState.removeDownloadInfo(for: task) else { return }
-            if success {
-                do {
-                    // Sanitize the notification ID for use in filename (remove |, :, etc.)
-                    let safeFileName = sanitizeForFilename(info.notificationId) + ".png"
-                    let finalFileURL = try await self.iconState.renamePartFile(url: info.partFileURL, to: safeFileName)
-                    Logger.services.debug("downloadTask saving icon to: \(finalFileURL.path, privacy: .public)")
-                    Logger.services.debug("Notification id: \(info.notificationId, privacy: .public)")
-                    
-                    await self.iconState.setDownloadedIconURL(finalFileURL, for: info.notificationId)
-                    
-                    if let fileHash = info.fileHash, await self.iconState.getCachedIconURL(for: fileHash) == nil {
-                        let cachedFileURL = try await self.iconState.copyFileToCache(url: finalFileURL, hash: fileHash)
-                        await self.iconState.setCachedIconURL(cachedFileURL, for: fileHash)
-                        Logger.services.debug("New icon found with hash \(fileHash, privacy: .public), saving to cached icons as \(cachedFileURL, privacy: .public)")
-                    }
-                }
-                catch let error {
-                    Logger.services.error("Failed to process downloaded icon for \(info.notificationId, privacy: .public): \(error, privacy: .public)")
-                }
-            }
-            await self.showNotification(for: info.dataPacket, from: info.device)
-        }
-    }
-    
-    
-    // MARK: NIODownloadTaskDelegate
-    
-    public func nioDownloadTask(_ task: NIODownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("downloadTask(id:<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
-        
-        Task {
-            guard let info = await self.iconState.removeNIODownloadInfo(for: task) else { return }
             if success {
                 do {
                     // Sanitize the notification ID for use in filename (remove |, :, etc.)
@@ -821,40 +755,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
             if let tempStream = await iconState.streamForTempDownload() {
                 let partFileURL = tempStream.fileURL
                 await iconState.addDownloadInfo(DownloadInfo(
-                    task: task,
-                    fileHash: downloadFileHash,
-                    notificationId: notificationId,
-                    partFileURL: partFileURL,
-                    dataPacket: dataPacket,
-                    device: device
-                ))
-                task.delegate = self
-                task.start(withStream: tempStream.transfer())
-            }
-        }
-    }
-    
-    private func startNIOIconDownloadTaskAndShowNotification(downloadTask task: NIODownloadTask, notificationId: String, dataPacket: DataPacket, device: Device) async {
-        var downloadFileHash: String? = nil
-        do {
-            downloadFileHash = try dataPacket.getPayloadHash()
-        }
-        catch {}
-        
-        if let hash = downloadFileHash, let cachedURL = await iconState.getCachedIconURL(for: hash) {
-            Logger.services.debug("Found cached icon for hash \(hash, privacy: .public) at \(cachedURL, privacy: .public)")
-            do {
-                let copiedFromCacheFileURL = try await iconState.copyFileFromCache(url: cachedURL, notificationId: notificationId)
-                await iconState.setDownloadedIconURL(copiedFromCacheFileURL, for: notificationId)
-            }
-            catch let error {
-                Logger.services.error("Failed to copy cached icon for \(notificationId, privacy: .public): \(error, privacy: .public)")
-            }
-            await self.showNotification(for: dataPacket, from: device)
-        } else {
-            if let tempStream = await iconState.streamForTempDownload() {
-                let partFileURL = tempStream.fileURL
-                await iconState.addNIODownloadInfo(NIODownloadInfo(
                     task: task,
                     fileHash: downloadFileHash,
                     notificationId: notificationId,

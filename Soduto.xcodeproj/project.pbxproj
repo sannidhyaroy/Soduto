@@ -43,10 +43,6 @@
 		31366D412F4130750013911D /* NIOPosix in Frameworks */ = {isa = PBXBuildFile; productRef = 31366D402F4130750013911D /* NIOPosix */; };
 		31366D432F4131470013911D /* NIOFoundationCompat in Frameworks */ = {isa = PBXBuildFile; productRef = 31366D422F4131470013911D /* NIOFoundationCompat */; };
 		31366D452F41337E0013911D /* NIOTLS in Frameworks */ = {isa = PBXBuildFile; productRef = 31366D442F41337E0013911D /* NIOTLS */; };
-		31366D472F4143F60013911D /* NIOConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D462F4143F60013911D /* NIOConnection.swift */; };
-		31366D492F414D6F0013911D /* BaseConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D482F414D6F0013911D /* BaseConnection.swift */; };
-		31366D4B2F415BB00013911D /* NIOUploadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D4A2F415BB00013911D /* NIOUploadTask.swift */; };
-		31366D4D2F41687B0013911D /* NIODownloadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D4C2F41687B0013911D /* NIODownloadTask.swift */; };
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
@@ -59,6 +55,9 @@
 		31A0A3C02F2C118F00CDA243 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */; };
 		31A0A3C52F2C7C6100CDA243 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */; };
 		31A421952F43B526003B97FC /* PayloadPortRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A421942F43B526003B97FC /* PayloadPortRegistry.swift */; };
+		31A421992F43B8C2003B97FC /* UploadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A421982F43B8C2003B97FC /* UploadTask.swift */; };
+		31A4219A2F43B8C2003B97FC /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A421962F43B8C2003B97FC /* Connection.swift */; };
+		31A4219B2F43B8C2003B97FC /* DownloadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A421972F43B8C2003B97FC /* DownloadTask.swift */; };
 		31DB2F072F3BE86300654096 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F062F3BE86300654096 /* Sparkle */; };
 		31DB2F0F2F3CEE8D00654096 /* NIOSSL in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F0E2F3CEE8D00654096 /* NIOSSL */; };
 		31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */; };
@@ -86,7 +85,6 @@
 		8436DEFA1E958ABA00529362 /* FileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8436DEF91E958ABA00529362 /* FileManager.swift */; };
 		8438A9261E45145F00922155 /* StatusBarApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8438A9251E45145F00922155 /* StatusBarApplication.swift */; };
 		843B67041DF1E64A00289EC9 /* ShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843B67031DF1E64A00289EC9 /* ShareService.swift */; };
-		843B670A1DF2CEC400289EC9 /* DownloadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843B67091DF2CEC400289EC9 /* DownloadTask.swift */; };
 		843B670C1DF3087800289EC9 /* URL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843B670B1DF3087800289EC9 /* URL.swift */; };
 		843E170E1E25851D001D0444 /* IO.m in Sources */ = {isa = PBXBuildFile; fileRef = 843E170D1E25851D001D0444 /* IO.m */; };
 		8440FCF71E6CA68300E5BFA9 /* FileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8440FCF61E6CA68300E5BFA9 /* FileSystem.swift */; };
@@ -132,10 +130,8 @@
 		849962131D572B1F002B893A /* Logging.m in Sources */ = {isa = PBXBuildFile; fileRef = 849962121D572B1F002B893A /* Logging.m */; };
 		84A16BE01E9EBADD00DE2C0B /* Sequence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84A16BDF1E9EBADD00DE2C0B /* Sequence.swift */; };
 		84C545E01EABC14E005A8107 /* SftpFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */; };
-		84C613E31DECBF6C00CE7F7A /* UploadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C613E21DECBF6B00CE7F7A /* UploadTask.swift */; };
 		84D071681EB91F5D004D383A /* Soduto Files.app in Embed Helper Executables */ = {isa = PBXBuildFile; fileRef = 845BC70A1E69F00E00DC9B81 /* Soduto Files.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		84D903A21DC696A600E61DA7 /* CertificateUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D903A11DC696A600E61DA7 /* CertificateUtils.swift */; };
-		84FA45D71DDDCB3D00EF3992 /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FA45CF1DDDCB3D00EF3992 /* Connection.swift */; };
 		84FA45D81DDDCB3D00EF3992 /* ConnectionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FA45D01DDDCB3D00EF3992 /* ConnectionProvider.swift */; };
 		84FA45D91DDDCB3D00EF3992 /* DataPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FA45D11DDDCB3D00EF3992 /* DataPacket.swift */; };
 		84FA45DA1DDDCB3D00EF3992 /* Device.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FA45D21DDDCB3D00EF3992 /* Device.swift */; };
@@ -262,10 +258,6 @@
 		31366D372F412C6F0013911D /* STARTTLSHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = STARTTLSHandler.swift; sourceTree = "<group>"; };
 		31366D392F412C7E0013911D /* TLSTrustHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSTrustHandler.swift; sourceTree = "<group>"; };
 		31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChannelOptions+Keepalive.swift"; sourceTree = "<group>"; };
-		31366D462F4143F60013911D /* NIOConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOConnection.swift; sourceTree = "<group>"; };
-		31366D482F414D6F0013911D /* BaseConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseConnection.swift; sourceTree = "<group>"; };
-		31366D4A2F415BB00013911D /* NIOUploadTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOUploadTask.swift; sourceTree = "<group>"; };
-		31366D4C2F41687B0013911D /* NIODownloadTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIODownloadTask.swift; sourceTree = "<group>"; };
 		3152C3F22F353AFA005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F42F353B1E005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F72F368F7B005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
@@ -276,6 +268,9 @@
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
 		31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetView.swift; sourceTree = "<group>"; };
 		31A421942F43B526003B97FC /* PayloadPortRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadPortRegistry.swift; sourceTree = "<group>"; };
+		31A421962F43B8C2003B97FC /* Connection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
+		31A421972F43B8C2003B97FC /* DownloadTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadTask.swift; sourceTree = "<group>"; };
+		31A421982F43B8C2003B97FC /* UploadTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadTask.swift; sourceTree = "<group>"; };
 		31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		31F3A14F293B5EA300550088 /* Soduto Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Soduto Share.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		31F3A153293B5EA300550088 /* ShareExtensionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionController.swift; sourceTree = "<group>"; };
@@ -310,7 +305,6 @@
 		8438A9251E45145F00922155 /* StatusBarApplication.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StatusBarApplication.swift; sourceTree = "<group>"; };
 		8438ECE01EBA650A006CBB07 /* Soduto_Files.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto_Files.entitlements; sourceTree = "<group>"; };
 		843B67031DF1E64A00289EC9 /* ShareService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShareService.swift; sourceTree = "<group>"; };
-		843B67091DF2CEC400289EC9 /* DownloadTask.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DownloadTask.swift; sourceTree = "<group>"; };
 		843B670B1DF3087800289EC9 /* URL.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = URL.swift; sourceTree = "<group>"; };
 		843E170C1E25851D001D0444 /* IO.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IO.h; sourceTree = "<group>"; };
 		843E170D1E25851D001D0444 /* IO.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = IO.m; sourceTree = "<group>"; };
@@ -364,9 +358,7 @@
 		849962121D572B1F002B893A /* Logging.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = Logging.m; path = MYUtilities/Logging.m; sourceTree = "<group>"; };
 		84A16BDF1E9EBADD00DE2C0B /* Sequence.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Sequence.swift; sourceTree = "<group>"; };
 		84C545DF1EABC14E005A8107 /* SftpFileSystem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SftpFileSystem.swift; sourceTree = "<group>"; };
-		84C613E21DECBF6B00CE7F7A /* UploadTask.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UploadTask.swift; sourceTree = "<group>"; };
 		84D903A11DC696A600E61DA7 /* CertificateUtils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CertificateUtils.swift; sourceTree = "<group>"; };
-		84FA45CF1DDDCB3D00EF3992 /* Connection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
 		84FA45D01DDDCB3D00EF3992 /* ConnectionProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ConnectionProvider.swift; sourceTree = "<group>"; };
 		84FA45D11DDDCB3D00EF3992 /* DataPacket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DataPacket.swift; sourceTree = "<group>"; };
 		84FA45D21DDDCB3D00EF3992 /* Device.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Device.swift; sourceTree = "<group>"; };
@@ -466,9 +458,6 @@
 			children = (
 				31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */,
 				31366D352F412C4A0013911D /* KDEConnectPacketCodec.swift */,
-				31366D462F4143F60013911D /* NIOConnection.swift */,
-				31366D4C2F41687B0013911D /* NIODownloadTask.swift */,
-				31366D4A2F415BB00013911D /* NIOUploadTask.swift */,
 				31366D372F412C6F0013911D /* STARTTLSHandler.swift */,
 				31366D392F412C7E0013911D /* TLSTrustHandler.swift */,
 			);
@@ -648,22 +637,21 @@
 				02EC48A91F2296C600C9370F /* Configuration */,
 				31366D342F412BB80013911D /* NIO */,
 				8468BDFE1DEB7F5F003B9925 /* Utils */,
-				31366D482F414D6F0013911D /* BaseConnection.swift */,
 				84D903A11DC696A600E61DA7 /* CertificateUtils.swift */,
-				84FA45CF1DDDCB3D00EF3992 /* Connection.swift */,
+				31A421962F43B8C2003B97FC /* Connection.swift */,
 				84FA45D01DDDCB3D00EF3992 /* ConnectionProvider.swift */,
 				84FA45D11DDDCB3D00EF3992 /* DataPacket.swift */,
 				8456F4A91D7DEA47006EFE19 /* DefaultPairingHandler.swift */,
 				84FA45D21DDDCB3D00EF3992 /* Device.swift */,
 				84FA45D31DDDCB3D00EF3992 /* DeviceManager.swift */,
-				843B67091DF2CEC400289EC9 /* DownloadTask.swift */,
+				31A421972F43B8C2003B97FC /* DownloadTask.swift */,
 				8456F4A71D7DE393006EFE19 /* Pairable.swift */,
 				31A421942F43B526003B97FC /* PayloadPortRegistry.swift */,
 				84FA45E91DDF433300EF3992 /* Service.swift */,
 				849237981DE06EBC00D95BBA /* ServiceAction.swift */,
 				84FA45E71DDE088B00EF3992 /* ServiceManager.swift */,
 				84FA45D51DDDCB3D00EF3992 /* SocketAddress.swift */,
-				84C613E21DECBF6B00CE7F7A /* UploadTask.swift */,
+				31A421982F43B8C2003B97FC /* UploadTask.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -805,11 +793,11 @@
 			isa = PBXGroup;
 			children = (
 				84651A711E599A3C00D17601 /* BatteryService.swift */,
-				F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */,
 				840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */,
+				F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */,
 				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
-				31711BA72F17435000E3B9FE /* MPRISService.swift */,
 				F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */,
+				31711BA72F17435000E3B9FE /* MPRISService.swift */,
 				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
 				84FA45EC1DDF525200EF3992 /* PingService.swift */,
 				842505E81ED1BD3C00AEE25F /* RemoteKeyboardService.swift */,
@@ -1088,10 +1076,8 @@
 				0248E0FF1F23C4AF00C411F7 /* DevicePreferencesViewController.swift in Sources */,
 				84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */,
 				311BC2912F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */,
-				84C613E31DECBF6C00CE7F7A /* UploadTask.swift in Sources */,
 				F80E30722DBE0D880047D068 /* MacToRemoteInputService.swift in Sources */,
 				84FA45E81DDE088B00EF3992 /* ServiceManager.swift in Sources */,
-				31366D4D2F41687B0013911D /* NIODownloadTask.swift in Sources */,
 				F826E6CD2DB4F12500E736CE /* ModernUIStyleKit.swift in Sources */,
 				F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */,
 				0236B63C1F9936C80020DA9F /* AboutWindowController.swift in Sources */,
@@ -1112,20 +1098,19 @@
 				84FA45D91DDDCB3D00EF3992 /* DataPacket.swift in Sources */,
 				8FC977F11D4778E9001ADF7E /* StatusBarMenuController.swift in Sources */,
 				F826E6C92DB419AF00E736CE /* RunCommandsWindowController.swift in Sources */,
-				843B670A1DF2CEC400289EC9 /* DownloadTask.swift in Sources */,
 				311BC28D2F2800D400E4A33F /* StableHashing.swift in Sources */,
 				02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */,
 				024F8B191F24FC7700D6E504 /* ServicePreferencesViewController.swift in Sources */,
 				849237A11DE224CF00D95BBA /* FindMyPhoneService.swift in Sources */,
+				31A421992F43B8C2003B97FC /* UploadTask.swift in Sources */,
+				31A4219A2F43B8C2003B97FC /* Connection.swift in Sources */,
+				31A4219B2F43B8C2003B97FC /* DownloadTask.swift in Sources */,
 				84FA45E41DDDDB7F00EF3992 /* InterfaceElementTags.swift in Sources */,
-				31366D4B2F415BB00013911D /* NIOUploadTask.swift in Sources */,
 				849237A31DE4E76E00D95BBA /* UserNotificationManager.swift in Sources */,
 				845BE2E21EC246EE00F3BD62 /* LoadingWindowController.swift in Sources */,
 				84651A761E5AEBE100D17601 /* SftpService.swift in Sources */,
-				84FA45D71DDDCB3D00EF3992 /* Connection.swift in Sources */,
 				84FFDA2A1E1D8D370069AC9A /* SimplePing.m in Sources */,
 				311BC28F2F2865A200E4A33F /* UserNotificationHelper.swift in Sources */,
-				31366D472F4143F60013911D /* NIOConnection.swift in Sources */,
 				849961C61D5728B2002B893A /* ExceptionUtils.m in Sources */,
 				31A421952F43B526003B97FC /* PayloadPortRegistry.swift in Sources */,
 				F826E6C72DB302F000E736CE /* RunCommandService.swift in Sources */,
@@ -1140,7 +1125,6 @@
 				0223974F1F0908FB00B0C70A /* TextFieldWithLinks.swift in Sources */,
 				3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */,
 				8499620E1D5728EE002B893A /* Test_Assertions.m in Sources */,
-				31366D492F414D6F0013911D /* BaseConnection.swift in Sources */,
 				8421A8E71D761409008AC833 /* PreferencesWindowController.swift in Sources */,
 				849237991DE06EBC00D95BBA /* ServiceAction.swift in Sources */,
 				31366D3C2F412C8D0013911D /* ChannelOptions+Keepalive.swift in Sources */,

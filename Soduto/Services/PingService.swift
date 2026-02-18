@@ -43,7 +43,7 @@ fileprivate extension DataPacket {
     }
 }
 
-/// Service providing capability to send end receive "pings" - short messages that can be used to test 
+/// Service providing capability to send end receive "pings" - short messages that can be used to test
 /// devices connectivity
 ///
 /// This service displays a notification to the user each time a package with type
@@ -70,16 +70,7 @@ public class PingService: Service {
     
     // MARK: Service methods
     
-    /// NIO-compatible packet handler.
-    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
-    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isPingPacket else { return false }
         
         self.showNotification(for: dataPacket, from: device)

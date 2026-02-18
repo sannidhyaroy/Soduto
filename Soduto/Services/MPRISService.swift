@@ -39,7 +39,7 @@ import CommonCrypto
 /// - SetPosition (int): set position in ms
 /// - albumArtUrl (string): request album art for a URL
 ///
-public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegate, ObservableObject {
+public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     
     let un = UNUserNotificationCenter.current()
     
@@ -65,14 +65,6 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
         let device: Device
     }
     
-    private struct NIODownloadInfo {
-        let task: NIODownloadTask
-        let fileHash: String?
-        let playerIdentity: String
-        let albumArtUrl: String
-        let partFileURL: URL
-        let device: Device
-    }
     
     /// Owns a temporary download stream and guarantees closure
     private final class TempDownloadStream {
@@ -103,7 +95,6 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.mprisRequestPacketType ])
     
     private var albumArtDownloadInfos: [DownloadInfo] = []
-    private var nioAlbumArtDownloadInfos: [NIODownloadInfo] = []
     private var downloadedAlbumArtFileURLByPlayerIdentity: [String: URL] = [:]
     private var cachedDownloadedAlbumArtFileURLByHash: [String: URL] = [:]
     
@@ -128,16 +119,7 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
     
     // MARK: Service methods
     
-    /// NIO-compatible packet handler.
-    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
-    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isMprisPacket else { return false }
         
         Logger.services.debug("MPRIS::handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
@@ -152,8 +134,6 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
                    dataPacket.hasPayload() {
                     if let downloadTask = dataPacket.downloadTask {
                         handleAlbumArtTransfer(player: player, albumArtUrl: albumArtUrl, downloadTask: downloadTask, from: device)
-                    } else if let nioDownloadTask = dataPacket.nioDownloadTask {
-                        handleNIOAlbumArtTransfer(player: player, albumArtUrl: albumArtUrl, downloadTask: nioDownloadTask, from: device)
                     }
                 } else {
                     // Regular player update
@@ -186,16 +166,8 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
             downloadInfo.task.cancel()
         }
         
-        // Cancel any ongoing NIO album art downloads for this device
-        let nioDownloadsToCancel = nioAlbumArtDownloadInfos.filter { $0.device.id == device.id }
-        for downloadInfo in nioDownloadsToCancel {
-            Logger.services.debug("MPRIS::Cancelling NIO album art download for device \(device.name, privacy: .public)")
-            downloadInfo.task.cancel()
-        }
-        
         // Remove download info for this device
         albumArtDownloadInfos.removeAll { $0.device.id == device.id }
-        nioAlbumArtDownloadInfos.removeAll { $0.device.id == device.id }
         
         // Clean up any player-specific album art files (keep cache for reuse)
         let playerIdentities = Set(players.values.flatMap { $0 }.map { $0.identity })
@@ -226,7 +198,7 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
     // MARK: DownloadTaskDelegate
     
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("MPRIS::downloadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
+        Logger.services.debug("MPRIS::downloadTask(<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         guard let index = self.albumArtDownloadInfos.firstIndex(where: { $0.task === task }) else {
             Logger.services.error("MPRIS::Download task not found in tracking list")
@@ -294,76 +266,6 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
     }
     
     
-    // MARK: NIODownloadTaskDelegate
-    
-    public func nioDownloadTask(_ task: NIODownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("MPRIS::downloadTask(id:<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
-        
-        guard let index = self.nioAlbumArtDownloadInfos.firstIndex(where: { $0.task === task }) else {
-            Logger.services.error("MPRIS::download task not found in tracking list")
-            return
-        }
-        let info = self.nioAlbumArtDownloadInfos.remove(at: index)
-        
-        if success {
-            do {
-                // Create a more descriptive filename with proper extension detection
-                let fileExtension: String
-                if let artURL = URL(string: info.albumArtUrl),
-                   !artURL.pathExtension.isEmpty {
-                    fileExtension = artURL.pathExtension.lowercased()
-                } else {
-                    // Default to png if we can't determine the extension
-                    fileExtension = "png"
-                }
-                
-                let fileName = "\(info.playerIdentity)-albumart-\(Int(Date().timeIntervalSince1970)).\(fileExtension)"
-                
-                let finalFileURL = try self.renamePartFile(url: info.partFileURL, to: fileName)
-                Logger.services.debug("MPRIS::NIO Album art downloaded to: \(finalFileURL.path, privacy: .public)")
-                
-                self.downloadedAlbumArtFileURLByPlayerIdentity[info.playerIdentity] = finalFileURL
-                
-                // Cache the album art using the hash
-                if let fileHash = info.fileHash {
-                    do {
-                        let cachedFileURL = try self.copyFileToCache(url: finalFileURL, hash: fileHash)
-                        self.cachedDownloadedAlbumArtFileURLByHash[fileHash] = cachedFileURL
-                        Logger.services.debug("MPRIS::NIO Album art cached with hash \(fileHash, privacy: .public) at \(cachedFileURL.path, privacy: .public)")
-                    } catch {
-                        Logger.services.error("MPRIS::NIO Failed to cache album art: \(error, privacy: .public)")
-                        // Continue even if caching fails
-                    }
-                }
-                
-                // Update the player with the downloaded album art
-                if let devicePlayers = players[info.device.id] {
-                    for player in devicePlayers {
-                        if player.identity == info.playerIdentity {
-                            Logger.services.debug("MPRIS::NIO Updating player \(player.identity, privacy: .public) with downloaded album art")
-                            player.updateAlbumArt(finalFileURL)
-                            break
-                        }
-                    }
-                }
-                
-            } catch {
-                Logger.services.error("MPRIS::NIO Error processing downloaded album art: \(error, privacy: .public)")
-            }
-        } else {
-            Logger.services.error("MPRIS::NIO Album art download failed for player \(info.playerIdentity, privacy: .public)")
-            
-            // Clean up the partial file
-            do {
-                if FileManager.default.fileExists(atPath: info.partFileURL.path) {
-                    try FileManager.default.removeItem(at: info.partFileURL)
-                }
-            } catch {
-                Logger.services.error("MPRIS::NIO Failed to clean up partial file: \(error, privacy: .public)")
-            }
-        }
-    }
-    
     // MARK: Private methods - Packet Handlers
     
     private func handlePlayerList(_ playerList: [String], from device: Device) {
@@ -407,11 +309,6 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
     private func handleAlbumArtTransfer(player: String, albumArtUrl: String, downloadTask: DownloadTask, from device: Device) {
         Logger.services.debug("MPRIS::Handle album art transfer for player \(player, privacy: .public) from device \(device.name, privacy: .public)")
         startAlbumArtDownload(player: player, albumArtUrl: albumArtUrl, downloadTask: downloadTask, from: device)
-    }
-    
-    private func handleNIOAlbumArtTransfer(player: String, albumArtUrl: String, downloadTask: NIODownloadTask, from device: Device) {
-        Logger.services.debug("MPRIS::Handle NIO album art transfer for player \(player, privacy: .public) from device \(device.name, privacy: .public)")
-        startNIOAlbumArtDownload(player: player, albumArtUrl: albumArtUrl, downloadTask: downloadTask, from: device)
     }
     
     private func handlePlayerUpdate(player: String, packet: DataPacket, from device: Device) {
@@ -727,59 +624,6 @@ public class MPRISService: Service, DownloadTaskDelegate, NIODownloadTaskDelegat
             Logger.services.debug("MPRIS::Started download task for album art")
         } else {
             Logger.services.error("MPRIS::Failed to create download stream for album art")
-        }
-    }
-    
-    private func startNIOAlbumArtDownload(player: String, albumArtUrl: String, downloadTask: NIODownloadTask, from device: Device) {
-        Logger.services.debug("MPRIS::Starting NIO album art download for player \(player, privacy: .public) from \(albumArtUrl, privacy: .public)")
-        
-        let downloadFileHash = getHashForAlbumArt(player: player, albumArtUrl: albumArtUrl)
-        
-        // Check if we already have this album art cached
-        if let hash = downloadFileHash, let cachedFileURL = getCachedAlbumArt(hash: hash) {
-            Logger.services.debug("MPRIS::Found cached album art for hash \(hash, privacy: .public) at \(cachedFileURL, privacy: .public)")
-            do {
-                let copiedFromCacheFileURL = try self.copyFileFromCache(url: cachedFileURL, playerIdentity: player)
-                self.downloadedAlbumArtFileURLByPlayerIdentity[player] = copiedFromCacheFileURL
-                
-                // Update the player with the album art
-                if let devicePlayers = players[device.id] {
-                    for playerObj in devicePlayers {
-                        if playerObj.identity == player {
-                            playerObj.updateAlbumArt(copiedFromCacheFileURL)
-                            break
-                        }
-                    }
-                }
-                return
-            } catch {
-                Logger.services.error("MPRIS::Failed to copy from cache: \(error, privacy: .public)")
-                // Continue with download if cache copy fails
-            }
-        }
-        
-        // Check if we already have a download in progress for this album art
-        if nioAlbumArtDownloadInfos.contains(where: { $0.albumArtUrl == albumArtUrl && $0.playerIdentity == player }) {
-            Logger.services.debug("MPRIS::album art download already in progress for \(albumArtUrl, privacy: .public)")
-            return
-        }
-        
-        // Start new download
-        if let (tempStream, partFileURL) = self.streamForTempDownload() {
-            let downloadInfo = NIODownloadInfo(
-                task: downloadTask,
-                fileHash: downloadFileHash,
-                playerIdentity: player,
-                albumArtUrl: albumArtUrl,
-                partFileURL: partFileURL,
-                device: device
-            )
-            self.nioAlbumArtDownloadInfos.append(downloadInfo)
-            downloadTask.delegate = self
-            downloadTask.start(withStream: tempStream.transfer())
-            Logger.services.debug("MPRIS::Started NIO download task for album art")
-        } else {
-            Logger.services.error("MPRIS::Failed to create NIO download stream for album art")
         }
     }
     

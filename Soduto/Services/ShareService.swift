@@ -33,7 +33,7 @@ import UserNotifications
 /// Note:
 /// `ShareService` is not the primary `ConnectionDelegate`.
 /// Upload completion events are forwarded by `Device`, which owns the active connection lifecycle.
-public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadTaskDelegate, ConnectionDelegate, NIOConnectionDelegate, UserNotificationActionHandler, NSDraggingDestination {
+public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDelegate, UserNotificationActionHandler, NSDraggingDestination {
     
     let un = UNUserNotificationCenter.current()
     let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("AirDrop"))
@@ -62,13 +62,9 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
         let task: DownloadTask
         let fileName: String
         let url: URL
+        let deviceName: String
     }
     
-    private struct NIODownloadInfo {
-        let task: NIODownloadTask
-        let fileName: String
-        let url: URL
-    }
     
     /// Owns a temporary download stream and guarantees closure
     private final class TempDownloadStream {
@@ -111,7 +107,6 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.sharePacketType ])
     
     private var downloadInfos: [DownloadInfo] = []
-    private var nioDownloadInfos: [NIODownloadInfo] = []
     private var devices: [Device.Id:Device] = [:]
     private var validDevices: [Device] { return self.devices.values.filter { $0.isReachable && $0.pairingStatus == .Paired } }
     
@@ -122,16 +117,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
     
     // MARK: Service methods
     
-    /// NIO-compatible packet handler.
-    public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onAnyConnection connection: AnyBaseConnection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        return handleDataPacketCore(dataPacket, fromDevice: device)
-    }
-    
-    private func handleDataPacketCore(_ dataPacket: DataPacket, fromDevice device: Device) -> Bool {
         guard dataPacket.isSharePacket else { return false }
         
 #if DEBUG
@@ -144,10 +130,6 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
             if let downloadTask = dataPacket.downloadTask {
                 let fileName = try dataPacket.getFilename()
                 self.downloadFile(fileName, usingTask: downloadTask, from: device)
-            }
-            else if let nioDownloadTask = dataPacket.nioDownloadTask {
-                let fileName = try dataPacket.getFilename()
-                self.downloadFile(fileName, usingNIOTask: nioDownloadTask, from: device)
             }
             else if let text = try dataPacket.getText() {
                 let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
@@ -271,48 +253,10 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
     }
     
     
-    // MARK: NIOConnectionDelegate
-    
-    public func nioConnection(_ connection: NIOConnection, didSwitchToState state: NIOConnection.State) {
-        // No action needed for state changes
-    }
-    
-    public func nioConnection(_ connection: NIOConnection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
-        guard packet.hasPayload(), packet.type == DataPacket.sharePacketType else { return }
-        
-        self.showUploadFinishNotification(nioConnection: connection, succeeded: uploadedPayload)
-        
-        // Track extension-initiated uploads and report final status when all complete
-        guard let deviceId = try? connection.identity?.getDeviceId(), var tracking = pendingExtensionUploads[deviceId] else { return }
-        
-        if uploadedPayload {
-            tracking.succeeded += 1
-        } else {
-            tracking.failed += 1
-        }
-        
-        if tracking.succeeded + tracking.failed >= tracking.total {
-            pendingExtensionUploads.removeValue(forKey: deviceId)
-            let status = tracking.failed > 0 ? "failed" : "success"
-            Self.reportExtensionTransferStatus(deviceId: deviceId, status: status)
-        } else {
-            pendingExtensionUploads[deviceId] = tracking
-        }
-    }
-    
-    public func nioConnection(_ connection: NIOConnection, didReadPacket packet: DataPacket) {
-        // Packet reading is handled by Device, not here
-    }
-    
-    public func nioConnectionCapacityChanged(_ connection: NIOConnection) {
-        // No action needed for capacity changes
-    }
-    
-    
     // MARK: DownloadTaskDelegate
     
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("downloadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
+        Logger.services.debug("downloadTask(<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         guard let index = self.downloadInfos.firstIndex(where: { $0.task === task }) else { return }
         let info = self.downloadInfos.remove(at: index)
@@ -320,37 +264,14 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
         do {
             if success {
                 let finalUrl = try self.renamePartFile(url: info.url, to: info.fileName)
-                self.showDownloadFinishNotification(fileName: info.fileName, downloadTask: task, succeeded: success, finalUrl: finalUrl)
+                self.showDownloadFinishNotification(fileName: info.fileName, deviceName: info.deviceName, downloadTask: task, succeeded: success, finalUrl: finalUrl)
             }
             else {
-                self.showDownloadFinishNotification(fileName: info.fileName, downloadTask: task, succeeded: success)
+                self.showDownloadFinishNotification(fileName: info.fileName, deviceName: info.deviceName, downloadTask: task, succeeded: success)
             }
         }
         catch {
-            self.showDownloadFinishNotification(fileName: info.fileName, downloadTask: task, succeeded: false)
-        }
-    }
-    
-    
-    // MARK: NIODownloadTaskDelegate
-    
-    public func nioDownloadTask(_ task: NIODownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("downloadTask(id:<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
-        
-        guard let index = self.nioDownloadInfos.firstIndex(where: { $0.task === task }) else { return }
-        let info = self.nioDownloadInfos.remove(at: index)
-        
-        do {
-            if success {
-                let finalUrl = try self.renamePartFile(url: info.url, to: info.fileName)
-                self.showNIODownloadFinishNotification(fileName: info.fileName, downloadTask: task, succeeded: success, finalUrl: finalUrl)
-            }
-            else {
-                self.showNIODownloadFinishNotification(fileName: info.fileName, downloadTask: task, succeeded: success)
-            }
-        }
-        catch {
-            self.showNIODownloadFinishNotification(fileName: info.fileName, downloadTask: task, succeeded: false)
+            self.showDownloadFinishNotification(fileName: info.fileName, deviceName: info.deviceName, downloadTask: task, succeeded: false)
         }
     }
     
@@ -533,65 +454,36 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
         //            panel.begin { result in
         //                guard result == NSFileHandlingPanelOKButton else { return }
         //                guard let url = panel.url else { return }
-        //                self.downloadFile(downloadTask: task, fileName: url.lastPathComponent, destUrl: url)
+        //                self.downloadFile(downloadTask: task, fileName: url.lastPathComponent, destUrl: url, deviceName: device.name)
         //            }
         //        }
         
         do {
             if let fileName = fileName {
                 let url = try URL(forDownloadedFile: fileName)
-                self.downloadFile(downloadTask: task, fileName: fileName, destUrl: url)
-                self.showDownloadStartNotification(fileName: fileName, downloadTask: task)
+                self.downloadFile(downloadTask: task, fileName: fileName, destUrl: url, deviceName: device.name)
+                self.showDownloadStartNotification(fileName: fileName, deviceName: device.name, downloadTask: task)
             }
             else {
                 //                askFileLocation()
-                self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
+                self.showDownloadFinishNotification(fileName: fileName, deviceName: device.name, downloadTask: task, succeeded: false)
             }
         }
         catch {
             // Failed to retrieve appropriate download destination - ask user to select
             //            askFileLocation()
-            self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
+            self.showDownloadFinishNotification(fileName: fileName, deviceName: device.name, downloadTask: task, succeeded: false)
         }
     }
     
-    private func downloadFile(downloadTask task: DownloadTask, fileName: String, destUrl: URL) {
+    private func downloadFile(downloadTask task: DownloadTask, fileName: String, destUrl: URL, deviceName: String) {
         if let (tempStream, partUrl) = self.streamForTempDownload(finalUrl: destUrl) {
-            self.downloadInfos.append(DownloadInfo(task: task, fileName: fileName, url: partUrl))
+            self.downloadInfos.append(DownloadInfo(task: task, fileName: fileName, url: partUrl, deviceName: deviceName))
             task.delegate = self
             task.start(withStream: tempStream.transfer())
         }
         else {
-            self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
-        }
-    }
-    
-    // MARK: NIO Download Support
-    
-    private func downloadFile(_ fileName: String?, usingNIOTask task: NIODownloadTask, from device: Device) {
-        do {
-            if let fileName = fileName {
-                let url = try URL(forDownloadedFile: fileName)
-                self.downloadFile(nioDownloadTask: task, fileName: fileName, destUrl: url)
-                self.showNIODownloadStartNotification(fileName: fileName, downloadTask: task)
-            }
-            else {
-                self.showNIODownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
-            }
-        }
-        catch {
-            self.showNIODownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
-        }
-    }
-    
-    private func downloadFile(nioDownloadTask task: NIODownloadTask, fileName: String, destUrl: URL) {
-        if let (tempStream, partUrl) = self.streamForTempDownload(finalUrl: destUrl) {
-            self.nioDownloadInfos.append(NIODownloadInfo(task: task, fileName: fileName, url: partUrl))
-            task.delegate = self
-            task.start(withStream: tempStream.transfer())
-        }
-        else {
-            self.showNIODownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
+            self.showDownloadFinishNotification(fileName: fileName, deviceName: deviceName, downloadTask: task, succeeded: false)
         }
     }
     
@@ -682,8 +574,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
         }
     }
     
-    private func showDownloadStartNotification(fileName: String?, downloadTask task: DownloadTask) {
-        let deviceName = (try? task.connection.identity?.getDeviceName()) ?? "Unknown Device"
+    private func showDownloadStartNotification(fileName: String?, deviceName: String, downloadTask task: DownloadTask) {
         let title = deviceName
         let subtitle = "Inbound Transfer in Progress"
         let body = "Receiving File from \(deviceName)"
@@ -752,43 +643,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
         }
     }
     
-    private func showUploadFinishNotification(nioConnection connection: NIOConnection, succeeded: Bool) {
-        let deviceName = (try? connection.identity?.getDeviceName()) ?? "Unknown Device"
-        let deviceId = (try? connection.identity?.getDeviceId()) ?? "unknown-device"
-        let title = deviceName
-        let subtitle = succeeded ? "Outbound Transfer Successful" : "Outbound Transfer Failed"
-        let body = succeeded ? "File sent to \(deviceName)" : "Failed to send file to \(deviceName)"
-        let notificationId = "\(self.id).upload.finish.\(deviceId)"
-        let notification = UNMutableNotificationContent()
-        notification.title = title
-        notification.subtitle = subtitle
-        notification.body = body
-        notification.sound = .default
-        notification.setUrgency(.active)
-        if let iconPath = self.notificationIconPath {
-            let notificationIconURL = URL(fileURLWithPath: iconPath)
-            do {
-                let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
-                notification.attachments = [attachment]
-            } catch {
-                print("Failed to attach upload icon: \(error.localizedDescription)")
-            }
-        }
-        
-        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-        un.add(request) { error in
-            if let error = error {
-                print("Failed to post upload notification: \(error.localizedDescription)")
-            }
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            self.un.removeNotification(withId: notificationId)
-        }
-    }
-    
-    private func showDownloadFinishNotification(fileName: String?, downloadTask task: DownloadTask, succeeded: Bool, finalUrl: URL? = nil) {
-        let deviceName = (try? task.connection.identity?.getDeviceName()) ?? "Unknown Device"
+    private func showDownloadFinishNotification(fileName: String?, deviceName: String, downloadTask task: DownloadTask, succeeded: Bool, finalUrl: URL? = nil) {
         let title = deviceName
         let subtitle = succeeded ? "Inbound Transfer Successful" : "Inbound Transfer Failed"
         let body: String
@@ -797,91 +652,6 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, NIODownloadT
         }
         else {
             body = "File received from \(deviceName)"
-        }
-        let notificationId = "\(self.id).download.\(task.id)"
-        
-        let notification = UNMutableNotificationContent()
-        if let url = finalUrl {
-            notification.userInfo = [
-                NotificationProperty.downloadedFileUrl.rawValue: url.absoluteString,
-                UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(ShareService.self)
-            ]
-        }
-        notification.title = title
-        notification.subtitle = subtitle
-        notification.body = body
-        notification.sound = .default
-        notification.setUrgency(.active)
-        if let iconPath = self.notificationIconPath {
-            let notificationIconURL = URL(fileURLWithPath: iconPath)
-            do {
-                let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
-                notification.attachments = [attachment]
-            } catch {
-                print(error.localizedDescription)
-            }
-        }
-        if succeeded && finalUrl != nil {
-            notification.categoryIdentifier = "DownloadFinished"
-        }
-        
-        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-        un.add(request) { error in
-            if let error = error {
-                print(error.localizedDescription)
-            }
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            self.un.removeNotification(withId: notificationId)
-        }
-    }
-    
-    // MARK: NIO Download Notifications
-    
-    private func showNIODownloadStartNotification(fileName: String?, downloadTask task: NIODownloadTask) {
-        let title = "Remote Device"
-        let subtitle = "Inbound Transfer in Progress"
-        let body = "Receiving File"
-        let notificationId = "\(self.id).download.\(task.id)"
-        
-        let notification = UNMutableNotificationContent()
-        notification.title = title
-        notification.subtitle = subtitle
-        notification.body = body
-        notification.sound = nil
-        notification.setUrgency(.active)
-        if let iconPath = self.notificationIconPath {
-            let notificationIconURL = URL(fileURLWithPath: iconPath)
-            do {
-                let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
-                notification.attachments = [attachment]
-            } catch {
-                print(error.localizedDescription)
-            }
-        }
-        
-        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-        un.add(request) { error in
-            if let error = error {
-                print(error.localizedDescription)
-            }
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            self.un.removeNotification(withId: notificationId)
-        }
-    }
-    
-    private func showNIODownloadFinishNotification(fileName: String?, downloadTask task: NIODownloadTask, succeeded: Bool, finalUrl: URL? = nil) {
-        let title = "Remote Device"
-        let subtitle = succeeded ? "Inbound Transfer Successful" : "Inbound Transfer Failed"
-        let body: String
-        if let fileName = finalUrl?.lastPathComponent ?? fileName {
-            body = "Received '\(fileName)'"
-        }
-        else {
-            body = "File received"
         }
         let notificationId = "\(self.id).download.\(task.id)"
         

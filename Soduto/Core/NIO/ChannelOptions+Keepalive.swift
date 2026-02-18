@@ -10,15 +10,14 @@ import Foundation
 import NIOCore
 import NIOPosix
 
-/// TCP keepalive configuration matching the existing CocoaAsyncSocket settings.
+/// TCP keepalive configuration for network connections.
 ///
-/// The original Connection.swift configures:
+/// Configures:
 /// - SO_KEEPALIVE = 1 (enable keepalive)
-/// - TCP_KEEPALIVE = 10 (interval in seconds)
+/// - TCP_KEEPALIVE = 10 seconds (interval)
 enum TCPKeepaliveConfiguration {
     
     /// The keepalive interval in seconds.
-    /// Matches the value used in Connection.configureSocket().
     static let keepaliveInterval: Int32 = 10
     
     /// Configures TCP keepalive on a channel.
@@ -79,7 +78,7 @@ enum TCPKeepaliveConfiguration {
 // MARK: - Bootstrap Extensions
 
 extension ClientBootstrap {
-    /// Configures TCP keepalive matching the existing Connection behavior.
+    /// Configures TCP keepalive for client connections.
     ///
     /// - Returns: The bootstrap with keepalive configured.
     func withTCPKeepalive() -> ClientBootstrap {
@@ -90,7 +89,7 @@ extension ClientBootstrap {
 }
 
 extension ServerBootstrap {
-    /// Configures TCP keepalive on child channels matching the existing Connection behavior.
+    /// Configures TCP keepalive on child channels for server connections.
     ///
     /// - Returns: The bootstrap with keepalive configured for child channels.
     func withChildTCPKeepalive() -> ServerBootstrap {

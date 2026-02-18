@@ -50,7 +50,7 @@ final class STARTTLSHandler: ChannelDuplexHandler, RemovableChannelHandler {
     typealias TLSCompletionHandler = (Result<Void, Error>) -> Void
     
     private let identity: SecIdentity
-    private let trustHandler: NIOTrustHandler
+    private let trustHandler: TrustHandler
     private var upgradePromise: EventLoopPromise<Void>?
     private weak var channel: Channel?
     
@@ -59,7 +59,7 @@ final class STARTTLSHandler: ChannelDuplexHandler, RemovableChannelHandler {
     /// - Parameters:
     ///   - identity: The host's SecIdentity (certificate + private key) to present during TLS handshake.
     ///   - trustHandler: Handler for custom certificate verification.
-    init(identity: SecIdentity, trustHandler: NIOTrustHandler) {
+    init(identity: SecIdentity, trustHandler: TrustHandler) {
         self.identity = identity
         self.trustHandler = trustHandler
     }
@@ -179,7 +179,7 @@ final class STARTTLSHandler: ChannelDuplexHandler, RemovableChannelHandler {
         
         // Convert to NIOSSLCertificate and NIOSSLPrivateKey
         let certData = SecCertificateCopyData(cert) as Data
-        let nioSSLCert = try NIOSSLCertificate(bytes: Array(certData), format: .der)
+        let sslCert = try NIOSSLCertificate(bytes: Array(certData), format: .der)
         
         // For the private key, we need to export it to data
         // This requires the key to be exportable
@@ -188,21 +188,21 @@ final class STARTTLSHandler: ChannelDuplexHandler, RemovableChannelHandler {
             throw NIOSSLError.failedToLoadPrivateKey
         }
         
-        let nioSSLKey = try NIOSSLPrivateKey(bytes: Array(keyData), format: .der)
+        let sslKey = try NIOSSLPrivateKey(bytes: Array(keyData), format: .der)
         
         var config: TLSConfiguration
         switch role {
         case .server:
             config = TLSConfiguration.makeServerConfiguration(
-                certificateChain: [.certificate(nioSSLCert)],
-                privateKey: .privateKey(nioSSLKey)
+                certificateChain: [.certificate(sslCert)],
+                privateKey: .privateKey(sslKey)
             )
             // Require client certificate (mutual TLS)
             config.certificateVerification = .noHostnameVerification
         case .client:
             config = TLSConfiguration.makeClientConfiguration()
-            config.certificateChain = [.certificate(nioSSLCert)]
-            config.privateKey = .privateKey(nioSSLKey)
+            config.certificateChain = [.certificate(sslCert)]
+            config.privateKey = .privateKey(sslKey)
             config.certificateVerification = .noHostnameVerification
         }
         
