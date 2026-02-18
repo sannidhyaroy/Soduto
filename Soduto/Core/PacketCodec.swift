@@ -1,5 +1,5 @@
 //
-//  KDEConnectPacketCodec.swift
+//  PacketCodec.swift
 //  Soduto
 //
 //  Created by Sannidhya Roy on 15/02/26.

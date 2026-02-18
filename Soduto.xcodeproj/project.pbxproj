@@ -35,7 +35,7 @@
 		312E77082938A93F00F29BFA /* Messages.png in Resources */ = {isa = PBXBuildFile; fileRef = 312E76FD2938A93F00F29BFA /* Messages.png */; };
 		313416CA2F381D44007E7640 /* X509 in Frameworks */ = {isa = PBXBuildFile; productRef = 313416C92F381D44007E7640 /* X509 */; };
 		313416CD2F3856C0007E7640 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 313416CC2F3856C0007E7640 /* Citadel */; };
-		31366D362F412C4A0013911D /* KDEConnectPacketCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D352F412C4A0013911D /* KDEConnectPacketCodec.swift */; };
+		31366D362F412C4A0013911D /* PacketCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D352F412C4A0013911D /* PacketCodec.swift */; };
 		31366D382F412C6F0013911D /* STARTTLSHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D372F412C6F0013911D /* STARTTLSHandler.swift */; };
 		31366D3A2F412C7E0013911D /* TLSTrustHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D392F412C7E0013911D /* TLSTrustHandler.swift */; };
 		31366D3C2F412C8D0013911D /* ChannelOptions+Keepalive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */; };
@@ -254,7 +254,7 @@
 		312674C82F2CE58200D68B2C /* ShareExtensionController+TouchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShareExtensionController+TouchBar.swift"; sourceTree = "<group>"; };
 		312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceScrubberItemView.swift; sourceTree = "<group>"; };
 		312E76FD2938A93F00F29BFA /* Messages.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Messages.png; sourceTree = "<group>"; };
-		31366D352F412C4A0013911D /* KDEConnectPacketCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KDEConnectPacketCodec.swift; sourceTree = "<group>"; };
+		31366D352F412C4A0013911D /* PacketCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketCodec.swift; sourceTree = "<group>"; };
 		31366D372F412C6F0013911D /* STARTTLSHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = STARTTLSHandler.swift; sourceTree = "<group>"; };
 		31366D392F412C7E0013911D /* TLSTrustHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSTrustHandler.swift; sourceTree = "<group>"; };
 		31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChannelOptions+Keepalive.swift"; sourceTree = "<group>"; };
@@ -453,17 +453,6 @@
 			path = "App Icons";
 			sourceTree = "<group>";
 		};
-		31366D342F412BB80013911D /* NIO */ = {
-			isa = PBXGroup;
-			children = (
-				31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */,
-				31366D352F412C4A0013911D /* KDEConnectPacketCodec.swift */,
-				31366D372F412C6F0013911D /* STARTTLSHandler.swift */,
-				31366D392F412C7E0013911D /* TLSTrustHandler.swift */,
-			);
-			path = NIO;
-			sourceTree = "<group>";
-		};
 		3152C3F62F368F4A005152CB /* Utils */ = {
 			isa = PBXGroup;
 			children = (
@@ -488,6 +477,16 @@
 				312674CC2F2CE5C700D68B2C /* DeviceScrubberItemView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		31A4219C2F45B3E9003B97FC /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				31366D3B2F412C8D0013911D /* ChannelOptions+Keepalive.swift */,
+				31366D372F412C6F0013911D /* STARTTLSHandler.swift */,
+				31366D392F412C7E0013911D /* TLSTrustHandler.swift */,
+			);
+			path = Network;
 			sourceTree = "<group>";
 		};
 		31F3A150293B5EA300550088 /* Soduto Share */ = {
@@ -635,7 +634,7 @@
 			isa = PBXGroup;
 			children = (
 				02EC48A91F2296C600C9370F /* Configuration */,
-				31366D342F412BB80013911D /* NIO */,
+				31A4219C2F45B3E9003B97FC /* Network */,
 				8468BDFE1DEB7F5F003B9925 /* Utils */,
 				84D903A11DC696A600E61DA7 /* CertificateUtils.swift */,
 				31A421962F43B8C2003B97FC /* Connection.swift */,
@@ -645,6 +644,7 @@
 				84FA45D21DDDCB3D00EF3992 /* Device.swift */,
 				84FA45D31DDDCB3D00EF3992 /* DeviceManager.swift */,
 				31A421972F43B8C2003B97FC /* DownloadTask.swift */,
+				31366D352F412C4A0013911D /* PacketCodec.swift */,
 				8456F4A71D7DE393006EFE19 /* Pairable.swift */,
 				31A421942F43B526003B97FC /* PayloadPortRegistry.swift */,
 				84FA45E91DDF433300EF3992 /* Service.swift */,
@@ -1132,7 +1132,7 @@
 				845BE2E61EC2476200F3BD62 /* HoverButton.swift in Sources */,
 				843B67041DF1E64A00289EC9 /* ShareService.swift in Sources */,
 				842505E91ED1BD3C00AEE25F /* RemoteKeyboardService.swift in Sources */,
-				31366D362F412C4A0013911D /* KDEConnectPacketCodec.swift in Sources */,
+				31366D362F412C4A0013911D /* PacketCodec.swift in Sources */,
 				026BFB581F194D7D00D888E2 /* DeviceInfoWindowController.swift in Sources */,
 				84FA45D81DDDCB3D00EF3992 /* ConnectionProvider.swift in Sources */,
 				8436DEF81E956DA000529362 /* Timer.swift in Sources */,
