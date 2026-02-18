@@ -662,13 +662,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     /// Repopulates the `notificationIds` dictionary from the Notification Center's delivered notifications.
     /// This is necessary because `notificationIds` is in-memory and lost on app restart.
+    ///
+    /// Important: this method must MERGE, not early-return, even when we already have in-memory IDs.
+    /// During setup, pre-sync packets can arrive before repopulation runs; if we skip here, we can miss
+    /// previously delivered notifications from an earlier app session and break duplicate detection.
     private func repopulateNotificationIds(for device: Device) async {
-        // If we already have IDs for this device, skip repopulation
-        if let ids = await state.notificationIds[device.id], !ids.isEmpty {
-            Logger.services.debug("Skipping repopulation for \(device.name, privacy: .public) - already have \(ids.count, privacy: .public) IDs")
-            return
-        }
-        
         guard let deviceIdEncoded = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
             Logger.services.error("Failed to encode device ID for \(device.name, privacy: .public)")
             return
@@ -681,20 +679,25 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         await MainActor.run {
             var matchCount = 0
+            var insertedCount = 0
             for notification in notifications {
                 let identifier = notification.request.identifier
                 // Check if this notification belongs to this service and device
                 if identifier.hasPrefix(prefix) {
+                    let alreadyTracked = state.notificationIds[device.id]?.contains(identifier) ?? false
                     state.addNotificationId(identifier, from: device)
                     // Also restore the content hash so we can detect reconnection duplicates
                     let body = notification.request.content.body
                     state.notificationContentHashes[identifier] = StableHashing.sha256(body)
                     matchCount += 1
+                    if !alreadyTracked {
+                        insertedCount += 1
+                    }
                 }
             }
             
-            if matchCount > 0 {
-                Logger.services.debug("Repopulated \(matchCount, privacy: .public) notification IDs for device \(device.name, privacy: .public)")
+            if matchCount > 0 || insertedCount > 0 {
+                Logger.services.debug("Repopulated \(matchCount, privacy: .public) delivered notification IDs for device \(device.name, privacy: .public); inserted \(insertedCount, privacy: .public) missing IDs into in-memory state")
             }
         }
     }
