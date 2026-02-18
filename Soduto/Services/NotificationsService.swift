@@ -310,6 +310,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
         /// Tracks notification IDs received during a sync window
         var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
         
+        /// Buffers notification IDs received after setup starts but before sync window starts.
+        var preSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
+        
+        /// Tracks setup generations to prevent stale setup tasks from mutating current sync state.
+        var setupGenerationByDevice: [Device.Id: Int] = [:]
+        
         /// Tasks for post-sync reconciliation
         var syncReconciliationTasks: [Device.Id: Task<Void, Never>] = [:]
         
@@ -332,6 +338,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
             notificationContentHashes.removeAll()
             syncReconciliationTasks.values.forEach { $0.cancel() }
             syncReconciliationTasks.removeAll()
+            preSyncReceivedIds.removeAll()
+            setupGenerationByDevice.removeAll()
             setupTasks.values.forEach { $0.cancel() }
             setupTasks.removeAll()
         }
@@ -428,7 +436,20 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
         return true
     }
     
-    /// Called when a device connects. Requests all current notifications from the device.
+    /// Called when a device connects. Requests current notifications from the device.
+    ///
+    /// Synchronization model:
+    /// - Rebuild local knowledge from Notification Center first (`repopulateNotificationIds`)
+    /// - Start a sync window and track all IDs observed during that window
+    /// - Reconcile only against IDs observed in that window
+    ///
+    /// Important behavioral choice:
+    /// - If zero notification packets are observed in a sync window, we treat the sync as
+    ///   non-authoritative and skip destructive stale-removal. This avoids deleting valid local
+    ///   notifications when a peer fails to answer `notification.request` reliably.
+    /// - IDs observed after setup begins but before the sync window opens are buffered and merged
+    ///   into the window. This prevents a race where early packets would otherwise be missed.
+    ///
     /// TODO: Verify if existing notifications are send continuously, then comment out the codeblock inside this function.
     ///
     /// Duplicate alerts are prevented by:
@@ -446,6 +467,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
         /// we might delete valid icons for newly arriving notifications.
         Task { @MainActor in
             state.setupTasks[device.id]?.cancel()
+            let generation = (state.setupGenerationByDevice[device.id] ?? 0) + 1
+            state.setupGenerationByDevice[device.id] = generation
+            state.preSyncReceivedIds[device.id] = []
+            
             let setupTask = Task {
                 await Self.cleanupManager.ensureCleanup { Self.cleanupStaleIconFiles() }
                 /// First reconcile to remove any stale entries for notifications dismissed via macOS UI,
@@ -453,9 +478,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
                 /// This ensures that on app restart, we don't re-alert for already-displayed notifications.
                 await reconcileNotificationState()
                 await repopulateNotificationIds(for: device)
+                
+                guard state.setupGenerationByDevice[device.id] == generation else { return }
+                
                 // Start sync window: track received notification IDs for this device
                 startSyncWindow(for: device)
                 device.send(DataPacket.notificationRequestPacket())
+                state.setupGenerationByDevice.removeValue(forKey: device.id)
             }
             state.setupTasks[device.id] = setupTask
             await setupTask.value
@@ -1153,10 +1182,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
     // MARK: Sync Window & Stale Notification Removal
     
     /// Starts a sync window for a device. During this window, all received notification IDs are tracked.
+    ///
+    /// Any IDs buffered during setup (received before the window opened) are seeded into the
+    /// pending set, so reconciliation does not lose early packets.
     @MainActor
     private func startSyncWindow(for device: Device) {
         state.syncReconciliationTasks[device.id]?.cancel() // Cancel any existing task for this device
-        state.pendingSyncReceivedIds[device.id] = []  // Clear the set of received IDs for this device
+        let bufferedIds = state.preSyncReceivedIds.removeValue(forKey: device.id) ?? []
+        state.pendingSyncReceivedIds[device.id] = bufferedIds
         
         let task = Task<Void, Never> {
             try? await Task.sleep(nanoseconds: UInt64(initialSyncTimeout * 1_000_000_000))
@@ -1165,34 +1198,59 @@ public class NotificationsService: Service, DownloadTaskDelegate, NIODownloadTas
             await finishSyncWindow(for: device)
         }
         state.syncReconciliationTasks[device.id] = task
-        Logger.services.debug("Started sync window for device \(device.name, privacy: .public)")
+        if bufferedIds.isEmpty {
+            Logger.services.debug("Started sync window for device \(device.name, privacy: .public)")
+        } else {
+            Logger.services.debug("Started sync window for device \(device.name, privacy: .public) with \(bufferedIds.count, privacy: .public) pre-sync notification IDs")
+        }
     }
     
-    /// Called when a notification is received during a sync window. Adds the notification ID to the pending set.
+    /// Records a notification ID for sync reconciliation.
+    ///
+    /// Behavior:
+    /// - If a sync window is active, the ID is added to that window's pending set.
+    /// - If setup is active but the window is not open yet, the ID is buffered in pre-sync state.
+    ///   This closes the setup->sync race and preserves packet visibility for reconciliation.
     @MainActor
     private func recordReceivedNotificationId(_ notificationId: NotificationId, for device: Device) {
-        // Only record if a sync window is active for this device
-        guard state.pendingSyncReceivedIds[device.id] != nil else { return }
-        state.pendingSyncReceivedIds[device.id]?.insert(notificationId)
-        
-        // Debounce: Reschedule the reconciliation task to wait for end of stream
-        state.syncReconciliationTasks[device.id]?.cancel()
-        
-        let task = Task<Void, Never> {
-            try? await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
+        // If sync window is active, record directly for reconciliation.
+        if state.pendingSyncReceivedIds[device.id] != nil {
+            state.pendingSyncReceivedIds[device.id]?.insert(notificationId)
             
-            guard !Task.isCancelled else { return }
-            await finishSyncWindow(for: device)
+            // Debounce: Reschedule the reconciliation task to wait for end of stream
+            state.syncReconciliationTasks[device.id]?.cancel()
+            
+            let task = Task<Void, Never> {
+                try? await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
+                
+                guard !Task.isCancelled else { return }
+                await finishSyncWindow(for: device)
+            }
+            state.syncReconciliationTasks[device.id] = task
+            return
         }
-        state.syncReconciliationTasks[device.id] = task
+        
+        // If setup is in progress but sync window hasn't started yet, buffer this ID.
+        guard state.setupGenerationByDevice[device.id] != nil else { return }
+        if state.preSyncReceivedIds[device.id] == nil {
+            state.preSyncReceivedIds[device.id] = []
+        }
+        state.preSyncReceivedIds[device.id]?.insert(notificationId)
     }
     
-    /// Finishes the sync window for a device. Removes any local notifications not received during the sync.
+    /// Finishes the sync window for a device. Removes local notifications not received during sync.
     /// NOTE: KDE Connect does not provide an authoritative or complete notification snapshot.
     /// There is no explicit end-of-list marker or completeness guarantee.
     /// Stale removal performed here is therefore best-effort and heuristic-based.
     ///
-    /// In rare cases, notifications that still exist on the remote device may be removed locally, if they are not re-sent during the sync window.
+    /// Reconciliation contract:
+    /// - If we observed at least one notification ID in this window, the result is treated as
+    ///   authoritative and local stale notifications are removed.
+    /// - If we observed zero IDs, reconciliation is treated as inconclusive and no destructive
+    ///   removal is performed.
+    ///
+    /// This intentionally favors false negatives (keeping a stale local notification a bit longer)
+    /// over false positives (incorrectly deleting a still-valid remote notification).
     /// They will be re-added when the notification packet arrives later. This situation may arise in devices that delay sending notification packets, even after establishing connection.
     /// This behavior is an intentional trade-off to provide a cleaner and more seamless notification mirroring experience on macOS.
     /// TODO: Verify if existing notifications are send continuously, then comment out the `for loop` codeblock inside this function
