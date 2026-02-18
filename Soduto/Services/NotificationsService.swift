@@ -653,6 +653,19 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         return "\(self.id).\(deviceId).\(packetId)"
     }
     
+    /// Extracts the raw remote notification ID from a tracked local notification identifier.
+    /// Local format: `<serviceId>.<encodedDeviceId>.<encodedRemoteNotificationId>`
+    private func packetNotificationId(from trackedId: NotificationId, for device: Device) -> String {
+        guard let encodedDeviceId = device.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
+            return trackedId
+        }
+        let prefix = "\(self.id).\(encodedDeviceId)."
+        guard trackedId.hasPrefix(prefix) else { return trackedId }
+        
+        let encodedPacketId = String(trackedId.dropFirst(prefix.count))
+        return encodedPacketId.removingPercentEncoding ?? encodedPacketId
+    }
+    
     /// Sanitizes a string to be safe for use in filenames by replacing invalid characters.
     /// macOS doesn't allow: / : in filenames. We also replace | and other problematic chars.
     private func sanitizeForFilename(_ string: String) -> String {
@@ -1182,8 +1195,20 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
         
         Logger.services.debug("Finished sync window for \(device.name, privacy: .public): removing \(staleIds.count, privacy: .public) stale notifications")
+        let deliveredByIdentifier = Dictionary(uniqueKeysWithValues: (await un.deliveredNotifications()).map { ($0.request.identifier, $0.request.content) })
         
         for staleId in staleIds {
+            let remotePacketId = packetNotificationId(from: staleId, for: device)
+            if let content = deliveredByIdentifier[staleId] {
+                let bodyPreview = String(content.body.prefix(180))
+                Logger.services.debug(
+                    "Removing stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), title=\(content.title, privacy: .public), subtitle=\(content.subtitle, privacy: .public), bodyPreview=\(bodyPreview, privacy: .public)"
+                )
+            } else {
+                Logger.services.debug(
+                    "Removing stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), deliveredMetadata=missing"
+                )
+            }
             /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach and keep our icon caches
             await hideNotification(for: staleId, from: device)
         }
