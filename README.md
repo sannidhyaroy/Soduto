@@ -224,13 +224,48 @@ You can use the fingerprint above to manually verify that you have obtained the 
 
 ---
 ## Limitations
-- Google introduced some privacy changes on Android 10 and higher, that doesn’t allow apps to access clipboard data, unless the app is the default input method editor (IME) or is currently in focus. This will affect seamless clipboard sync between KDE Connect and Soduto. Your clipboard will automatically sync to your other devices when you copy something on your mac, however you will have to manually tap on `Send Clipboard` in the KDE Connect app, everytime you want to sync your android's clipboard to your mac.
-- On Android 11 and higher, you may not be able to add the root location of your Internal Storage or your Download folder to KDE Connect's `Filesystem expose` locations due to Google's privacy changes.
+
+#### Clipboard Sync (Android 10+)
+Google introduced privacy restrictions on Android 10 and higher that prevent apps from accessing clipboard data unless the app is the default input method editor (IME) or is currently in focus. This affects seamless clipboard sync between KDE Connect and Soduto. Your clipboard will automatically sync to your other devices when you copy something on your mac, however you will have to manually tap on `Send Clipboard` in the KDE Connect app every time you want to sync your Android's clipboard to your mac.
+
+#### Storage Access (Android 11+)
+On Android 11 and higher, you may not be able to add the root location of your Internal Storage or your Download folder to KDE Connect's `Filesystem expose` locations due to Google's privacy changes.
+
+#### Sensitive Notification Content (Android 15+)
+On Android 15 and higher, the system hides sensitive notification content (such as passwords, OTPs, and other sensitive information) from applications by default. This means Soduto will display "Sensitive notification content hidden" instead of the actual content. This restriction also affects automatic OTP copying in Soduto. KDE Connect will not receive sensitive notifications unless you explicitly grant the `RECEIVE_SENSITIVE_NOTIFICATIONS` permission (see workarounds below).
 
 ---
 ## Workarounds
-- If you have `Riru` or `Zygisk`, you can bypass the clipboard restriction on Android 10 or higher by using [Kr328's Clipboard Whitelist](https://github.com/Kr328/Riru-ClipboardWhitelist) module and then tick `KDE Connect`/`Zorin Connect` from the `Clipboard Whitelist` app. If you're on Android 13 and the module isn’t working for you, try [Xposed Clipboard Whitelist](https://github.com/GamerGirlandCo/xposed-clipboard-whitelist) (remember to select `System Framework` for the module scope). You need to have `Xposed Framework` for the `Xposed Clipboard Whitelist` module to work.
-- [NoStorageRestrict](https://github.com/Xposed-Modules-Repo/com.github.dan.nostoragerestrict) is an `Xposed Module` that removes the restriction when selecting folders(like Internal Storage, Android, Download, data, obb) through file manager on Android 11 and higher. There is a [Magisk module](https://github.com/DanGLES3/NoStorageRestrict) for this as well but I haven’t tested the Magisk Module version yet, so use it at your own risk ⚠️.
+
+#### Clipboard Sync (Android 10+)
+If you have `Riru` or `Zygisk`, you can bypass the clipboard restriction on Android 10 or higher by using [Kr328's Clipboard Whitelist](https://github.com/Kr328/Riru-ClipboardWhitelist) module and then tick `KDE Connect`/`Zorin Connect` from the `Clipboard Whitelist` app. If you're on Android 13 and the module isn't working for you, try [Xposed Clipboard Whitelist](https://github.com/GamerGirlandCo/xposed-clipboard-whitelist) (remember to select `System Framework` for the module scope). You need to have `Xposed Framework` for the `Xposed Clipboard Whitelist` module to work.
+
+#### Storage Access (Android 11+)
+[NoStorageRestrict](https://github.com/Xposed-Modules-Repo/com.github.dan.nostoragerestrict) is an `Xposed Module` that removes the restriction when selecting folders(like Internal Storage, Android, Download, data, obb) through file manager on Android 11 and higher. There is a [Magisk module](https://github.com/DanGLES3/NoStorageRestrict) for this as well but I haven't tested the Magisk Module version yet, so use it at your own risk ⚠️.
+
+#### Sensitive Notification Content (Android 15+)
+The recommended approach is to grant KDE Connect the `RECEIVE_SENSITIVE_NOTIFICATIONS` permission using ADB (Android Debug Bridge). This will allow sensitive notifications to be delivered normally and enable automatic OTP copying.
+
+- **Set up ADB** — Follow the [official Android ADB setup guide](https://developer.android.com/tools/adb).
+
+- **Connect your device** — Connect your phone via USB or wireless ADB.
+
+- **Grant the permission** — Run this command:
+  ```bash
+  adb shell cmd appops set --user 0 org.kde.kdeconnect_tp RECEIVE_SENSITIVE_NOTIFICATIONS allow
+  ```
+
+- **If permission monitoring error occurs** — If you see this error, follow these steps:
+  ```
+  java.lang.SecurityException: uid 2000 does not have android.permission.MANAGE_APP_OPS_MODES
+  ```
+   - Go to Developer Options and enable "Disable permission monitoring"
+   - Reboot your phone
+   - Run the ADB command again
+
+- **Reboot** — Reboot your phone for the changes to take effect.
+
+After completing these steps, sensitive notifications (including OTPs) will be delivered to Soduto, and automatic OTP copying will work as expected.
 
 ---
 ## Troubleshooting
