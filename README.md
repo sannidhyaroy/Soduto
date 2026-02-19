@@ -16,30 +16,104 @@
 ---
 ## **Navigation**
 - [Installation](#installation)
+- [Features](#features)
 - [Building](#building)
 - [Debugging](#debugging)
 - [Verifying Downloads](#verifying-downloads)
   - [Signing Identity](#-signing-identity)
   - [Verification Steps](#verification-steps)
 - [Limitations](#limitations)
+  - [Clipboard Sync (Android 10+)](#clipboard-sync-android-10)
+  - [Storage Access (Android 11+)](#storage-access-android-11)
+  - [Sensitive Notification Content (Android 15+)](#sensitive-notification-content-android-15)
 - [Workarounds](#workarounds)
+  - [Clipboard Sync (Android 10+)](#clipboard-sync-android-10-1)
+  - [Storage Access (Android 11+)](#storage-access-android-11-1)
+  - [Sensitive Notification Content (Android 15+)](#sensitive-notification-content-android-15-1)
 - [Troubleshooting](#troubleshooting)
+- [Documentation & Resources](#documentation--resources)
 - [Get in touch](#get-in-touch)
 - [FAQ](#faq)
 - [License](#license)
 ---
 ## Installation
 
-To install my forked version of Soduto, head to the [Releases Page](https://github.com/sannidhyaroy/soduto/releases/latest) of this Repository and download the `.dmg` file from the latest build. Then open the downloaded `.dmg` file. You might get a pop-up window containing the license. Tap agree if you've read it and wish to continue. Then drag `Soduto.app` onto the Applications Folder. When running for the first time, you might get a prompt saying that macOS can't run apps from an unidentified developer. Press and hold `control` and click on the app icon. While still holding `Control`, select `Open`.
+To install builds of Soduto from this repository, head to the [Releases Page](https://github.com/sannidhyaroy/soduto/releases/latest) and download the [`.dmg`](https://github.com/sannidhyaroy/Soduto/releases/latest/download/Soduto.Nightly.dmg) file. As an optional step, you may head over to the [Verifying Downloads](#verifying-downloads) section if you wish to verify its integrity and cryptographic signature. Open it and you might get a pop-up window containing the license. Tap agree if you've read it and wish to continue. Then drag `Soduto.app` onto the Applications Folder. When running for the first time, you might get a prompt saying that macOS can't run apps from an unidentified developer. Pick any one of the following options to continue:
+- Go to `System Preferences → Privacy & Security` and find `Soduto` was blocked message, then tap `Open Anyway` and follow the on-screen instructions.
+- Remove the quarantine flag from the downloaded [`.dmg`](https://github.com/sannidhyaroy/Soduto/releases/latest/download/Soduto.Nightly.dmg) file before opening it: 
+  ```bash
+  xattr -d com.apple.quarantine <path to your dmg directory>/Soduto.Nightly.dmg
+  ```
+- On macOS (14) Sonoma and earlier, you can press and hold `control` and click on the app icon. While still holding `Control`, select `Open`.
 
-The official build of Soduto can be downloaded from [soduto.com](https://www.soduto.com) or from [Soduto's official repository](https://github.com/soduto/Soduto).
+The official build of Soduto can be downloaded from [soduto.com](https://www.soduto.com) or from [Soduto's official repository](https://github.com/soduto/Soduto). You may find support for the official build in [Soduto's official repository](https://github.com/soduto/Soduto), so only post issues [here](https://github.com/sannidhyaroy/Soduto/issues) related to the builds of this repository.
 
-There is also a (unofficial) Homebrew formulae, that can install Soduto with such command:
+Please note that currently there's no brew cask for Soduto builds of this repository and the only source is the [Releases Page](https://github.com/sannidhyaroy/soduto/releases/latest) of this repository. Installation is a one-time process, and future upgrades are handled in-app using [Sparkle](https://sparkle-project.org/).
 
-```bash
-brew install --cask soduto
-```
-Do note that currently there's no Homebrew formulae for my forked version and the only source is the [Releases Page](https://github.com/sannidhyaroy/soduto/releases/latest) of this repository.
+---
+## Features
+
+Soduto implements the following KDE Connect plugin features (compatible with any KDE Connect device):
+
+### Notifications
+- [x] Receive — Mirror remote device notifications on macOS (with automatic OTP copying)
+- [ ] Send — Send macOS notifications to remote devices
+
+### Clipboard
+- [x] Receive — Receive clipboard content from remote devices
+- [x] Send — Send macOS clipboard content to remote devices
+
+### File Sharing
+- [x] Receive — Receive shared files, links, and text from remote devices (files are saved in the Downloads folder)
+- [x] Send — Share files, links, and text to remote devices via Share extension, drag and drop to menu bar, or `Send Files` option
+- [x] Browse storage — Access remote device filesystem via SFTP
+
+### Battery Status
+- [x] Receive — View remote device battery level and charging status
+- [x] Send — Send macOS battery status to remote devices
+
+### Media Control (MPRIS)
+- [x] Receive — Control remote device music/video playback from macOS Control Center and Now Playing Module (experimental)
+- [ ] Send — Control macOS music/video playback from remote devices
+
+### Telephony
+- [x] Receive — View incoming call and SMS notifications from remote devices
+
+### SMS Window
+- [ ] Receive — View SMS of remote devices
+- [x] Send — Send SMS from macOS
+
+### Remote Input
+- [x] Receive — Use remote device as keyboard and touchpad for macOS
+- [x] Send — Use macOS to control remote device input (experimental)
+
+### Ping
+- [x] Receive — Receive ping messages from remote devices
+- [x] Send — Send ping messages to remote devices
+
+### Run Commands
+- [x] Receive — Execute macOS commands from remote devices
+- [ ] Send — Execute predefined commands on remote devices
+
+### Find My Device
+- [x] Receive — Make macOS play an alarm sound to locate it
+- [x] Send — Make remote device play an alarm sound to locate it
+
+### Connectivity Report
+- [x] Receive — Monitor remote device network connectivity status
+
+### Presentation Remote
+- [x] Receive — Use remote device as presentation remote for macOS
+- [ ] Send — Use macOS as presentation remote for remote device
+
+### Contacts
+- [x] Receive — Synchronize contacts between macOS and remote devices
+
+### System Integration
+- [ ] Screensaver Inhibit — Prevent macOS screensaver when device is connected
+- [ ] Call Pause — Automatically pause macOS media during device calls
+
+For the complete list of KDE Connect features and documentation, visit the [official KDE Connect Wiki](https://userbase.kde.org/KDEConnect).
 
 ---
 ## Building
@@ -272,7 +346,16 @@ After completing these steps, sensitive notifications (including OTPs) will be d
 
 ### 1. Soduto Share doesn't show up in the share sheet
 
+Go to `System Preferences → General → Login Items & Extensions → Sharing` info button, and ensure `Soduto Share` toggle is enabled. If you still have issues, keep reading.
+
+
+<details><summary>On macOS (14) Sonoma and earlier?</summary>
+<p>
+
 Go to `System Preferences → Privacy & Security → Extensions → Sharing`, and ensure `Soduto Share` is checked. If you still have issues, keep reading.
+
+</p>
+</details> 
 
 If `Soduto Share` doesn't appear in the share menu, only when multiple files are selected, macOS may have cached a stale extension registration. To fix this:
   1. Check for stale plugin registrations:
@@ -322,6 +405,11 @@ Soduto and KDE Connect use SSL/TLS with self-signed certificates to secure commu
 After clearing the cache, the new certificate will be accepted and cached correctly.
 
 ---
+## Documentation & Resources
+
+For comprehensive information about KDE Connect features, limitations, configuration, and troubleshooting across all platforms, visit the [official KDE Connect Wiki](https://userbase.kde.org/KDEConnect). While the wiki primarily focuses on Linux environments, a lot of the information will still be useful for macOS and Android.
+
+---
 ## Get in touch
 To ask a question, offer suggestions or share an idea, please use the [discussions tab](https://github.com/sannidhyaroy/soduto/discussions) of this repository.
 
@@ -342,11 +430,11 @@ The development for the official version seems to have been inactive for a very 
 
 The code is public, so instead of taking someone else's word for it, it's better to review it yourself if the app is safe.
 
-The reason macOS shows a prompt saying that this app is from an unidentified developer is because I have a free Apple Developer Account and not a paid one, thus the builds of Soduto released by me is not notarized. If you build the app yourself for your own mac, you won’t get the warning. Head over to the [building](#building) section to do so.
+The reason macOS shows a prompt saying that this app is from an unidentified developer is because I have a free Apple Developer Account and not a paid one, thus the builds of Soduto released by me are not notarized. If you build the app yourself for your own mac, you won’t get the warning. Head over to the [building](#building) section to do so.
 
 ### Why is the app not notarized?
 
-Developers can’t send an app for notarization with a free Apple Developer Account. I am a Student and developing apps for the Apple Platform is neither my job or my hobby. Neither I can or want to pay Apple, a hefty amount of $99 every year for the privilege of developing apps for their platform.
+Developers can't send an app for notarization with a free Apple Developer Account. I am a student and developing apps for the Apple Platform is neither my job nor my hobby. Neither can I nor do I want to pay Apple a hefty amount of $99 every year for the privilege of developing apps for their platform.
 
 ### Why is this not on the Mac App Store?
 
