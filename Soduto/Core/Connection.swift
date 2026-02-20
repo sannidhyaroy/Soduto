@@ -237,6 +237,10 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         self.identity = packet
         self.pairingHandler = DefaultPairingHandler(config: deviceConfig)
         self.pairingHandler!.delegate = self
+        
+        // Store peer's protocol version (default to 7 for backwards compatibility)
+        self.peerProtocolVersion = (try? packet.getProtocolVersion()) ?? 7
+        
         // Note: pairingHandler's pairingDelegate and impersonateAs are NOT set because
         // Connection handles incoming pairing packets directly in handlePairingPacket(),
         // while outgoing pairing actions (requestPairing, acceptPairing, etc.) delegate
@@ -833,6 +837,9 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         if let trustHandler = self.trustHandler,
            let peerCert = trustHandler.peerCertificates.first {
             self.peerCertificate = SSLCertificateUtils.createSecCertificate(from: peerCert)
+            
+            // Generate protocol v8 pair verification code now that we have both certificates
+            self.pairingHandler?.updateVerificationCode()
         }
         
         // Perform post-handshake certificate validation for paired devices
