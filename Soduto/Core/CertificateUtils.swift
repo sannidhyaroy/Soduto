@@ -205,6 +205,114 @@ public class CertificateUtils {
         return hexBytes.joined(separator: " ")
     }
     
+    // MARK: Protocol v8 SHA256 Functions
+    
+    /// Returns the SHA256 digest of a certificate as a byte array.
+    /// Used for protocol v8 pair verification code generation.
+    public class func sha256Digest(for certificate: SecCertificate) -> [UInt8] {
+        let data = SecCertificateCopyData(certificate) as Data
+        let hash = SHA256.hash(data: data)
+        return Array(hash)
+    }
+    
+    /// Returns the SHA256 digest of a certificate as a lowercase hex string.
+    /// Used for protocol v8 pair verification code generation.
+    public class func sha256DigestString(for certificate: SecCertificate) -> String {
+        let digest = sha256Digest(for: certificate)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+    
+    /// Returns the SHA256 digest of a certificate formatted for display.
+    /// Format: uppercase hex bytes separated by spaces (e.g., "A1 B2 C3...").
+    public class func sha256FormattedDigestString(for certificate: SecCertificate) -> String {
+        let digest = sha256Digest(for: certificate)
+        let hexBytes = digest.map { String(format: "%02hhX", $0) }
+        return hexBytes.joined(separator: " ")
+    }
+    
+    /// Generates a pair verification code from two certificate SHA256 hashes.
+    ///
+    /// The verification code is calculated as:
+    /// 1. Sort the two certificate hashes alphabetically
+    /// 2. Concatenate them
+    /// 3. Take SHA256 of the concatenation
+    /// 4. Take the first 8 hex characters, formatted as "XXXX XXXX"
+    ///
+    /// Both devices will show the same code, allowing users to verify
+    /// they are pairing with the correct device (MITM protection).
+    ///
+    /// - Parameters:
+    ///   - localCertHash: SHA256 hex string of the local certificate
+    ///   - remoteCertHash: SHA256 hex string of the remote certificate
+    /// - Returns: An 8-character verification code formatted as "XXXX XXXX"
+    public class func pairVerificationCode(localCertHash: String, remoteCertHash: String, timestamp: Int64? = nil) -> String {
+        // Sort and concatenate (ensures both devices get same result)
+        var combined = [localCertHash, remoteCertHash].sorted().joined()
+        if let timestamp = timestamp {
+            combined += String(timestamp)
+        }
+        
+        // SHA256 of combined string
+        let hash = SHA256.hash(data: Data(combined.utf8))
+        
+        // Take first 4 bytes (8 hex chars) and format as "XXXX XXXX"
+        let hexChars = Array(hash.prefix(4)).map { String(format: "%02X", $0) }.joined()
+        let firstHalf = String(hexChars.prefix(4))
+        let secondHalf = String(hexChars.suffix(4))
+        
+        return "\(firstHalf) \(secondHalf)"
+    }
+    
+    /// Generates a pair verification code from two public keys.
+    ///
+    /// KDE Connect compares the raw public-key DER byte arrays lexicographically and
+    /// concatenates them in descending order before hashing.
+    ///
+    /// - Parameters:
+    ///   - localPublicKey: DER bytes of the local public key.
+    ///   - remotePublicKey: DER bytes of the remote public key.
+    ///   - timestamp: Optional pairing timestamp (required for protocol v8 requests).
+    /// - Returns: An 8-character verification code formatted as "XXXX XXXX"
+    public class func pairVerificationCode(localPublicKey: Data, remotePublicKey: Data, timestamp: Int64? = nil) -> String {
+        var a = localPublicKey
+        var b = remotePublicKey
+        if a.lexicographicallyPrecedes(b) {
+            swap(&a, &b)
+        }
+        
+        var hash = SHA256()
+        hash.update(data: a)
+        hash.update(data: b)
+        if let timestamp = timestamp {
+            hash.update(data: Data(String(timestamp).utf8))
+        }
+        
+        let digest = hash.finalize()
+        let hexChars = Array(digest.prefix(4)).map { String(format: "%02X", $0) }.joined()
+        let firstHalf = String(hexChars.prefix(4))
+        let secondHalf = String(hexChars.suffix(4))
+        
+        return "\(firstHalf) \(secondHalf)"
+    }
+    
+    /// Generates a pair verification code from two certificates.
+    /// Convenience method that handles the SHA256 hashing internally.
+    ///
+    /// - Parameters:
+    ///   - localCert: The local device's certificate
+    ///   - remoteCert: The remote device's certificate
+    /// - Returns: An 8-character verification code formatted as "XXXX XXXX"
+    public class func pairVerificationCode(localCert: SecCertificate, remoteCert: SecCertificate, timestamp: Int64? = nil) -> String {
+        if let localPublicKey = publicKeyDERBytes(for: localCert),
+           let remotePublicKey = publicKeyDERBytes(for: remoteCert) {
+            return pairVerificationCode(localPublicKey: localPublicKey, remotePublicKey: remotePublicKey, timestamp: timestamp)
+        }
+        
+        let localHash = sha256DigestString(for: localCert)
+        let remoteHash = sha256DigestString(for: remoteCert)
+        return pairVerificationCode(localCertHash: localHash, remoteCertHash: remoteHash, timestamp: timestamp)
+    }
+    
     public class func validate(certificate: SecCertificate) -> Bool {
         let oids: [CFString] = [
             kSecOIDX509V1ValidityNotAfter,
@@ -266,6 +374,28 @@ public class CertificateUtils {
     private class func relativeTime(forOID oid: CFString, values: [String:[String:AnyObject]]?) -> Double {
         guard let dateNumber = values?[oid as String]?[kSecPropertyKeyValue as String] as? NSNumber else { return 0.0 }
         return dateNumber.doubleValue - CFAbsoluteTimeGetCurrent();
+    }
+    
+    /// Extracts the public key from a certificate in SubjectPublicKeyInfo (SPKI) DER format.
+    ///
+    /// This matches Qt's `QSslKey::toDer()` which KDE Connect uses for verification code calculation.
+    /// Note: `SecKeyCopyExternalRepresentation` returns raw key data (PKCS#1 for RSA), not SPKI format.
+    private class func publicKeyDERBytes(for certificate: SecCertificate) -> Data? {
+        // Get certificate DER data
+        let certData = SecCertificateCopyData(certificate) as Data
+        
+        do {
+            // Parse certificate using swift-certificates
+            let x509Cert = try Certificate(derEncoded: Array(certData))
+            
+            // Serialize the public key to DER format (SubjectPublicKeyInfo)
+            var serializer = DER.Serializer()
+            try x509Cert.publicKey.serialize(into: &serializer)
+            return Data(serializer.serializedBytes)
+        } catch {
+            Logger.config.error("Failed to extract public key SPKI DER: \(error, privacy: .public)")
+            return nil
+        }
     }
     
     private class func deleteItem(_ item: CFTypeRef, secClass: CFString) throws {
@@ -401,7 +531,7 @@ public class CertificateUtils {
             CommonName(commonName)
             OrganizationName("Soduto")
         }
-
+        
         let now = Date()
         // Valid from 1 year ago (matches original OpenSSL behavior)
         let notValidBefore = now.addingTimeInterval(-365 * 24 * 60 * 60)
