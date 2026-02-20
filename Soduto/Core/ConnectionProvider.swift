@@ -158,27 +158,45 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         }
         guard let bytes = try? packet.serialize() else { return }
         
-        // Create ByteBuffer from packet bytes
-        var buffer = channel.allocator.buffer(capacity: bytes.count)
-        buffer.writeBytes(bytes)
+        // Get local interfaces and broadcast to each interface's broadcast address
+        // This avoids kernel errors from attempting to broadcast on interfaces that don't support it
+        let localAddresses = NetworkUtils.localAddresses()
+        var broadcastCount = 0
         
-        // Broadcast to 255.255.255.255
-        do {
-            let broadcastAddress = try NIOCore.SocketAddress(ipAddress: "255.255.255.255", port: Int(ConnectionProvider.udpPort))
-            let envelope = AddressedEnvelope(remoteAddress: broadcastAddress, data: buffer)
-            channel.writeAndFlush(envelope).whenComplete { result in
-                switch result {
-                case .success:
-                    Logger.network.debug("Sent UDP broadcast")
-                case .failure(let error):
-                    // Expected to fail on some interfaces (loopback, VPN, etc.)
-                    Logger.network.debug("UDP broadcast send failed (may be expected): \(error, privacy: .public)")
+        for addressInfo in localAddresses {
+            // Only support IPv4 broadcast for now
+            guard addressInfo.ip.isIPv4 else { continue }
+            guard addressInfo.netmask.isIPv4 else { continue }
+            
+            // Calculate broadcast address: IP | ~netmask
+            let ipAddr = addressInfo.ip.ipv4.sin_addr.s_addr
+            let netmask = addressInfo.netmask.ipv4.sin_addr.s_addr
+            let broadcastAddr = ipAddr | ~netmask
+            
+            // Convert to string
+            var addr = in_addr(s_addr: broadcastAddr)
+            guard let broadcastString = String(cString: inet_ntoa(addr), encoding: .ascii) else { continue }
+            
+            do {
+                let broadcastAddress = try NIOCore.SocketAddress(ipAddress: broadcastString, port: Int(ConnectionProvider.udpPort))
+                var buffer = channel.allocator.buffer(capacity: bytes.count)
+                buffer.writeBytes(bytes)
+                let envelope = AddressedEnvelope(remoteAddress: broadcastAddress, data: buffer)
+                channel.writeAndFlush(envelope).whenFailure { error in
+                    Logger.network.debug("UDP broadcast to \(broadcastString, privacy: .public) failed: \(error, privacy: .public)")
                 }
+                broadcastCount += 1
+            } catch {
+                Logger.network.error("Failed to create broadcast address for \(broadcastString, privacy: .public): \(error, privacy: .public)")
             }
-        } catch {
-            Logger.network.error("Failed to create broadcast address: \(error, privacy: .public)")
         }
-
+        
+        if broadcastCount > 0 {
+            Logger.network.debug("Sent UDP broadcast to \(broadcastCount, privacy: .public) interface(s)")
+        } else {
+            Logger.network.notice("No suitable interfaces found for UDP broadcast")
+        }
+        
         // Send explicit announcements to known hardware addresses
         let knownDeviceConfigs = self.config.knownDeviceConfigs()
         let accessibleAddresses = (try? NetworkUtils.accessibleIPv4Addresses()) ?? []
