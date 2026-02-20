@@ -445,12 +445,18 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 await reconcileNotificationState()
                 await repopulateNotificationIds(for: device)
                 
-                guard state.setupGenerationByDevice[device.id] == generation else { return }
-                
-                // Start sync window: track received notification IDs for this device
-                startSyncWindow(for: device)
+                // Check generation on MainActor before proceeding
+                let shouldProceed = await MainActor.run {
+                    state.setupGenerationByDevice[device.id] == generation
+                }
+                guard shouldProceed else { return }
+
+                // Start sync window and update state on MainActor
+                await MainActor.run {
+                    startSyncWindow(for: device)
+                    state.setupGenerationByDevice.removeValue(forKey: device.id)
+                }
                 device.send(DataPacket.notificationRequestPacket())
-                state.setupGenerationByDevice.removeValue(forKey: device.id)
             }
             state.setupTasks[device.id] = setupTask
             await setupTask.value
