@@ -221,8 +221,9 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         self.pairingHandler = DefaultPairingHandler(config: deviceConfig)
         self.pairingHandler!.delegate = self
         // Note: pairingHandler's pairingDelegate and impersonateAs are NOT set because
-        // Connection handles pairing packets directly in handlePairingPacket()
-        // and uses ConnectionPairingDelegate for pairing events
+        // Connection handles incoming pairing packets directly in handlePairingPacket(),
+        // while outgoing pairing actions (requestPairing, acceptPairing, etc.) delegate
+        // to pairingHandler. ConnectionPairingDelegate receives pairing events.
     }
     
     public func secureServer() {
