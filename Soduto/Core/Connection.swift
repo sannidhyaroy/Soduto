@@ -225,24 +225,45 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     }
     
     public func secureServer() {
-        assert(self.state == .Initializing, "Connection initialization already finished")
-        assert(self.identity != nil, "Identity expected to be known before securing connection")
+        guard self.state == .Initializing else {
+            Logger.network.error("secureServer called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
+            return
+        }
+        guard self.identity != nil else {
+            Logger.network.error("secureServer called but identity not set")
+            assertionFailure("Identity expected to be known before securing connection")
+            return
+        }
         
         self.waitingToSecure = true
         self.performTLSUpgrade(role: .server)
     }
     
     public func secureClient() {
-        assert(self.state == .Initializing, "Connection initialization already finished")
-        assert(self.identity != nil, "Identity expected to be known before securing connection")
+        guard self.state == .Initializing else {
+            Logger.network.error("secureClient called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
+            return
+        }
+        guard self.identity != nil else {
+            Logger.network.error("secureClient called but identity not set")
+            assertionFailure("Identity expected to be known before securing connection")
+            return
+        }
         
         self.waitingToSecure = true
         self.performTLSUpgrade(role: .client)
     }
     
     public func finishInitialization() {
-        assert(self.state == .Initializing, "Connection initialization already finished")
-        assert(self.identity != nil, "Connection identity must be set before finishing initialization")
+        guard self.state == .Initializing else {
+            Logger.network.error("finishInitialization called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
+            return
+        }
+        guard self.identity != nil else {
+            Logger.network.error("finishInitialization called but identity not set")
+            assertionFailure("Connection identity must be set before finishing initialization")
+            return
+        }
         
         if !self.waitingToSecure {
             self.state = .Open
