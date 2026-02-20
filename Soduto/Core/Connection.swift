@@ -359,20 +359,23 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     // MARK: Pairable
     
     public var pairingStatus: PairingStatus {
-        if self.state == .Open {
-            return self.pairingHandler!.pairingStatus
-        } else {
+        guard self.state == .Open, let handler = self.pairingHandler else {
             return .Unpaired
         }
+        return handler.pairingStatus
     }
-    
+
     public func requestPairing() {
-        assert(self.state == .Open, "Connection expected to be open")
-        let previousStatus = self.pairingHandler!.pairingStatus
-        self.pairingHandler!.requestPairing()
-        
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("requestPairing called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        let previousStatus = handler.pairingStatus
+        handler.requestPairing()
+
         // Notify delegate about pairing status change
-        let newStatus = self.pairingHandler!.pairingStatus
+        let newStatus = handler.pairingStatus
         if newStatus != previousStatus {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
@@ -380,14 +383,18 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             }
         }
     }
-    
+
     public func acceptPairing() {
-        assert(self.state == .Open, "Connection expected to be open")
-        self.pairingHandler!.acceptPairing()
-        
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("acceptPairing called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        handler.acceptPairing()
+
         // Notify delegate about pairing status change
         // (DefaultPairingHandler.pairingDelegate is nil for Connection, so we handle it here)
-        if self.pairingHandler!.pairingStatus == .Paired {
+        if handler.pairingStatus == .Paired {
             self.rememberHwAddress()
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
@@ -395,32 +402,44 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             }
         }
     }
-    
+
     public func declinePairing() {
-        assert(self.state == .Open, "Connection expected to be open")
-        self.pairingHandler!.declinePairing()
-        
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("declinePairing called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        handler.declinePairing()
+
         // Notify delegate about pairing status change
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.pairingDelegate?.connection(self, pairingStatusChanged: .Unpaired)
         }
     }
-    
+
     public func unpair() {
-        assert(self.state == .Open, "Connection expected to be open")
-        self.pairingHandler!.unpair()
-        
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("unpair called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        handler.unpair()
+
         // Notify delegate about pairing status change
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.pairingDelegate?.connection(self, pairingStatusChanged: .Unpaired)
         }
     }
-    
+
     public func updatePairingStatus(globalStatus: PairingStatus) {
-        assert(self.state == .Open, "Connection expected to be open")
-        self.pairingHandler!.updatePairingStatus(globalStatus: globalStatus)
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("updatePairingStatus called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        handler.updatePairingStatus(globalStatus: globalStatus)
     }
     
     // MARK: CustomStringConvertible
