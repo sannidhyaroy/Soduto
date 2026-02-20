@@ -11,7 +11,7 @@ import Cocoa
 import os
 import MediaPlayer
 import UserNotifications
-import CommonCrypto
+import CryptoKit
 
 /// MPRIS (Media Player Remote Interfacing Specification) Service
 ///
@@ -626,16 +626,11 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     }
     
     private func getHashForAlbumArt(player: String, albumArtUrl: String) -> String? {
-        // KDE Connect / GSConnect compatibility:
-        // Album art cache keys are MD5 hashes of the album art URL.
-        // This is NOT used for security, only as a stable identifier.
-        
+        // Generate a deterministic hash of the album art URL for caching.
+        // Using SHA256 for stable, cross-session cache keys.
+
         guard let data = albumArtUrl.data(using: .utf8) else { return nil }
-        var digest = [UInt8](repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
-        data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard let baseAddress = buffer.baseAddress else { return }
-            CC_MD5(baseAddress.assumingMemoryBound(to: UInt8.self), CC_LONG(buffer.count), &digest)
-        }
+        let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
     
