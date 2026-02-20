@@ -571,6 +571,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             } catch {
                 Logger.network.error("Failed to add/create TLS handler: \(error, privacy: .public)")
                 self.state = .Closed
+                channel.close(promise: nil)
             }
         }
     }
