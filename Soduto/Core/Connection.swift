@@ -113,6 +113,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     private let uploadQueue: DispatchQueue
     private let downloadQueue: DispatchQueue
     private var packetsSending: [DataPacketSendingInfo] = []
+    private let packetsSendingLock = NSLock()
     private var packetsExpected: Int = 0
     private var waitingToSecure: Bool = false
     private var shouldFinishInitializationWhenSecured: Bool = false
@@ -318,6 +319,8 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     
     /// Returns true if there are active upload tasks that haven't completed yet.
     public var hasActiveUploadTasks: Bool {
+        self.packetsSendingLock.lock()
+        defer { self.packetsSendingLock.unlock() }
         return self.packetsSending.contains { info in
             guard let uploadTask = info.uploadTask else { return false }
             return uploadTask.isStarted && info.payloadSent == nil
@@ -328,6 +331,9 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     /// The tasks are removed from this connection and returned.
     /// This prevents the upload tasks from being closed when this connection closes.
     public func extractActiveUploadTasks() -> [UploadTask] {
+        self.packetsSendingLock.lock()
+        defer { self.packetsSendingLock.unlock() }
+        
         var activeTasks: [UploadTask] = []
         var indicesToRemove: [Int] = []
         
@@ -360,12 +366,21 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     public func uploadTask(_ task: UploadTask, finishedWithSuccess payloadSent: Bool) {
         Logger.network.debug("uploadTask finishedWithSuccess:<\(payloadSent, privacy: .public)>")
         
-        guard let index = self.packetsSending.firstIndex(where: { $0.uploadTask === task }) else { return }
+        var packetInfoToFinalize: DataPacketSendingInfo?
+        var packetSentValue: Bool?
         
-        self.packetsSending[index].payloadSent = payloadSent
+        self.packetsSendingLock.lock()
+        if let index = self.packetsSending.firstIndex(where: { $0.uploadTask === task }) {
+            self.packetsSending[index].payloadSent = payloadSent
+            
+            if let packetSent = self.packetsSending[index].packetSent {
+                packetInfoToFinalize = self.packetsSending.remove(at: index)
+                packetSentValue = packetSent
+            }
+        }
+        self.packetsSendingLock.unlock()
         
-        if let packetSent = self.packetsSending[index].packetSent {
-            let packetInfo = self.packetsSending.remove(at: index)
+        if let packetInfo = packetInfoToFinalize, let packetSent = packetSentValue {
             self.finalizeSending(packet: packetInfo.dataPacket, completionHandler: packetInfo.completionHandler, packetSent: packetSent, payloadSent: payloadSent)
         }
         
@@ -826,12 +841,21 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     }
     
     fileprivate func handleWriteComplete(tag: Int) {
-        guard let index = self.packetsSending.firstIndex(where: { Int($0.dataPacket.id) == tag }) else { return }
+        var packetInfoToFinalize: DataPacketSendingInfo?
+        var payloadSentValue: Bool?
         
-        self.packetsSending[index].packetSent = true
+        self.packetsSendingLock.lock()
+        if let index = self.packetsSending.firstIndex(where: { Int($0.dataPacket.id) == tag }) {
+            self.packetsSending[index].packetSent = true
+            
+            if let payloadSent = self.packetsSending[index].payloadSent {
+                packetInfoToFinalize = self.packetsSending.remove(at: index)
+                payloadSentValue = payloadSent
+            }
+        }
+        self.packetsSendingLock.unlock()
         
-        if let payloadSent = self.packetsSending[index].payloadSent {
-            let packetInfo = self.packetsSending.remove(at: index)
+        if let packetInfo = packetInfoToFinalize, let payloadSent = payloadSentValue {
             self.finalizeSending(packet: packetInfo.dataPacket, completionHandler: packetInfo.completionHandler, packetSent: true, payloadSent: payloadSent)
         }
     }
@@ -858,7 +882,9 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         
         let data = Data(bytes)
         let info = DataPacketSendingInfo(dataPacket: packet, uploadTask: nil, completionHandler: whenCompleted)
+        self.packetsSendingLock.lock()
         self.packetsSending.append(info)
+        self.packetsSendingLock.unlock()
         
         // Write Data directly so RawDataEncoder can process it
         channel.writeAndFlush(data).whenComplete { [weak self] result in
@@ -916,7 +942,9 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         
         let data = Data(bytes)
         let info = DataPacketSendingInfo(dataPacket: payloadPacket, uploadTask: uploadTask, completionHandler: whenCompleted)
+        self.packetsSendingLock.lock()
         self.packetsSending.append(info)
+        self.packetsSendingLock.unlock()
         
         Logger.network.debug("Sending payload packet type: \(packet.type, privacy: .public) with payload on port \(uploadTask.payloadInfo["port"] as? UInt16 ?? 0, privacy: .public)")
         
@@ -972,15 +1000,25 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     
     private func discardUnsentPackets(silently: Bool) -> [(dataPacket: DataPacket, completionHandler: SendingCompletionHandler?)] {
         var results: [(dataPacket: DataPacket, completionHandler: SendingCompletionHandler?)] = []
+        var infosToDiscard: [DataPacketSendingInfo] = []
+        
+        self.packetsSendingLock.lock()
         for info in self.packetsSending {
             guard info.packetSent == nil && info.uploadTask?.isStarted != true else { continue }
+            infosToDiscard.append(info)
+            results.append((dataPacket: info.dataPacket, completionHandler: info.completionHandler))
+        }
+        self.packetsSending = self.packetsSending.filter { $0.packetSent != nil || $0.uploadTask?.isStarted == true }
+        self.packetsSendingLock.unlock()
+        
+        // Process outside the lock
+        for info in infosToDiscard {
             info.uploadTask?.close()
             if !silently {
                 self.finalizeSending(packet: info.dataPacket, completionHandler: info.completionHandler, packetSent: false, payloadSent: false)
             }
-            results.append((dataPacket: info.dataPacket, completionHandler: info.completionHandler))
         }
-        self.packetsSending = self.packetsSending.filter { $0.packetSent != nil || $0.uploadTask?.isStarted == true }
+        
         return results
     }
     
