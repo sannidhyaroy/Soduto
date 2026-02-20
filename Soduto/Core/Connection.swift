@@ -100,6 +100,23 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     public private(set) var peerCertificate: SecCertificate? = nil
     public private(set) var peerAddress: SocketAddress
     
+    /// The protocol version reported by the peer device.
+    /// Defaults to 7 for backwards compatibility with older devices.
+    public private(set) var peerProtocolVersion: UInt = 7
+    
+    /// Whether to show the pair verification code during pairing.
+    /// Only true when both devices support protocol v8+.
+    public var shouldShowVerificationCode: Bool {
+        return peerProtocolVersion >= 8
+    }
+    
+    /// The pair verification code for protocol v8+ pairing.
+    /// This code should be displayed to users during pairing so they can verify
+    /// both devices show the same code (MITM protection).
+    public var verificationCode: String? {
+        return pairingHandler?.verificationCode
+    }
+    
     public var hostCertificate: SecCertificate? { return self.config.hostCertificate?.certificate }
     
     /// The NIO channel for this connection.

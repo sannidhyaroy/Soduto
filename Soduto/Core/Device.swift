@@ -80,6 +80,19 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         return self.config.hostCertificate?.certificate
     }
     
+    /// The pair verification code for protocol v8+ pairing.
+    /// This code is displayed to users during pairing so they can verify
+    /// both devices show the same code (MITM protection).
+    public var verificationCode: String? {
+        return self.connections.first?.verificationCode
+    }
+    
+    /// Whether to show the pair verification code during pairing.
+    /// Only true when both devices support protocol v8+.
+    public var shouldShowVerificationCode: Bool {
+        return self.connections.first?.shouldShowVerificationCode ?? false
+    }
+    
     public private(set) var isReachable: Bool = false {
         didSet {
             if oldValue != self.isReachable {

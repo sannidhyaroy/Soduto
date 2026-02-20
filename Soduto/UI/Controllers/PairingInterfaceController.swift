@@ -47,7 +47,14 @@ public class PairingInterfaceController: UserNotificationActionHandler {
             UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(PairingInterfaceController.self)
         ]
         notification.title = device.name
-        notification.body = "Do you want to pair this device?"
+        
+        // Show verification code for protocol v8+ connections
+        if device.shouldShowVerificationCode, let code = device.verificationCode {
+            notification.body = "Do you want to pair this device?\n\nVerification code: \(code)\n\nConfirm this code matches the other device."
+        } else {
+            notification.body = "Do you want to pair this device?"
+        }
+        
         notification.sound = .default
         notification.categoryIdentifier = "PairDevice"
         notification.setUrgency(.timeSensitive)

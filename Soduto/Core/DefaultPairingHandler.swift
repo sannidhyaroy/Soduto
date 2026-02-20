@@ -42,6 +42,13 @@ public class DefaultPairingHandler: Pairable {
     
     private let config: DeviceConfiguration
     private var pairingTimeout: Timer? = nil
+    private var pairingTimestamp: Int64? = nil
+    
+    /// The pair verification code for protocol v8+.
+    /// This 8-character code (formatted as "XXXX XXXX") should be displayed to users
+    /// during pairing so they can verify both devices show the same code.
+    /// Only available when both local and peer certificates are present.
+    public private(set) var verificationCode: String?
     
     
     // MARK: Init / Deinit
@@ -71,6 +78,8 @@ public class DefaultPairingHandler: Pairable {
             
             if self.pairingStatus == .Unpaired {
                 self.config.certificate = nil
+                self.pairingTimestamp = nil
+                self.verificationCode = nil
             }
             
             self.pairingTimeout?.invalidate()
@@ -96,8 +105,10 @@ public class DefaultPairingHandler: Pairable {
         
         switch self.pairingStatus {
         case .Unpaired:
+            self.pairingTimestamp = Int64(Date().timeIntervalSince1970)
             self.pairingStatus = .Requested
-            _ = self.delegate!.send(DataPacket.pairPacket())
+            _ = self.delegate!.send(DataPacket.pairPacket(timestamp: self.pairingTimestamp))
+            self.generateVerificationCode()
         case .RequestedByPeer:
             self.acceptPairing()
         case .Requested, .Paired:
@@ -161,6 +172,21 @@ public class DefaultPairingHandler: Pairable {
     }
     
     
+    // MARK: Public Methods
+    
+    /// Updates the verification code based on current certificates.
+    /// Call this when the peer certificate becomes available during TLS handshake.
+    public func updateVerificationCode() {
+        generateVerificationCode()
+    }
+    
+    /// Sets the pairing timestamp used for verification code generation.
+    /// For protocol v8 this should be the timestamp from the original pair request.
+    internal func setPairingTimestamp(_ timestamp: Int64?) {
+        self.pairingTimestamp = timestamp
+        generateVerificationCode()
+    }
+    
     // MARK: Private methods
     
     private func canSetPaired() -> Bool {
@@ -175,6 +201,23 @@ public class DefaultPairingHandler: Pairable {
             self.pairingStatus = .Unpaired
         }
     }
+    
+    /// Generates the pair verification code from both certificates.
+    /// The code is only generated when both local and peer certificates are available.
+    private func generateVerificationCode() {
+        guard let hostIdentity = config.hostCertificate,
+              let hostCert = hostIdentity.certificate,
+              let peerCert = delegate?.peerCertificate else {
+            verificationCode = nil
+            return
+        }
+        
+        verificationCode = CertificateUtils.pairVerificationCode(
+            localCert: hostCert,
+            remoteCert: peerCert,
+            timestamp: pairingTimestamp
+        )
+    }
 }
 
 
@@ -187,11 +230,13 @@ public extension DataPacket {
     
     enum PairingProperty: String {
         case pairFlag = "pair"
+        case timestamp = "timestamp"
     }
     
     enum PairingError: Error {
         case wrongType
         case invalidPairFlag
+        case invalidTimestamp
     }
     
     
@@ -204,10 +249,14 @@ public extension DataPacket {
     
     // MARK: Public static methods
     
-    static func pairPacket() -> DataPacket {
-        return DataPacket(type: pairingPacketType, body: [
+    static func pairPacket(timestamp: Int64? = nil) -> DataPacket {
+        var body: DataPacket.Body = [
             PairingProperty.pairFlag.rawValue: NSNumber(value: true)
-        ])
+        ]
+        if let timestamp = timestamp {
+            body[PairingProperty.timestamp.rawValue] = NSNumber(value: timestamp)
+        }
+        return DataPacket(type: pairingPacketType, body: body)
     }
     
     static func unpairPacket() -> DataPacket {
@@ -223,6 +272,12 @@ public extension DataPacket {
         try self.validatePairingType()
         guard let value = body[PairingProperty.pairFlag.rawValue] as? NSNumber else { throw PairingError.invalidPairFlag }
         return value.boolValue
+    }
+    
+    func getPairingTimestamp() throws -> Int64 {
+        try self.validatePairingType()
+        guard let value = body[PairingProperty.timestamp.rawValue] as? NSNumber else { throw PairingError.invalidTimestamp }
+        return value.int64Value
     }
     
     func validatePairingType() throws {
