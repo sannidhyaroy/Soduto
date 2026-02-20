@@ -166,12 +166,19 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         do {
             let broadcastAddress = try NIOCore.SocketAddress(ipAddress: "255.255.255.255", port: Int(ConnectionProvider.udpPort))
             let envelope = AddressedEnvelope(remoteAddress: broadcastAddress, data: buffer)
-            channel.writeAndFlush(envelope, promise: nil)
-            Logger.network.debug("Sent UDP broadcast")
+            channel.writeAndFlush(envelope).whenComplete { result in
+                switch result {
+                case .success:
+                    Logger.network.debug("Sent UDP broadcast")
+                case .failure(let error):
+                    // Expected to fail on some interfaces (loopback, VPN, etc.)
+                    Logger.network.debug("UDP broadcast send failed (may be expected): \(error, privacy: .public)")
+                }
+            }
         } catch {
             Logger.network.error("Failed to create broadcast address: \(error, privacy: .public)")
         }
-        
+
         // Send explicit announcements to known hardware addresses
         let knownDeviceConfigs = self.config.knownDeviceConfigs()
         let accessibleAddresses = (try? NetworkUtils.accessibleIPv4Addresses()) ?? []
@@ -184,9 +191,11 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
                     var deviceBuffer = channel.allocator.buffer(capacity: bytes.count)
                     deviceBuffer.writeBytes(bytes)
                     let envelope = AddressedEnvelope(remoteAddress: deviceAddress, data: deviceBuffer)
-                    channel.writeAndFlush(envelope, promise: nil)
+                    channel.writeAndFlush(envelope).whenFailure { error in
+                        Logger.network.debug("UDP send to known device \(accessibleAddress.ipAddressString, privacy: .public) failed: \(error, privacy: .public)")
+                    }
                 } catch {
-                    Logger.network.error("Failed to send to known device: \(error, privacy: .public)")
+                    Logger.network.error("Failed to create address for known device: \(error, privacy: .public)")
                 }
                 break
             }
