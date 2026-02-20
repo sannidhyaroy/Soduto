@@ -115,7 +115,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     private var packetsSending: [DataPacketSendingInfo] = []
     private var packetsExpected: Int = 0
     private var waitingToSecure: Bool = false
-    private var shouldFinishIntializationWhenSecured: Bool = false
+    private var shouldFinishInitializationWhenSecured: Bool = false
     private var pairingHandler: DefaultPairingHandler? = nil
     
     /// Trust handler for TLS verification.
@@ -247,7 +247,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         if !self.waitingToSecure {
             self.state = .Open
         } else {
-            self.shouldFinishIntializationWhenSecured = true
+            self.shouldFinishInitializationWhenSecured = true
         }
         
         self.observeNotifications()
@@ -774,7 +774,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             }
         }
         
-        if self.shouldFinishIntializationWhenSecured {
+        if self.shouldFinishInitializationWhenSecured {
             self.state = .Open
         }
     }
