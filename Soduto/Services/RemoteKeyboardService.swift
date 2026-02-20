@@ -331,7 +331,7 @@ public class RemoteKeyboardService: Service {
             dataPacket.body.keys.contains(MouseInputProperty.dx) &&
             dataPacket.body.keys.contains(MouseInputProperty.dy) {
             if let dx = try? getMouseDx(from: dataPacket),
-                let dy = try? getMouseDy(from: dataPacket) {
+               let dy = try? getMouseDy(from: dataPacket) {
                 movePointer(dx: dx, dy: dy)
                 return
             }

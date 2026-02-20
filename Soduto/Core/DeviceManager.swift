@@ -69,7 +69,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     private let config: DeviceManagerConfiguration
     private let serviceManager: ServiceManager
     private var devices: [Device.Id:Device] = [:] /// Reachable devices
-    private var recentDevices: [Device.Id:RecentDeviceInfo] = [:] /// Recently reachable devices that are no more - keeping references of them for a short time in case they became unavailable only transiently
+    private var recentDevices: [Device.Id:RecentDeviceInfo] = [:] /// Recently reachable devices
     
     private static let recentDevicesTimout: TimeInterval = 15.0
     
@@ -183,8 +183,6 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     }
     
     private func removeDevice(_ device: Device) {
-        // Probably the only delegate event that can be called is `device(:didChangeReachabilityStatus:)`, but precisely this one
-        // we want to handle specially - without calling self.serviceManager.setup(for:)
         device.delegate = nil
         
         self.devices.removeValue(forKey: device.id)
@@ -199,7 +197,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     
     private func readdDevice(_ device: Device, connection: Connection) {
         device.addConnection(connection)
-        device.delegate = self // this goes after connection adding intentionally - we handle event specially
+        device.delegate = self
         self.devices[device.id] = device
         self.device(device, didChangeReachabilityStatus: device.isReachable)
     }

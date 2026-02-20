@@ -498,7 +498,7 @@ extension FindMyPhoneService {
     // Called when mouse enters the button area
     @objc public func mouseEntered(_ event: NSEvent) {
         if let button = self.hoverButton,
-            let userInfo = event.trackingArea?.userInfo as? [String: Any],
+           let userInfo = event.trackingArea?.userInfo as? [String: Any],
            let isDark = userInfo["isDark"] as? Bool {
             
             NSAnimationContext.runAnimationGroup({ context in

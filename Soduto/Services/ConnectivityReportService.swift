@@ -45,8 +45,7 @@ public class ConnectivityReportService: Service {
         
         do {
             try handle(statusPacket: dataPacket, fromDevice: device)
-        }
-        catch {
+        } catch {
             Logger.services.error("Error handling connectivity report packet: \(error, privacy: .public)")
         }
         

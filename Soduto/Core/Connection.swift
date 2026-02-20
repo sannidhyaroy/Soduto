@@ -2,53 +2,52 @@
 //  Connection.swift
 //  Soduto
 //
-//  Created by Admin on 2016-08-04.
-//  Copyright © 2016 Soduto. All rights reserved.
+//  Created by Sannidhya Roy on 15/02/26.
+//  Copyright © 2026 Soduto. All rights reserved.
 //
 
 import Foundation
-import CocoaAsyncSocket
+import NIOCore
+import NIOPosix
+import NIOSSL
+import NIOTLS
+import NIOFoundationCompat
 import os
 
-public enum ConnectionError: Error {
-    case InitializationAlreadyFinished
-    case IdentityAbsent
-}
-
-public protocol ConnectionDelegate: AnyObject {
-    func connection(_ connection:Connection, didSwitchToState:Connection.State)
-    func connection(_ connection:Connection, didSendPacket:DataPacket, uploadedPayload: Bool)
-    func connection(_ connection:Connection, didReadPacket:DataPacket)
-    func connectionCapacityChanged(_ connection:Connection) // Informs receiver that it can try to resend previously declined packets
-}
+// MARK: - Connection Configuration
 
 public protocol ConnectionConfiguration: HostConfiguration {
     var hostCertificate: SecIdentity? { get }
-    func deviceConfig(for deviceId:Device.Id) -> DeviceConfiguration
+    func deviceConfig(for deviceId: Device.Id) -> DeviceConfiguration
     func knownDeviceConfigs() -> [DeviceConfiguration]
 }
 
-public protocol ConnectionDataPacketHandler {
-    func handleDataPacket(_ dataPacket:DataPacket, onConnection connection:Connection) -> Bool
+// MARK: - Connection Delegate
+
+/// Delegate protocol for Connection events.
+public protocol ConnectionDelegate: AnyObject {
+    func connection(_ connection: Connection, didSwitchToState state: Connection.State)
+    func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool)
+    func connection(_ connection: Connection, didReadPacket packet: DataPacket)
+    func connectionCapacityChanged(_ connection: Connection)
 }
 
+// MARK: - Connection
 
-/// Upload handling is owned by `Connection`.
+/// Manages a TCP connection with TLS for KDE Connect protocol communication.
 ///
-/// Rationale:
-/// Uploads are connection-level operations that require:
-/// - coordination between control packet transmission and payload transfer
-/// - port and capacity management
-/// - retry / defer logic when capacity is exceeded
-/// - a single authoritative completion signal
-///
-/// Because of this, `Connection` tracks upload task state internally and emits a single completion event via `ConnectionDelegate`.
-public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegate, Pairable, PairableDelegate, UploadTaskDelegate {
+/// This class manages a TCP connection with TLS using SwiftNIO. It supports
+/// STARTTLS with role reversal as required by KDE Connect protocol.
+public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     
     // MARK: Types
     
     public enum ConnectionError: Error {
-        case setSocketOptionFailed(code: Int32)
+        case channelNotAvailable
+        case identityNotSet
+        case initializationAlreadyFinished
+        case tlsUpgradeFailed(Error)
+        case serializationFailed
     }
     
     public enum State {
@@ -60,7 +59,6 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     public typealias SendingCompletionHandler = ((_ packetSent: Bool, _ payloadSent: Bool) -> Void)
     
     public struct DataPacketSendingInfo {
-        
         let dataPacket: DataPacket
         let uploadTask: UploadTask?
         let completionHandler: SendingCompletionHandler?
@@ -77,17 +75,19 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
         }
     }
     
-    
     // MARK: Properties
     
     public weak var delegate: ConnectionDelegate?
-    
-    public weak var pairingDelegate: PairableDelegate?
+    public weak var pairingDelegate: ConnectionPairingDelegate?
     
     public private(set) var state: State {
         didSet {
             if oldValue != self.state {
-                self.delegate?.connection(self, didSwitchToState: self.state)
+                // Notify delegate on main queue
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.delegate?.connection(self, didSwitchToState: self.state)
+                }
             }
             
             if self.state == .Open && self.pairingStatus == .Paired {
@@ -102,70 +102,116 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     
     public var hostCertificate: SecCertificate? { return self.config.hostCertificate?.certificate }
     
+    /// The NIO channel for this connection.
+    private var channel: Channel?
+    
+    /// The event loop group (shared).
+    private let eventLoopGroup: EventLoopGroup
+    
     private let config: ConnectionConfiguration
-    private let socket: GCDAsyncSocket
-    private let sslCertificates: [AnyObject]
-    private let uploadQueue = Connection.createDispatchQueue(withLabel: "Payload upload queue")
-    private let downloadQueue = Connection.createDispatchQueue(withLabel: "Payload download queue")
-    private var packetsSending: [DataPacketSendingInfo] = []  // array of packets being sent
-    private var packetsExpected: Int = 0         // count of packets to read befor stopping automatic reading, -1 for unlimited count
+    private let hostIdentity: SecIdentity
+    private let uploadQueue: DispatchQueue
+    private let downloadQueue: DispatchQueue
+    private var packetsSending: [DataPacketSendingInfo] = []
+    private let packetsSendingLock = NSLock()
+    private var packetsExpected: Int = 0
     private var waitingToSecure: Bool = false
-    private var shouldFinishIntializationWhenSecured: Bool = false
+    private var shouldFinishInitializationWhenSecured: Bool = false
     private var pairingHandler: DefaultPairingHandler? = nil
-    private var packetHandlers: [ConnectionDataPacketHandler] = []
     
-    static private let packetsDelimiter = Data("\n".utf8)
+    /// Trust handler for TLS verification.
+    private var trustHandler: TrustHandler?
     
+    /// Reference to the packet handler in the pipeline.
+    private var connectionHandler: ConnectionHandler?
+    
+    /// If true, connection will close after all pending uploads complete.
+    private var shouldCloseAfterUploads: Bool = false
     
     // MARK: Initialization / Deinitialization
     
-    init?(address: SocketAddress, identityPacket packet: DataPacket, config: ConnectionConfiguration) {
+    /// Creates an outgoing connection to the specified address.
+    ///
+    /// - Parameters:
+    ///   - address: The socket address to connect to.
+    ///   - identityPacket: The identity packet received from the peer.
+    ///   - config: The connection configuration.
+    ///   - eventLoopGroup: The NIO event loop group to use.
+    init?(address: SocketAddress, identityPacket packet: DataPacket, config: ConnectionConfiguration, eventLoopGroup: EventLoopGroup) {
         guard let hostIdentity = config.hostCertificate else { return nil }
         
         self.peerAddress = address
         self.config = config
-        self.socket = GCDAsyncSocket(delegate: nil, delegateQueue: DispatchQueue.main)
-        self.sslCertificates = [ hostIdentity ]
+        self.hostIdentity = hostIdentity
+        self.eventLoopGroup = eventLoopGroup
         self.state = .Initializing
+        self.uploadQueue = Connection.createDispatchQueue(withLabel: "Payload upload queue")
+        self.downloadQueue = Connection.createDispatchQueue(withLabel: "Payload download queue")
         
         super.init()
         
-        self.socket.delegate = self
         do {
             try self.applyIdentity(packet: packet)
-            try self.socket.connect(toAddress: address.data)
-        }
-        catch {
-            Logger.network.error("Could not connect to address \(address, privacy: .public): \(error, privacy: .public)")
+        } catch {
+            Logger.network.error("Failed to apply identity: \(error, privacy: .public)")
             return nil
         }
-        self.configureSocket()
+        
+        // Connect to peer
+        self.connectToAddress(address)
     }
     
-    init?(socket: GCDAsyncSocket, config: ConnectionConfiguration) {
-        guard socket.isConnected else { return nil }
-        guard let connectedAddress = socket.connectedAddress else { return nil }
+    /// Creates an incoming connection from an accepted NIO channel.
+    ///
+    /// - Parameters:
+    ///   - channel: The accepted NIO channel.
+    ///   - config: The connection configuration.
+    ///   - eventLoopGroup: The NIO event loop group.
+    init?(channel: Channel, config: ConnectionConfiguration, eventLoopGroup: EventLoopGroup) {
         guard let hostIdentity = config.hostCertificate else { return nil }
+        guard let remoteAddress = channel.remoteAddress else { return nil }
         
-        self.peerAddress = SocketAddress(data: connectedAddress)
+        // Convert NIOCore.SocketAddress to SocketAddress
+        let peerAddr: SocketAddress
+        switch remoteAddress {
+        case .v4(let addr):
+            peerAddr = SocketAddress(addr: addr.address)
+        case .v6(let addr):
+            peerAddr = SocketAddress(addr: addr.address)
+        default:
+            return nil
+        }
+        
+        self.peerAddress = peerAddr
         self.config = config
-        self.socket = socket
-        self.sslCertificates = [ hostIdentity ]
+        self.hostIdentity = hostIdentity
+        self.eventLoopGroup = eventLoopGroup
+        self.channel = channel
         self.state = .Initializing
+        self.uploadQueue = Connection.createDispatchQueue(withLabel: "Payload upload queue")
+        self.downloadQueue = Connection.createDispatchQueue(withLabel: "Payload download queue")
         
         super.init()
         
-        self.socket.delegate = self
-        self.configureSocket()
+        // Set up the channel pipeline
+        self.setupChannelPipeline(channel: channel).whenFailure { [weak self] error in
+            Logger.network.error("Failed to set up connection pipeline: \(error, privacy: .public)")
+            self?.close()
+        }
     }
     
     deinit {
         NotificationCenter.default.removeObserver(self)
         self.state = .Closed
+        self.channel?.close(promise: nil)
     }
     
+    // MARK: Public API
+    
     public func applyIdentity(packet: DataPacket) throws {
-        assert(self.state == .Initializing, "Connection initialization already finished")
+        guard self.state == .Initializing else {
+            throw ConnectionError.initializationAlreadyFinished
+        }
         
         try packet.validateIdentityType()
         let deviceId = try packet.getDeviceId()
@@ -174,51 +220,67 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
         self.identity = packet
         self.pairingHandler = DefaultPairingHandler(config: deviceConfig)
         self.pairingHandler!.delegate = self
-        self.pairingHandler!.pairingDelegate = self
-        self.packetHandlers.append(self.pairingHandler!)
+        // Note: pairingHandler's pairingDelegate and impersonateAs are NOT set because
+        // Connection handles incoming pairing packets directly in handlePairingPacket(),
+        // while outgoing pairing actions (requestPairing, acceptPairing, etc.) delegate
+        // to pairingHandler. ConnectionPairingDelegate receives pairing events.
     }
     
     public func secureServer() {
-        assert(self.state == .Initializing, "Connection initialization already finished")
-        assert(self.identity != nil, "Identity expected to be known before securing connection")
+        guard self.state == .Initializing else {
+            Logger.network.error("secureServer called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
+            return
+        }
+        guard self.identity != nil else {
+            Logger.network.error("secureServer called but identity not set")
+            assertionFailure("Identity expected to be known before securing connection")
+            return
+        }
         
-        self.secureServerSocket(self.socket)
         self.waitingToSecure = true
+        self.performTLSUpgrade(role: .server)
     }
     
     public func secureClient() {
-        assert(self.state == .Initializing, "Connection initialization already finished")
-        assert(self.identity != nil, "Identity expected to be known before securing connection")
+        guard self.state == .Initializing else {
+            Logger.network.error("secureClient called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
+            return
+        }
+        guard self.identity != nil else {
+            Logger.network.error("secureClient called but identity not set")
+            assertionFailure("Identity expected to be known before securing connection")
+            return
+        }
         
-        self.secureClientSocket(self.socket)
         self.waitingToSecure = true
+        self.performTLSUpgrade(role: .client)
     }
     
     public func finishInitialization() {
-        assert(self.state == .Initializing, "Connection initialization already finished")
-        assert(self.identity != nil, "Connection identity must be set before finishing initialization")
+        guard self.state == .Initializing else {
+            Logger.network.error("finishInitialization called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
+            return
+        }
+        guard self.identity != nil else {
+            Logger.network.error("finishInitialization called but identity not set")
+            assertionFailure("Connection identity must be set before finishing initialization")
+            return
+        }
         
         if !self.waitingToSecure {
             self.state = .Open
-        }
-        else {
-            self.shouldFinishIntializationWhenSecured = true
+        } else {
+            self.shouldFinishInitializationWhenSecured = true
         }
         
         self.observeNotifications()
     }
     
-    
-    // MARK: Public API
-    
-    /// Try sending a packed with completion handler. Returns false if sending is declined because of capacity exceeded.
-    /// In such case the sender may try resending the packet when connection capacity changes. In other cases
-    /// true is returned even if sending does not succeed - sending failure is reported through completion handler.
+    /// Try sending a packet with completion handler.
     public func send(_ dataPacket: DataPacket, whenCompleted: SendingCompletionHandler? = nil) -> Bool {
         if dataPacket.hasPayload() {
             return self.sendPayloadPacket(dataPacket, whenCompleted: whenCompleted)
-        }
-        else {
+        } else {
             return self.sendSimplePacket(dataPacket, whenCompleted: whenCompleted)
         }
     }
@@ -229,171 +291,104 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     
     public func readOnePacket() {
         self.packetsExpected = 1
-        self.readNextPacket()
+        // NIO reads automatically via pipeline - just track expected count
     }
     
     public func readPackets() {
         self.packetsExpected = -1
-        self.readNextPacket()
+        // NIO reads automatically via pipeline
     }
     
-    /// Discard and return unsent packets, so that they can be resent with other connection. This can be done only when
-    /// connection is already closed, otherwise behaviour is undefined
     public func reclaimUnsentPackets() -> [(dataPacket: DataPacket, completionHandler: SendingCompletionHandler?)] {
         assert(self.state == .Closed)
         return self.discardUnsentPackets(silently: true)
     }
     
-    /// Disconnect underlying socket, effectively discarded all unfinished packet writings. State change however is not
-    /// performed imediately, but in the near future when diconnect event is received
     public func close() {
-        self.socket.disconnect()
+        self.channel?.close(promise: nil)
     }
     
-    /// Wait for all packet writes are finished and then discard. State change however is not
-    /// performed imediately, but in the near future when diconnect event is received
     public func closeAfterWriting() {
-        self.socket.disconnectAfterWriting()
+        if self.hasActiveUploadTasks {
+            // Don't close yet - set flag to close after uploads complete
+            Logger.network.debug("Connection: deferring close until uploads complete")
+            self.shouldCloseAfterUploads = true
+        } else {
+            self.channel?.close(mode: .output, promise: nil)
+        }
     }
     
-    /// Helper function to secure any server socket equivalently as this connection secures
-    /// its own socket - with same certificates and settings
-    public func secureServerSocket(_ socket: GCDAsyncSocket) {
-        let settings: [String:NSObject] = [
-            kCFStreamSSLCertificates as String: self.sslCertificates as NSArray,
-            kCFStreamSSLIsServer as String: NSNumber(value: true),
-            GCDAsyncSocketSSLClientSideAuthenticate as String: NSNumber(value: SSLAuthenticate.alwaysAuthenticate.rawValue),
-            GCDAsyncSocketManuallyEvaluateTrust as String: NSNumber(value: true)
-        ]
-        socket.startTLS(settings)
+    /// Returns true if there are active upload tasks that haven't completed yet.
+    public var hasActiveUploadTasks: Bool {
+        self.packetsSendingLock.lock()
+        defer { self.packetsSendingLock.unlock() }
+        return self.packetsSending.contains { info in
+            guard let uploadTask = info.uploadTask else { return false }
+            return uploadTask.isStarted && info.payloadSent == nil
+        }
     }
     
-    /// Helper function to secure any client socket equivalently as this connection secures
-    /// its own socket - with same certificates and settings
-    public func secureClientSocket(_ socket: GCDAsyncSocket) {
-        let settings: [String:NSObject] = [
-            kCFStreamSSLCertificates as String: self.sslCertificates as NSArray,
-            GCDAsyncSocketManuallyEvaluateTrust as String: NSNumber(value: true)
-        ]
-        socket.startTLS(settings)
+    /// Extracts active upload tasks from this connection for transfer to another owner.
+    /// The tasks are removed from this connection and returned.
+    /// This prevents the upload tasks from being closed when this connection closes.
+    public func extractActiveUploadTasks() -> [UploadTask] {
+        self.packetsSendingLock.lock()
+        defer { self.packetsSendingLock.unlock() }
+        
+        var activeTasks: [UploadTask] = []
+        var indicesToRemove: [Int] = []
+        
+        for (index, info) in self.packetsSending.enumerated() {
+            if let uploadTask = info.uploadTask, uploadTask.isStarted && info.payloadSent == nil {
+                activeTasks.append(uploadTask)
+                indicesToRemove.append(index)
+            }
+        }
+        
+        // Remove extracted tasks from packetsSending (in reverse order to preserve indices)
+        for index in indicesToRemove.reversed() {
+            self.packetsSending.remove(at: index)
+        }
+        
+        return activeTasks
     }
     
-    /// Helper function to validate peer certificate equivalently as this connection validates
-    /// its own connections
+    /// Helper function to validate peer certificate.
     public func shouldTrustPeerCertificate(_ peerCertificate: SecCertificate) -> Bool {
-        assert(self.identity != nil, "Identity expected to be known before securing connection and evaluating trust")
+        assert(self.identity != nil, "Identity expected to be known before securing connection")
         
         guard let deviceId = try? self.identity!.getDeviceId() else { return false }
         guard let savedCertificate = self.config.deviceConfig(for: deviceId).certificate else { return false }
         return CertificateUtils.compareCertificates(savedCertificate, peerCertificate)
     }
     
-    
-    // MARK: GCDAsyncSocketDelegate
-    
-    public func socket(_ sock: GCDAsyncSocket, didConnectToHost host: String, port: UInt16) {
-        Logger.network.debug("socket(<\(sock, privacy: .public)> didConnectToHost:<\(host, privacy: .public)> port:<\(port, privacy: .public)>)")
-    }
-    
-    public func socket(_ sock: GCDAsyncSocket, didWriteDataWithTag tag: Int) {
-        Logger.network.debug("socket(<\(sock, privacy: .public)> didWriteDataWithTag:<\(tag, privacy: .public)>)")
-        
-        assert(self.packetsSending.firstIndex(where: { Int($0.dataPacket.id) == tag }) != nil, "Data packet is not in the packetsSending list.")
-        guard let index = self.packetsSending.firstIndex(where: { Int($0.dataPacket.id) == tag }) else { return }
-        
-        self.packetsSending[index].packetSent = true
-        
-        if let payloadSent = self.packetsSending[index].payloadSent {
-            let packetInfo = self.packetsSending.remove(at: index)
-            self.finalizeSending(packet: packetInfo.dataPacket, completionHandler: packetInfo.completionHandler, packetSent: true, payloadSent: payloadSent)
-        }
-    }
-    
-    public func socket(_ sock: GCDAsyncSocket, didRead data: Data, withTag tag: Int) {
-#if DEBUG
-        Logger.network.debug("socket(<\(sock, privacy: .public)> didRead:<\(data, privacy: .public)> withTag:<\(tag, privacy: .public)>)")
-#else
-        Logger.network.debug("socket(<\(sock, privacy: .public)> didReadBytes:<\(data.count, privacy: .public)> withTag:<\(tag, privacy: .public)>)")
-#endif
-        
-        if data.count > 0 {
-            if let packet = DataPacket(data: data) {
-                var mutablePacket = packet
-                if mutablePacket.payloadInfo != nil {
-                    mutablePacket.downloadTask = DownloadTask(packet: mutablePacket, connection: self, writeQueue: self.downloadQueue)
-                }
-                
-                self.handle(packet: mutablePacket)
-                if self.packetsExpected > 0 {
-                    self.packetsExpected = self.packetsExpected - 1
-                }
-            }
-            else {
-                Logger.network.error("Could not deserialize received data packet")
-            }
-        }
-        
-        if self.packetsExpected != 0 {
-            self.readNextPacket()
-        }
-    }
-    
-    public func socketDidSecure(_ sock: GCDAsyncSocket) {
-        Logger.network.debug("socketDidSecure(<\(sock, privacy: .public)>)")
-        self.waitingToSecure = false
-        if self.shouldFinishIntializationWhenSecured {
-            self.state = .Open
-        }
-    }
-    
-    public func socketDidDisconnect(_ sock: GCDAsyncSocket, withError err: Error?) {
-        Logger.network.debug("socketDidDisconnect(<\(sock, privacy: .public)> withError:<\(err, privacy: .public)>)")
-        
-        // Execute state change before packets dicarding, so that delegate could reclaim unsent packets
-        self.state = .Closed
-        
-        // Discard unsent packets, leaving only those packets that have uploads in progress.
-        _ = self.discardUnsentPackets(silently: true)
-    }
-    
-    public func socket(_ sock: GCDAsyncSocket, didReceive trust: SecTrust, completionHandler: @escaping (Bool) -> Swift.Void) {
-        completionHandler(self.shouldTrustPeer(trust))
-    }
-    
-    
     // MARK: UploadTaskDelegate
     
     public func uploadTask(_ task: UploadTask, finishedWithSuccess payloadSent: Bool) {
-        Logger.network.debug("uploadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(payloadSent, privacy: .public)>)")
+        Logger.network.debug("uploadTask finishedWithSuccess:<\(payloadSent, privacy: .public)>")
         
-        assert(self.packetsSending.firstIndex(where: { $0.uploadTask === task }) != nil, "Data packet is not in the packetsSending list.")
-        guard let index = self.packetsSending.firstIndex(where: { $0.uploadTask === task }) else { return }
+        var packetInfoToFinalize: DataPacketSendingInfo?
+        var packetSentValue: Bool?
         
-        self.packetsSending[index].payloadSent = true
+        self.packetsSendingLock.lock()
+        if let index = self.packetsSending.firstIndex(where: { $0.uploadTask === task }) {
+            self.packetsSending[index].payloadSent = payloadSent
+            
+            if let packetSent = self.packetsSending[index].packetSent {
+                packetInfoToFinalize = self.packetsSending.remove(at: index)
+                packetSentValue = packetSent
+            }
+        }
+        self.packetsSendingLock.unlock()
         
-        //        assert(self.packetsSending[index].packetSent == true, "Payload expected to be uploaded after packet is sent (since payload info is in the packet)")
-        if let packetSent = self.packetsSending[index].packetSent {
-            let packetInfo = self.packetsSending.remove(at: index)
+        if let packetInfo = packetInfoToFinalize, let packetSent = packetSentValue {
             self.finalizeSending(packet: packetInfo.dataPacket, completionHandler: packetInfo.completionHandler, packetSent: packetSent, payloadSent: payloadSent)
         }
-    }
-    
-    
-    // MARK: PairableDelegate
-    
-    public func pairable(_ pairable:Pairable, receivedRequest request:PairingRequest) {
-        self.pairingDelegate?.pairable(self, receivedRequest:request)
-    }
-    
-    public func pairable(_ pairable:Pairable, failedWithError error:Error) {
-        self.pairingDelegate?.pairable(self, failedWithError:error)
-    }
-    
-    public func pairable(_ pairable:Pairable, statusChanged status:PairingStatus) {
-        self.pairingDelegate?.pairable(self, statusChanged: status)
         
-        if self.pairingStatus == .Paired {
-            self.rememberHwAddress()
+        // If we were waiting to close and no more active uploads, close now
+        if self.shouldCloseAfterUploads && !self.hasActiveUploadTasks {
+            Logger.network.debug("Connection: all uploads complete, closing now")
+            self.channel?.close(mode: .output, promise: nil)
         }
     }
     
@@ -401,184 +396,311 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     // MARK: Pairable
     
     public var pairingStatus: PairingStatus {
-        if self.state == .Open {
-            return self.pairingHandler!.pairingStatus
-        }
-        else {
+        guard self.state == .Open, let handler = self.pairingHandler else {
             return .Unpaired
         }
+        return handler.pairingStatus
     }
     
     public func requestPairing() {
-        assert(self.state == .Open, "Connection expected to be open")
-        self.pairingHandler!.requestPairing()
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("requestPairing called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        let previousStatus = handler.pairingStatus
+        handler.requestPairing()
+        
+        // Notify delegate about pairing status change
+        let newStatus = handler.pairingStatus
+        if newStatus != previousStatus {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.pairingDelegate?.connection(self, pairingStatusChanged: newStatus)
+            }
+        }
     }
     
     public func acceptPairing() {
-        assert(self.state == .Open, "Connection expected to be open")
-        self.pairingHandler!.acceptPairing()
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("acceptPairing called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        handler.acceptPairing()
+        
+        // Notify delegate about pairing status change
+        // (DefaultPairingHandler.pairingDelegate is nil for Connection, so we handle it here)
+        if handler.pairingStatus == .Paired {
+            self.rememberHwAddress()
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.pairingDelegate?.connection(self, pairingStatusChanged: .Paired)
+            }
+        }
     }
     
     public func declinePairing() {
-        assert(self.state == .Open, "Connection expected to be open")
-        self.pairingHandler!.declinePairing()
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("declinePairing called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        handler.declinePairing()
+        
+        // Notify delegate about pairing status change
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.pairingDelegate?.connection(self, pairingStatusChanged: .Unpaired)
+        }
     }
     
     public func unpair() {
-        assert(self.state == .Open, "Connection expected to be open")
-        self.pairingHandler!.unpair()
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("unpair called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        handler.unpair()
+        
+        // Notify delegate about pairing status change
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.pairingDelegate?.connection(self, pairingStatusChanged: .Unpaired)
+        }
     }
     
     public func updatePairingStatus(globalStatus: PairingStatus) {
-        assert(self.state == .Open, "Connection expected to be open")
-        self.pairingHandler!.updatePairingStatus(globalStatus: globalStatus)
+        guard self.state == .Open, let handler = self.pairingHandler else {
+            Logger.network.error("updatePairingStatus called but connection not open or pairingHandler not set")
+            assertionFailure("Connection expected to be open with pairingHandler set")
+            return
+        }
+        handler.updatePairingStatus(globalStatus: globalStatus)
     }
-    
     
     // MARK: CustomStringConvertible
     
     public override var description: String {
-        // Extract socket address string
-        let socketString = self.socket.description
-        let endIndex = socketString.index(socketString.endIndex, offsetBy: -1)
-        let startIndex = socketString.index(endIndex, offsetBy: -11)
-        let socketAddress = socketString[startIndex..<endIndex]
-        
         let id: String = (try? self.identity?.getDeviceId() ?? "") ?? ""
         let name: String = (try? self.identity?.getDeviceName() ?? "") ?? ""
-        return "<Connection:\(socketAddress):\(id):\(name)>"
+        return "<Connection:\(self.peerAddress):\(id):\(name)>"
     }
     
+    // MARK: Private - Connection Setup
     
-    // MARK: Private
-    
-    private func configureSocket() {
-        self.socket.perform {
-            if self.socket.isIPv4 {
-                do {
-                    let nativeSocket = self.socket.socket4FD()
-                    try self.setSockOpt(socket: nativeSocket, level: SOL_SOCKET, optionName: SO_KEEPALIVE, optionValue: 1)
-                    try self.setSockOpt(socket: nativeSocket, level: IPPROTO_TCP, optionName: TCP_KEEPALIVE, optionValue: 10)
+    private func connectToAddress(_ address: SocketAddress) {
+        let bootstrap = ClientBootstrap(group: self.eventLoopGroup)
+            .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .withTCPKeepalive()
+            .channelInitializer { [weak self] channel in
+                guard let self = self else {
+                    return channel.eventLoop.makeSucceededVoidFuture()
                 }
-                catch {
-                    Logger.network.error("Failed to configure socket for connection \(self, privacy: .public): \(error, privacy: .public)")
+                self.channel = channel
+                return self.setupChannelPipeline(channel: channel)
+            }
+        
+        // Convert to NIOCore.SocketAddress
+        let targetAddress: NIOCore.SocketAddress
+        do {
+            let ipString: String
+            if address.isIPv4 {
+                // address.description for IPv4 is "ip:port", extract just the IP
+                let desc = address.description
+                ipString = String(desc.split(separator: ":").first ?? "")
+            } else if address.isIPv6 {
+                // address.description for IPv6 is "[ip]:port", extract just the IP
+                let desc = address.description
+                if let start = desc.firstIndex(of: "["), let end = desc.firstIndex(of: "]") {
+                    ipString = String(desc[desc.index(after: start)..<end])
+                } else {
+                    Logger.network.error("Failed to parse IPv6 address")
+                    return
+                }
+            } else {
+                Logger.network.error("Unsupported address type")
+                return
+            }
+            targetAddress = try NIOCore.SocketAddress(ipAddress: ipString, port: Int(address.port))
+        } catch {
+            Logger.network.error("Failed to create address: \(error, privacy: .public)")
+            return
+        }
+        
+        bootstrap.connect(to: targetAddress).whenComplete { [weak self] result in
+            switch result {
+            case .success(let channel):
+                self?.channel = channel
+                Logger.network.debug("Connection connected to \(String(describing: channel.remoteAddress), privacy: .public)")
+            case .failure(let error):
+                Logger.network.error("Connection failed to connect: \(error, privacy: .public)")
+                self?.state = .Closed
+            }
+        }
+    }
+    
+    @discardableResult
+    private func setupChannelPipeline(channel: Channel) -> EventLoopFuture<Void> {
+        // Create handlers - wrap decoder/encoder protocols in their handler types
+        let decoder = ByteToMessageHandler(KDEConnectPacketDecoder())
+        let encoder = MessageToByteHandler(RawDataEncoder())
+        self.connectionHandler = ConnectionHandler(connection: self)
+        
+        // Add handlers to pipeline.
+        do {
+            try channel.pipeline.syncOperations.addHandler(decoder)
+            try channel.pipeline.syncOperations.addHandler(encoder)
+            try channel.pipeline.syncOperations.addHandler(self.connectionHandler!)
+            return channel.eventLoop.makeSucceededVoidFuture()
+        } catch {
+            return channel.eventLoop.makeFailedFuture(error)
+        }
+    }
+    
+    // MARK: Private - TLS
+    
+    private func performTLSUpgrade(role: TLSRole) {
+        guard let channel = self.channel else {
+            Logger.network.error("Cannot upgrade to TLS: no channel")
+            return
+        }
+        
+        // Determine if this is a paired device
+        let isPaired: Bool
+        if let deviceId = try? self.identity?.getDeviceId() {
+            isPaired = self.config.deviceConfig(for: deviceId).isPaired
+        } else {
+            isPaired = false
+        }
+        
+        // Create trust handler
+        self.trustHandler = TrustHandler(isPaired: isPaired)
+        
+        channel.eventLoop.execute { [weak self, weak channel] in
+            guard let self = self, let channel = channel else { return }
+            
+            do {
+                let sslHandler = try self.createSSLHandler(role: role)
+                // Add SSL handler at the front of the pipeline.
+                try channel.pipeline.syncOperations.addHandler(sslHandler, position: .first)
+            } catch {
+                Logger.network.error("Failed to add/create TLS handler: \(error, privacy: .public)")
+                self.state = .Closed
+                channel.close(promise: nil)
+            }
+        }
+    }
+    
+    private func createSSLHandler(role: TLSRole) throws -> NIOSSLHandler {
+        let tlsConfig = try createTLSConfiguration(role: role)
+        let sslContext = try NIOSSLContext(configuration: tlsConfig)
+        
+        switch role {
+        case .server:
+            return NIOSSLServerHandler(
+                context: sslContext,
+                customVerificationCallback: trustHandler!.verificationCallback
+            )
+        case .client:
+            return try NIOSSLClientHandler(
+                context: sslContext,
+                serverHostname: nil,
+                customVerificationCallback: trustHandler!.verificationCallback
+            )
+        }
+    }
+    
+    private func createTLSConfiguration(role: TLSRole) throws -> TLSConfiguration {
+        // Extract certificate and private key from SecIdentity
+        var certificate: SecCertificate?
+        let certStatus = SecIdentityCopyCertificate(hostIdentity, &certificate)
+        guard certStatus == errSecSuccess, let cert = certificate else {
+            throw NIOSSLError.failedToLoadCertificate
+        }
+        
+        var privateKey: SecKey?
+        let keyStatus = SecIdentityCopyPrivateKey(hostIdentity, &privateKey)
+        guard keyStatus == errSecSuccess, let key = privateKey else {
+            throw NIOSSLError.failedToLoadPrivateKey
+        }
+        
+        // Convert to NIOSSLCertificate and NIOSSLPrivateKey
+        let certData = SecCertificateCopyData(cert) as Data
+        let sslCert = try NIOSSLCertificate(bytes: Array(certData), format: .der)
+        
+        var error: Unmanaged<CFError>?
+        guard let keyData = SecKeyCopyExternalRepresentation(key, &error) as Data? else {
+            throw NIOSSLError.failedToLoadPrivateKey
+        }
+        
+        let sslKey = try NIOSSLPrivateKey(bytes: Array(keyData), format: .der)
+        
+        var config: TLSConfiguration
+        switch role {
+        case .server:
+            config = TLSConfiguration.makeServerConfiguration(
+                certificateChain: [.certificate(sslCert)],
+                privateKey: .privateKey(sslKey)
+            )
+            config.certificateVerification = .noHostnameVerification
+        case .client:
+            config = TLSConfiguration.makeClientConfiguration()
+            config.certificateChain = [.certificate(sslCert)]
+            config.privateKey = .privateKey(sslKey)
+            config.certificateVerification = .noHostnameVerification
+        }
+        
+        config.minimumTLSVersion = .tlsv12
+        return config
+    }
+    
+    // MARK: Private - Packet Handling
+    
+    fileprivate func handleReceivedData(_ data: Data) {
+        guard var mutablePacket = DataPacket(data: data) else {
+            Logger.network.error("Could not deserialize received data packet")
+            return
+        }
+        
+        if mutablePacket.payloadInfo != nil {
+            // Create DownloadTask for packets with payload
+            // Extract host IP from peer address
+            // IPv4 format: "ip:port", IPv6 format: "[ip]:port"
+            let peerHost: String
+            let addressDesc = self.peerAddress.description
+            if addressDesc.hasPrefix("[") {
+                // IPv6: extract between brackets
+                if let endBracket = addressDesc.firstIndex(of: "]") {
+                    peerHost = String(addressDesc[addressDesc.index(after: addressDesc.startIndex)..<endBracket])
+                } else {
+                    peerHost = addressDesc
+                }
+            } else {
+                // IPv4: extract before last colon
+                if let lastColon = addressDesc.lastIndex(of: ":") {
+                    peerHost = String(addressDesc[..<lastColon])
+                } else {
+                    peerHost = addressDesc
                 }
             }
             
-            if self.socket.isIPv6 {
-                do {
-                    let nativeSocket = self.socket.socket6FD()
-                    try self.setSockOpt(socket: nativeSocket, level: SOL_SOCKET, optionName: SO_KEEPALIVE, optionValue: 1)
-                    try self.setSockOpt(socket: nativeSocket, level: IPPROTO_TCP, optionName: TCP_KEEPALIVE, optionValue: 10)
-                }
-                catch {
-                    Logger.network.error("Failed to configure socket for connection \(self, privacy: .public): \(error, privacy: .public)")
-                }
-            }
-        }
-    }
-    
-    private func setSockOpt(socket: Int32, level: Int32, optionName: Int32, optionValue: Int32) throws {
-        var value = optionValue // need writable value
-        let result = setsockopt(socket, level, optionName, &value, UInt32(MemoryLayout<Int32>.size))
-        if result != 0 {
-            throw ConnectionError.setSocketOptionFailed(code: errno)
-        }
-    }
-    
-    private func sendSimplePacket(_ packet: DataPacket, whenCompleted: SendingCompletionHandler? = nil) -> Bool {
-        assert(!packet.hasPayload())
-        
-#if DEBUG
-        Logger.network.debug("send(:\(String(describing: packet), privacy: .public) whenCompleted:\(String(describing: whenCompleted), privacy: .public)) [\(String(describing: self), privacy: .public)]")
-#else
-        Logger.network.debug("send(type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(String(describing: self), privacy: .public)]")
-#endif
-        
-        if let bytes = try? packet.serialize() {
-            let data = Data(bytes)
-            self.socket.write(data, withTimeout: -1, tag: Int(packet.id))
-            let info = DataPacketSendingInfo(dataPacket: packet, uploadTask: nil, completionHandler: whenCompleted)
-            self.packetsSending.append(info)
-        }
-        else {
-#if DEBUG
-            Logger.network.error("Failed to serialize packet: \(packet, privacy: .public).")
-#else
-            Logger.network.error("Failed to serialize packet type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public).")
-#endif
-            self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
+            mutablePacket.downloadTask = DownloadTask(
+                packet: mutablePacket,
+                peerHost: peerHost,
+                hostIdentity: self.hostIdentity,
+                expectedPeerCertificate: self.peerCertificate,
+                eventLoopGroup: self.eventLoopGroup,
+                writeQueue: self.downloadQueue,
+                delegateQueue: .main
+            )
         }
         
-        return true
-    }
-    
-    /// Sends a packet with an attached payload.
-    ///
-    /// Note:
-    /// Payload uploads are initiated and tracked by `Connection`.
-    /// Upload completion is reported via `ConnectionDelegate(connection(_:didSendPacket:uploadedPayload:))`, not via `UploadTaskDelegate` directly.
-    private func sendPayloadPacket(_ packet: DataPacket, whenCompleted: SendingCompletionHandler? = nil) -> Bool {
-        assert(packet.hasPayload())
+        self.handle(packet: mutablePacket)
         
-        if let uploadTask = UploadTask(packet: packet, connection: self, readQueue: self.uploadQueue) {
-            
-#if DEBUG
-            Logger.network.debug("send(:\(String(describing: packet), privacy: .public) whenCompleted:\(String(describing: whenCompleted), privacy: .public)) [\(String(describing: self), privacy: .public)]")
-#else
-            Logger.network.debug("send(type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public) with payload) [\(String(describing: self), privacy: .public)]")
-#endif
-            
-            var packet = packet
-            packet.payloadInfo = uploadTask.payloadInfo
-            uploadTask.delegate = self
-            
-            if let bytes = try? packet.serialize() {
-                let data = Data(bytes)
-                self.socket.write(data, withTimeout: -1, tag: Int(packet.id))
-                let info = DataPacketSendingInfo(dataPacket: packet, uploadTask: uploadTask, completionHandler: whenCompleted)
-                self.packetsSending.append(info)
-            }
-            else {
-#if DEBUG
-                Logger.network.error("Failed to serialize packet: \(packet, privacy: .public).")
-#else
-                Logger.network.error("Failed to serialize packet type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public).")
-#endif
-                self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
-            }
-            return true
+        if self.packetsExpected > 0 {
+            self.packetsExpected -= 1
         }
-        else if !UploadTask.hasUsedPorts() {
-            // We dont have any ports in use, so no will become available and no point of waiting - fail immediately
-#if DEBUG
-            Logger.network.error("Failed to initialize upload task for packet \(packet, privacy: .public).")
-#else
-            Logger.network.error("Failed to initialize upload task for packet type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public).")
-#endif
-            self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
-            return true
-        }
-        else {
-            // Tell caller to wait
-            return false
-        }
-    }
-    
-    private func sendKeepAlivePacket() {
-        let packet = DataPacket(type: "soduto.keepalive", body: [:])
-        _ = send(packet)
-    }
-    
-    private func finalizeSending(packet: DataPacket, completionHandler: SendingCompletionHandler?, packetSent: Bool, payloadSent: Bool) {
-        completionHandler?(packetSent, payloadSent)
-        if packetSent {
-            self.delegate?.connection(self, didSendPacket: packet, uploadedPayload: payloadSent)
-        }
-    }
-    
-    private func readNextPacket() {
-        self.socket.readData(to: Connection.packetsDelimiter, withTimeout: -1, tag: 0)
     }
     
     private func handle(packet: DataPacket) {
@@ -588,32 +710,273 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
         Logger.network.debug("handle(packet type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(self, privacy: .public)]")
 #endif
         
-        // try to handle with registered handlers
-        for handler in self.packetHandlers {
-            let handled = handler.handleDataPacket(packet, onConnection: self)
-            if handled {
-                return
+        // During initialization, pass all packets to delegate (e.g., identity packet)
+        // The delegate (ConnectionProvider) will call applyIdentity() and finish initialization
+        if self.state == .Initializing {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.delegate?.connection(self, didReadPacket: packet)
+            }
+            return
+        }
+        
+        // Handle pairing packets directly
+        if packet.isPairingPacket {
+            self.handlePairingPacket(packet)
+            return
+        }
+        
+        // If not paired (but connection is Open), send unpair notification and don't process further
+        if self.pairingStatus != .Paired {
+            if self.pairingStatus == .Unpaired {
+                _ = self.send(DataPacket.unpairPacket())
+            }
+            return
+        }
+        
+        // Pass to delegate for external handling
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.delegate?.connection(self, didReadPacket: packet)
+        }
+    }
+    
+    /// Handles pairing packets directly without using ConnectionDataPacketHandler.
+    ///
+    /// This replaces DefaultPairingHandler.handleDataPacket for Connection.
+    private func handlePairingPacket(_ packet: DataPacket) {
+        guard let pairingHandler = self.pairingHandler else { return }
+        
+        do {
+            let pairFlag = try packet.getPairFlag()
+            if pairFlag {
+                switch pairingHandler.pairingStatus {
+                case .Unpaired:
+                    // Peer initiates pairing - notify delegate with PairingRequest
+                    pairingHandler.setStatus(.RequestedByPeer)
+                    let request = PairingRequest(connection: self)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        self.pairingDelegate?.connection(self, receivedPairingRequest: request)
+                    }
+                    
+                case .Requested:
+                    // Peer accepted our request - store certificate and set paired
+                    if let deviceId = try? self.identity?.getDeviceId() {
+                        let deviceConfig = self.config.deviceConfig(for: deviceId)
+                        if deviceConfig.certificate == nil {
+                            deviceConfig.certificate = self.peerCertificate
+                        }
+                    }
+                    pairingHandler.setStatus(.Paired)
+                    if pairingHandler.pairingStatus != .Paired {
+                        _ = self.send(DataPacket.unpairPacket())
+                    } else {
+                        self.rememberHwAddress()
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self = self else { return }
+                            self.pairingDelegate?.connection(self, pairingStatusChanged: .Paired)
+                        }
+                    }
+                    
+                case .Paired:
+                    // Already paired - confirm to peer
+                    self.acceptPairing()
+                    
+                case .RequestedByPeer:
+                    // Already waiting for response
+                    break
+                }
+            } else {
+                // Peer declined or unpaired
+                if pairingHandler.pairingStatus == .Requested {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        self.pairingDelegate?.connection(self, pairingFailed: DefaultPairingHandler.Error.declinedByPeer)
+                    }
+                }
+                pairingHandler.setStatus(.Unpaired)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.pairingDelegate?.connection(self, pairingStatusChanged: .Unpaired)
+                }
+            }
+        } catch {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.pairingDelegate?.connection(self, pairingFailed: error)
+            }
+        }
+    }
+    
+    fileprivate func handleTLSEstablished() {
+        self.waitingToSecure = false
+        
+        // Extract and store peer certificate for pairing
+        if let trustHandler = self.trustHandler,
+           let peerCert = trustHandler.peerCertificates.first {
+            self.peerCertificate = SSLCertificateUtils.createSecCertificate(from: peerCert)
+        }
+        
+        // Perform post-handshake certificate validation for paired devices
+        if let trustHandler = self.trustHandler, self.pairingHandler?.pairingStatus == .Paired {
+            if let deviceId = try? self.identity?.getDeviceId(),
+               let savedCertificate = self.config.deviceConfig(for: deviceId).certificate {
+                let validator = PostHandshakeValidator(expectedCertificate: savedCertificate)
+                if !validator.validate(peerCertificates: trustHandler.peerCertificates) {
+                    Logger.network.error("Post-handshake certificate validation failed - closing connection")
+                    self.close()
+                    return
+                }
             }
         }
         
-        // if not handled - pass to delegate
-        self.delegate?.connection(self, didReadPacket: packet)
+        if self.shouldFinishInitializationWhenSecured {
+            self.state = .Open
+        }
     }
     
-    private func shouldTrustPeer(_ trust: SecTrust) -> Bool {
-        assert(self.identity != nil, "Identity expected to be known before securing connection and evaluating trust")
+    fileprivate func handleChannelInactive() {
+        self.state = .Closed
+        _ = self.discardUnsentPackets(silently: true)
+    }
+    
+    fileprivate func handleWriteComplete(tag: Int) {
+        var packetInfoToFinalize: DataPacketSendingInfo?
+        var payloadSentValue: Bool?
         
-        guard let certificateChain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
-              let peerCertificate = certificateChain.first else { return false }
-        self.peerCertificate = peerCertificate
-        
-        if self.pairingHandler!.pairingStatus == .Paired {
-            return self.shouldTrustPeerCertificate(peerCertificate)
+        self.packetsSendingLock.lock()
+        if let index = self.packetsSending.firstIndex(where: { Int($0.dataPacket.id) == tag }) {
+            self.packetsSending[index].packetSent = true
+            
+            if let payloadSent = self.packetsSending[index].payloadSent {
+                packetInfoToFinalize = self.packetsSending.remove(at: index)
+                payloadSentValue = payloadSent
+            }
         }
-        else {
-            return true
+        self.packetsSendingLock.unlock()
+        
+        if let packetInfo = packetInfoToFinalize, let payloadSent = payloadSentValue {
+            self.finalizeSending(packet: packetInfo.dataPacket, completionHandler: packetInfo.completionHandler, packetSent: true, payloadSent: payloadSent)
         }
     }
+    
+    // MARK: Private - Sending
+    
+    private func sendSimplePacket(_ packet: DataPacket, whenCompleted: SendingCompletionHandler? = nil) -> Bool {
+        guard let channel = self.channel else {
+            self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
+            return true
+        }
+        
+#if DEBUG
+        Logger.network.debug("send(:\(String(describing: packet), privacy: .public) whenCompleted:\(String(describing: whenCompleted), privacy: .public)) [\(String(describing: self), privacy: .public)]")
+#else
+        Logger.network.debug("send(type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(String(describing: self), privacy: .public)]")
+#endif
+        
+        guard let bytes = try? packet.serialize() else {
+            Logger.network.error("Failed to serialize packet type: \(packet.type, privacy: .public)")
+            self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
+            return true
+        }
+        
+        let data = Data(bytes)
+        let info = DataPacketSendingInfo(dataPacket: packet, uploadTask: nil, completionHandler: whenCompleted)
+        self.packetsSendingLock.lock()
+        self.packetsSending.append(info)
+        self.packetsSendingLock.unlock()
+        
+        // Write Data directly so RawDataEncoder can process it
+        channel.writeAndFlush(data).whenComplete { [weak self] result in
+            switch result {
+            case .success:
+                self?.handleWriteComplete(tag: Int(packet.id))
+            case .failure(let error):
+                Logger.network.error("Failed to write packet: \(error, privacy: .public)")
+            }
+        }
+        
+        return true
+    }
+    
+    private func sendPayloadPacket(_ packet: DataPacket, whenCompleted: SendingCompletionHandler? = nil) -> Bool {
+        guard self.channel != nil else {
+            self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
+            return true
+        }
+        
+        // Get the peer certificate for verification during payload transfer
+        let peerCertificate: SecCertificate?
+        if let deviceId = try? self.identity?.getDeviceId() {
+            peerCertificate = self.config.deviceConfig(for: deviceId).certificate
+        } else {
+            peerCertificate = nil
+        }
+        
+        // Create upload task
+        guard let uploadTask = UploadTask(
+            packet: packet,
+            hostIdentity: self.hostIdentity,
+            expectedPeerCertificate: peerCertificate,
+            eventLoopGroup: self.eventLoopGroup,
+            delegateQueue: .main
+        ) else {
+            Logger.network.error("Failed to create upload task for packet type: \(packet.type, privacy: .public)")
+            self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
+            return true
+        }
+        
+        uploadTask.delegate = self
+        
+        // Add payload info to the packet
+        var payloadPacket = packet
+        payloadPacket.payloadInfo = uploadTask.payloadInfo
+        
+        // Serialize and send the packet
+        guard let bytes = try? payloadPacket.serialize() else {
+            Logger.network.error("Failed to serialize payload packet type: \(packet.type, privacy: .public)")
+            uploadTask.close()
+            self.finalizeSending(packet: packet, completionHandler: whenCompleted, packetSent: false, payloadSent: false)
+            return true
+        }
+        
+        let data = Data(bytes)
+        let info = DataPacketSendingInfo(dataPacket: payloadPacket, uploadTask: uploadTask, completionHandler: whenCompleted)
+        self.packetsSendingLock.lock()
+        self.packetsSending.append(info)
+        self.packetsSendingLock.unlock()
+        
+        Logger.network.debug("Sending payload packet type: \(packet.type, privacy: .public) with payload on port \(uploadTask.payloadInfo["port"] as? UInt16 ?? 0, privacy: .public)")
+        
+        self.channel!.writeAndFlush(data).whenComplete { [weak self] result in
+            switch result {
+            case .success:
+                self?.handleWriteComplete(tag: Int(payloadPacket.id))
+            case .failure(let error):
+                Logger.network.error("Failed to write payload packet: \(error, privacy: .public)")
+                uploadTask.close()
+            }
+        }
+        
+        return true
+    }
+    
+    private func finalizeSending(packet: DataPacket, completionHandler: SendingCompletionHandler?, packetSent: Bool, payloadSent: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            completionHandler?(packetSent, payloadSent)
+            if packetSent, let self = self {
+                self.delegate?.connection(self, didSendPacket: packet, uploadedPayload: payloadSent)
+            }
+        }
+    }
+    
+    private func sendKeepAlivePacket() {
+        let packet = DataPacket(type: "soduto.keepalive", body: [:])
+        _ = send(packet)
+    }
+    
+    // MARK: Private - Utilities
     
     private func rememberHwAddress() {
         guard self.pairingStatus == .Paired else { return }
@@ -624,9 +987,11 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     }
     
     private func observeNotifications() {
-        NotificationCenter.default.addObserver(forName: UploadTask.portReleaseNotification, object: nil, queue: nil) { [weak self] notification in
-            if let strongSelf = self {
-                strongSelf.delegate?.connectionCapacityChanged(strongSelf)
+        NotificationCenter.default.addObserver(forName: PayloadPortRegistry.portReleaseNotification, object: nil, queue: nil) { [weak self] _ in
+            if let self = self {
+                DispatchQueue.main.async {
+                    self.delegate?.connectionCapacityChanged(self)
+                }
             }
         }
         NotificationCenter.default.addObserver(forName: ConnectionProvider.networkBecameReachableNotification, object: nil, queue: nil) { [weak self] _ in
@@ -636,33 +1001,68 @@ public class Connection: NSObject, GCDAsyncSocketDelegate, PairingHandlerDelegat
     
     private func discardUnsentPackets(silently: Bool) -> [(dataPacket: DataPacket, completionHandler: SendingCompletionHandler?)] {
         var results: [(dataPacket: DataPacket, completionHandler: SendingCompletionHandler?)] = []
+        var infosToDiscard: [DataPacketSendingInfo] = []
+        
+        self.packetsSendingLock.lock()
         for info in self.packetsSending {
             guard info.packetSent == nil && info.uploadTask?.isStarted != true else { continue }
+            infosToDiscard.append(info)
+            results.append((dataPacket: info.dataPacket, completionHandler: info.completionHandler))
+        }
+        self.packetsSending = self.packetsSending.filter { $0.packetSent != nil || $0.uploadTask?.isStarted == true }
+        self.packetsSendingLock.unlock()
+        
+        // Process outside the lock
+        for info in infosToDiscard {
             info.uploadTask?.close()
             if !silently {
                 self.finalizeSending(packet: info.dataPacket, completionHandler: info.completionHandler, packetSent: false, payloadSent: false)
             }
-            results.append((dataPacket: info.dataPacket, completionHandler: info.completionHandler))
-            
-            let taskString: String = info.uploadTask != nil ? "\(info.uploadTask!)" : "nil"
-            if silently {
-                Logger.network.debug("Reclaiming data packet <\(info.dataPacket.id, privacy: .public)> with upload task <\(taskString, privacy: .public)>. [\(self, privacy: .public)]")
-            }
-            else {
-                Logger.network.debug("Discarding data packet <\(info.dataPacket.id, privacy: .public)> with upload task <\(taskString, privacy: .public)>. [\(self, privacy: .public)]")
-            }
         }
-        self.packetsSending = self.packetsSending.filter { $0.packetSent != nil || $0.uploadTask?.isStarted == true }
+        
         return results
     }
     
     private class func createDispatchQueue(withLabel label: String) -> DispatchQueue {
-        if #available(OSX 10.12, *) {
-            return DispatchQueue(label: label, qos: DispatchQoS.background, autoreleaseFrequency: .workItem)
-        }
-        else {
-            return DispatchQueue(label: label, qos: DispatchQoS.background)
-        }
+        return DispatchQueue(label: label, qos: .background, autoreleaseFrequency: .workItem)
+    }
+}
+
+// MARK: - Connection Handler
+
+/// Channel handler for Connection that receives decoded packets.
+private final class ConnectionHandler: ChannelInboundHandler {
+    typealias InboundIn = Data
+    
+    private weak var connection: Connection?
+    
+    init(connection: Connection) {
+        self.connection = connection
     }
     
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let packetData = unwrapInboundIn(data)
+        connection?.handleReceivedData(packetData)
+    }
+    
+    func channelInactive(context: ChannelHandlerContext) {
+        connection?.handleChannelInactive()
+    }
+    
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if let tlsEvent = event as? TLSUserEvent {
+            switch tlsEvent {
+            case .handshakeCompleted:
+                connection?.handleTLSEstablished()
+            case .shutdownCompleted:
+                break
+            }
+        }
+        context.fireUserInboundEventTriggered(event)
+    }
+    
+    func errorCaught(context: ChannelHandlerContext, error: Error) {
+        Logger.network.error("Connection error: \(error, privacy: .public)")
+        context.close(promise: nil)
+    }
 }

@@ -118,7 +118,7 @@ For the complete list of KDE Connect features and documentation, visit the [offi
 ---
 ## Building
 
-* Clone this repo:
+- Clone this repo:
 
   ```bash
   git clone git@github.com:sannidhyaroy/Soduto.git Soduto && cd Soduto
@@ -130,37 +130,13 @@ For the complete list of KDE Connect features and documentation, visit the [offi
     git clone https://github.com/sannidhyaroy/Soduto.git Soduto && cd Soduto
     ```
 
-  </details> 
+  </details>
 
-* Install [Carthage](https://github.com/Carthage/Carthage#installing-carthage):
-
-  ```bash
-  brew install carthage
-  ```
-    
-* Fetch and build frameworks using Carthage:
-    
-  ```bash
-  XCODE_XCCONFIG_FILE="$(pwd)/carthage.xcconfig" carthage update --platform macOS --use-xcframeworks
-  ```
-
->  [!NOTE]
->  If there are errors similar to the following:
->  ```
->  *** Skipped downloading CocoaAsyncSocket binary due to the error:
->      "Bad credentials"
->  ```
->
->  This is likely due to GitHub Rate Limits. You can create a [GitHub Token](https://github.com/settings/tokens) and export it as an environment variable (format: `ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`):
->  ```bash
->  export GITHUB_ACCESS_TOKEN=<INSERT YOUR TOKEN HERE>
->  ```
-
-* Open project `Soduto.xcodeproj` with Xcode (select the Soduto Application in Xcode Project Navigator).
-  - Swift Package dependencies (Sparkle, Citadel, swift-certificates, etc.) will resolve automatically on first build.
-* Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `Signing` section, ensure your appropriate `Team` is selected.
-* Make sure you have the same `App Group key` for `Soduto Share` and also verify that the same `Team` is selected for each target.
-* Build target `Soduto`
+- Open project `Soduto.xcodeproj` with Xcode (select the Soduto Project menu in Xcode Project Navigator).
+  - Swift Package dependencies (`swift-certificates`, `SwiftNIO`, `NIOSSL`, `NIOSSH`, `Citadel`, `Sparkle`, etc.) will resolve automatically on first build.
+- Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `Signing` section, ensure your appropriate `Team` is selected.
+- Make sure you have the same `App Group key` for `Soduto Share` and also verify that the same `Team` is selected for each target.
+- Build target `Soduto`
 
 ---
 ## Debugging
@@ -368,14 +344,27 @@ If `Soduto Share` doesn't appear in the share menu, only when multiple files are
      ```
   3. Restart your Mac, then open Soduto. The extension should re-register automatically with the correct rules.
 
-### 2. SSL connection errors after re-pairing (error -9829)
+### 2. SSL certificate errors after re-pairing
 
-If you see errors like this in Console.app after re-pairing your device:
+If you see SSL/TLS certificate errors in Console.app after re-pairing your device, the remote device is rejecting Soduto's certificate.
+
+```
+Connection error: NIOSSL.NIOSSLError.handshakeFailed(NIOSSL.BoringSSLError.sslError([Error: 268436502 error:10000416:SSL routines:OPENSSL_internal:SSLV3_ALERT_CERTIFICATE_UNKNOWN at /Users/sannidhyaroy/Library/Developer/Xcode/DerivedData/Soduto-djazogzlahmuayfoqwqoflmgulsi/SourcePackages/checkouts/swift-nio-ssl/Sources/CNIOBoringSSL/ssl/tls_record.cc:484]))
+```
+
+This `SSLV3_ALERT_CERTIFICATE_UNKNOWN` error means the remote device is rejecting Soduto's certificate as "unknown"
+
+<details><summary>Click here for Legacy versions (CocoaAsyncSocket)</summary>
+<p>
+
 ```
 socketDidDisconnect(<<GCDAsyncSocket: 0x...>> withError:<Error Domain=kCFStreamErrorDomainSSL Code=-9829 "(null)" UserInfo={NSLocalizedRecoverySuggestion=Error code definition can be found in Apple's SecureTransport.h}>)
 ```
 
-This is error code -9829 (`errSSLPeerCertUnknown`), which means the remote device is rejecting Soduto's certificate as "unknown."
+This is error code -9829 (`errSSLPeerCertUnknown`), which means the remote device is rejecting Soduto's certificate as "unknown"
+
+</p>
+</details> 
 
 **When does this happen?**
 
@@ -387,6 +376,8 @@ This occurs when Soduto's keychain entries are cleared (manually or by reinstall
 - Secondary connections fail (file transfers, notification icons, etc.)
 - The paired device may disconnect and fail to reconnect after restarting Soduto
 
+**Note:** With the current SwiftNIO implementation, previously paired devices usually reconnect successfully despite this error appearing in logs. However, devices that were paired before the certificate was regenerated and never re-paired will not connect.
+
 **Why does this happen?**
 
 Soduto and KDE Connect use SSL/TLS with self-signed certificates to secure communications. Each device stores the other's certificate during pairing. KDE Connect on Android caches certificate data aggressively, and this cache persists even after unpairing. When Soduto presents a new certificate (same device ID, different key), KDE Connect's cached data causes validation to fail.
@@ -397,9 +388,11 @@ Soduto and KDE Connect use SSL/TLS with self-signed certificates to secure commu
 2. On Android: Go to `Settings → Apps → KDE Connect → Storage → Clear Cache`
    - Note: Clear **cache** only, not app data (clearing app data will remove all your KDE Connect settings)
 3. On Mac (optional): Remove Soduto's preferences to get a fresh device ID:
-   ```bash
-   defaults delete com.soduto.Soduto
-   ```
+> [!CAUTION]
+>  Running the following command is optional and dangerous as it will delete your saved Soduto Preferences. Only run when you absolutely want a fresh device ID and are fine with reconfiguring lost preferences
+> ```bash
+> defaults delete com.soduto.Soduto
+> ```
 4. Re-pair the devices
 
 After clearing the cache, the new certificate will be accepted and cached correctly.

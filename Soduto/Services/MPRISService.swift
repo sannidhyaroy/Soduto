@@ -65,6 +65,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
         let device: Device
     }
     
+    
     /// Owns a temporary download stream and guarantees closure
     private final class TempDownloadStream {
         let stream: OutputStream
@@ -119,10 +120,9 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     // MARK: Service methods
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        
         guard dataPacket.isMprisPacket else { return false }
         
-        Logger.services.debug("MPRIS::handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)")
+        Logger.services.debug("MPRIS::handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
         
         do {
             if let playerList = try dataPacket.getPlayerList() {
@@ -131,9 +131,10 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
                 // Check if this is an album art transfer packet
                 if let isTransferringAlbumArt = try dataPacket.getTransferringAlbumArt(), isTransferringAlbumArt,
                    let albumArtUrl = try dataPacket.getAlbumArtUrl(),
-                   dataPacket.hasPayload(),
-                   let downloadTask = dataPacket.downloadTask {
-                    handleAlbumArtTransfer(player: player, albumArtUrl: albumArtUrl, downloadTask: downloadTask, from: device)
+                   dataPacket.hasPayload() {
+                    if let downloadTask = dataPacket.downloadTask {
+                        handleAlbumArtTransfer(player: player, albumArtUrl: albumArtUrl, downloadTask: downloadTask, from: device)
+                    }
                 } else {
                     // Regular player update
                     handlePlayerUpdate(player: player, packet: dataPacket, from: device)
@@ -197,7 +198,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     // MARK: DownloadTaskDelegate
     
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("MPRIS::downloadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
+        Logger.services.debug("MPRIS::downloadTask(<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         guard let index = self.albumArtDownloadInfos.firstIndex(where: { $0.task === task }) else {
             Logger.services.error("MPRIS::Download task not found in tracking list")
@@ -263,6 +264,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
             }
         }
     }
+    
     
     // MARK: Private methods - Packet Handlers
     

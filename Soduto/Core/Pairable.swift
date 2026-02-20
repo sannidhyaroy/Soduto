@@ -16,22 +16,19 @@ public enum PairingStatus: Int {
 }
 
 public struct PairingRequest {
-    
-    let connection: Connection
-    
+    public let connection: Connection
 }
 
-public protocol PairableDelegate: AnyObject {
-    
-    func pairable(_ pairable:Pairable, receivedRequest request:PairingRequest)
-    func pairable(_ pairable:Pairable, failedWithError error:Error)
-    func pairable(_ pairable:Pairable, statusChanged status:PairingStatus)
-    
+/// Delegate protocol for Connection pairing events.
+public protocol ConnectionPairingDelegate: AnyObject {
+    func connection(_ connection: Connection, receivedPairingRequest request: PairingRequest)
+    func connection(_ connection: Connection, pairingFailed error: Error)
+    func connection(_ connection: Connection, pairingStatusChanged status: PairingStatus)
 }
 
 public protocol Pairable {
     
-    var pairingDelegate: PairableDelegate? { get set }
+    var pairingDelegate: ConnectionPairingDelegate? { get set }
     var pairingStatus: PairingStatus { get }
     
     func requestPairing()

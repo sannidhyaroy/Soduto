@@ -73,14 +73,12 @@ public class BatteryService: Service {
         guard dataPacket.isBatteryPacket || dataPacket.isBatteryRequestPacket else { return false }
         
         do {
-            if dataPacket.isBatteryRequestPacket{
+            if dataPacket.isBatteryRequestPacket {
                 try handle(requestPacket: dataPacket, fromDevice: device)
-            }
-            else {
+            } else {
                 try handle(statusPacket: dataPacket, fromDevice: device)
             }
-        }
-        catch {
+        } catch {
             Logger.services.error("Error handling battery packet: \(error, privacy: .public)")
         }
         

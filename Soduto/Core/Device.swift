@@ -41,13 +41,14 @@ public protocol DeviceDelegate: AnyObject {
 
 /// Functionality for handling incoming data packets from devices.
 public protocol DeviceDataPacketHandler: AnyObject {
-    func handleDataPacket(_ dataPacket:DataPacket, fromDevice device:Device, onConnection connection:Connection) -> Bool
+    /// Handle a packet received on a Connection.
+    func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool
 }
 
 
 /// Device class represents a remote device. Multiple connections to the device may be used,
 /// but only one of the same kind (LAN, Bluetooth, etc.)
-public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStringConvertible {
+public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, CustomStringConvertible {
     
     // MARK: Types
     
@@ -73,7 +74,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     
     public var peerCertificate: SecCertificate? {
         if let certificate = self.connections.first?.peerCertificate { return certificate }
-        else { return self.config.certificate }
+        return self.config.certificate
     }
     public var hostCertificate: SecCertificate? {
         return self.config.hostCertificate?.certificate
@@ -88,7 +89,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     }
     
     private var connections: [Connection] = [] // Active connections
-    private var lingeringConnections: [Connection] = [] // Dismissed connections, waiting to finish its work and completely close
+    private var lingeringConnections: [Connection] = [] // Dismissed connections, waiting to finish work
     private var packetHandlers: [DeviceDataPacketHandler] = []
     private var pendingPackets: [PendingDataPacket] = []
     
@@ -119,7 +120,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         
         self.addConnection(connection)
         
-        // update config with lates device name and type
+        // update config with latest device name and type
         config.name = self.name
         config.type = self.type
     }
@@ -156,7 +157,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         self.connections.append(connection)
         
         // remove connection of the same type if present
-        // do it after new connection added to avoid unnecessary device state switches (especially to .Unavailable)
+        // do it after new connection added to avoid unnecessary device state switches
         let index = self.connections.firstIndex { c in
             guard c !== connection else { return false }
             return Swift.type(of: c) == Swift.type(of: connection)
@@ -209,8 +210,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
                 let pendingPacket = PendingDataPacket(packet: packet, completionHandler: whenCompleted)
                 self.pendingPackets.insert(pendingPacket, at: 0)
             }
-        }
-        else {
+        } else {
             whenCompleted?(false, false)
         }
     }
@@ -230,20 +230,18 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         Logger.device.debug("connection(<\(String(describing: connection), privacy: .public)> didSwitchToState:<\(String(describing: state), privacy: .public)>)")
         switch state {
         case .Closed:
-            // Remove closed connection from containing list and reclaim its unsent packets
-            // to be sent with another connection.
-            // NOTE: Reclaiming unsent packets handle only those packets, that are unsent itself,
-            // not the ones that have uploading in progress. However it is ok to remove connections with
-            // uploads in progress as upload tasks and connections keep references to each other,
-            // so connection will be alive until all uploads are finished and all completion handlers are executed
             if let index = self.connections.firstIndex(of: connection) {
                 let connection = self.connections.remove(at: index)
                 self.reclaimUnsentPackets(from: connection)
                 self.updateReachabilityStatus()
             }
             else if let index = self.lingeringConnections.firstIndex(of: connection) {
-                let connection = self.lingeringConnections.remove(at: index)
-                self.reclaimUnsentPackets(from: connection)
+                if connection.hasActiveUploadTasks {
+                    Logger.device.debug("Device: keeping closed lingering connection for active uploads")
+                } else {
+                    let connection = self.lingeringConnections.remove(at: index)
+                    self.reclaimUnsentPackets(from: connection)
+                }
             }
             else {
                 assertionFailure("Connection not found in device connections list")
@@ -260,6 +258,12 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
                 delegate.connection(connection, didSendPacket: packet, uploadedPayload: uploadedPayload)
             }
         }
+        
+        // If this was a lingering connection and all uploads are now done, clean it up
+        if let index = self.lingeringConnections.firstIndex(of: connection), !connection.hasActiveUploadTasks {
+            Logger.device.debug("Device: lingering connection uploads complete, removing")
+            self.lingeringConnections.remove(at: index)
+        }
     }
     
     public func connection(_ connection: Connection, didReadPacket packet: DataPacket) {
@@ -271,17 +275,19 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     }
     
     
-    // MARK: PairableDelegate
+    // MARK: ConnectionPairingDelegate
     
-    public func pairable(_ pairable:Pairable, receivedRequest request:PairingRequest) {
+    public func connection(_ connection: Connection, receivedPairingRequest request: PairingRequest) {
+        Logger.device.debug("Connection received pairing request from \(connection.peerAddress.description, privacy: .public)")
+        self.updatePairingStatus()
         self.delegate?.device(self, didReceivePairingRequest: request)
     }
     
-    public func pairable(_ pairable:Pairable, failedWithError error:Error) {
-        Logger.device.debug("pairable(<\(String(describing: pairable), privacy: .public)> failedWithError:<\(error, privacy: .public)>)")
+    public func connection(_ connection: Connection, pairingFailed error: Error) {
+        Logger.device.debug("Connection pairing failed: \(error, privacy: .public)")
     }
     
-    public func pairable(_ pairable:Pairable, statusChanged status:PairingStatus) {
+    public func connection(_ connection: Connection, pairingStatusChanged status: PairingStatus) {
         self.updatePairingStatus()
     }
     
@@ -289,7 +295,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     // MARK: Pairable
     
     /// Not used - present only to comply Pairable protocol
-    public var pairingDelegate: PairableDelegate? = nil
+    public var pairingDelegate: ConnectionPairingDelegate? = nil
     
     public var pairingStatus: PairingStatus {
         didSet {
@@ -303,17 +309,23 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
         if let connection = self.connectionForPairing() {
             if connection.pairingStatus == .RequestedByPeer {
                 connection.acceptPairing()
-            }
-            else {
+            } else {
                 connection.requestPairing()
             }
         }
     }
     
     public func acceptPairing() {
-        if let connection = self.connectionForPairing(), connection.pairingStatus == .RequestedByPeer {
-            connection.acceptPairing()
+        guard let connection = self.connectionForPairing() else {
+            Logger.device.error("acceptPairing: no connection found for pairing")
+            return
         }
+        guard connection.pairingStatus == .RequestedByPeer else {
+            Logger.device.error("acceptPairing: connection status is \(String(describing: connection.pairingStatus), privacy: .public), expected RequestedByPeer")
+            return
+        }
+        Logger.device.debug("acceptPairing: accepting pairing on connection")
+        connection.acceptPairing()
     }
     
     public func declinePairing() {
@@ -376,7 +388,9 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     
     private func updatePairingStatus() {
         var status: PairingStatus = .Unpaired
-        if self.connections.count > 0 {
+        let hasConnections = self.connections.count > 0
+        
+        if hasConnections {
             for connection in self.connections {
                 if connection.pairingStatus == .Paired {
                     status = connection.pairingStatus
@@ -387,24 +401,23 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
                     status = connection.pairingStatus
                 }
             }
-        }
-        else {
+        } else {
             status = self.config.isPaired ? .Paired : .Unpaired
         }
         
         self.updatePairingStatus(globalStatus: status)
     }
     
-    /// Choose a connection most appropriate for pairing. Return `nil` if pairing seems inapprorpiate.
+    /// Choose a connection most appropriate for pairing. Return `nil` if pairing seems inappropriate.
     private func connectionForPairing() -> Connection? {
         var bestConnection: Connection? = nil
+        
         for connection in self.connections {
             switch connection.pairingStatus {
             case .Unpaired:
                 if bestConnection == nil {
                     bestConnection = connection
                 }
-                break
             case .RequestedByPeer:
                 return connection
             case .Requested:
@@ -413,6 +426,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
                 return nil
             }
         }
+        
         return bestConnection
     }
     
@@ -441,8 +455,11 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     /// Try sending packets from pendingPackets list, send as many as possible until no connection accepts any.
     private func sendPendingPackets() {
         while let pendingPacket = self.pendingPackets.popLast() {
-            let connection = self.connectionForSending()
-            let accepted = connection?.send(pendingPacket.packet, whenCompleted: pendingPacket.completionHandler) ?? false
+            guard let connection = self.connectionForSending() else {
+                self.pendingPackets.append(pendingPacket)
+                break
+            }
+            let accepted = connection.send(pendingPacket.packet, whenCompleted: pendingPacket.completionHandler)
             if !accepted {
                 self.pendingPackets.append(pendingPacket)
                 break

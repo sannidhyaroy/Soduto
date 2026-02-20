@@ -45,10 +45,10 @@ Package.resolved
 # Carthage
 #
 # Add this line if you want to avoid checking in source code from Carthage dependencies.
-Carthage/Checkouts
+# Carthage/Checkouts
 
-Carthage/Build/
-Cartfile.resolved
+# Carthage/Build/
+# Cartfile.resolved
 
 # fastlane
 #
@@ -62,10 +62,8 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
+# macOS
+.DS_Store
+
 # Environment Files
 *.env
-
-# Custom Ignores
-Libraries/*
-Builds/*
-.DS_Store

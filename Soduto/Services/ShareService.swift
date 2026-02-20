@@ -62,7 +62,9 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         let task: DownloadTask
         let fileName: String
         let url: URL
+        let deviceName: String
     }
+    
     
     /// Owns a temporary download stream and guarantees closure
     private final class TempDownloadStream {
@@ -116,11 +118,10 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     // MARK: Service methods
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        
         guard dataPacket.isSharePacket else { return false }
         
 #if DEBUG
-        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)> onConnection:<\(connection, privacy: .public)>)")
+        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
 #else
         Logger.services.debug("handleDataPacket(type: \(dataPacket.type, privacy: .public), id: \(dataPacket.id, privacy: .public)) from device: \(device.id, privacy: .public)")
 #endif
@@ -255,7 +256,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     // MARK: DownloadTaskDelegate
     
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
-        Logger.services.debug("downloadTask(<\(task, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
+        Logger.services.debug("downloadTask(<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
         guard let index = self.downloadInfos.firstIndex(where: { $0.task === task }) else { return }
         let info = self.downloadInfos.remove(at: index)
@@ -263,14 +264,14 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         do {
             if success {
                 let finalUrl = try self.renamePartFile(url: info.url, to: info.fileName)
-                self.showDownloadFinishNotification(fileName: info.fileName, downloadTask: task, succeeded: success, finalUrl: finalUrl)
+                self.showDownloadFinishNotification(fileName: info.fileName, deviceName: info.deviceName, downloadTask: task, succeeded: success, finalUrl: finalUrl)
             }
             else {
-                self.showDownloadFinishNotification(fileName: info.fileName, downloadTask: task, succeeded: success)
+                self.showDownloadFinishNotification(fileName: info.fileName, deviceName: info.deviceName, downloadTask: task, succeeded: success)
             }
         }
         catch {
-            self.showDownloadFinishNotification(fileName: info.fileName, downloadTask: task, succeeded: false)
+            self.showDownloadFinishNotification(fileName: info.fileName, deviceName: info.deviceName, downloadTask: task, succeeded: false)
         }
     }
     
@@ -453,36 +454,36 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         //            panel.begin { result in
         //                guard result == NSFileHandlingPanelOKButton else { return }
         //                guard let url = panel.url else { return }
-        //                self.downloadFile(downloadTask: task, fileName: url.lastPathComponent, destUrl: url)
+        //                self.downloadFile(downloadTask: task, fileName: url.lastPathComponent, destUrl: url, deviceName: device.name)
         //            }
         //        }
         
         do {
             if let fileName = fileName {
                 let url = try URL(forDownloadedFile: fileName)
-                self.downloadFile(downloadTask: task, fileName: fileName, destUrl: url)
-                self.showDownloadStartNotification(fileName: fileName, downloadTask: task)
+                self.downloadFile(downloadTask: task, fileName: fileName, destUrl: url, deviceName: device.name)
+                self.showDownloadStartNotification(fileName: fileName, deviceName: device.name, downloadTask: task)
             }
             else {
                 //                askFileLocation()
-                self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
+                self.showDownloadFinishNotification(fileName: fileName, deviceName: device.name, downloadTask: task, succeeded: false)
             }
         }
         catch {
             // Failed to retrieve appropriate download destination - ask user to select
             //            askFileLocation()
-            self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
+            self.showDownloadFinishNotification(fileName: fileName, deviceName: device.name, downloadTask: task, succeeded: false)
         }
     }
     
-    private func downloadFile(downloadTask task: DownloadTask, fileName: String, destUrl: URL) {
+    private func downloadFile(downloadTask task: DownloadTask, fileName: String, destUrl: URL, deviceName: String) {
         if let (tempStream, partUrl) = self.streamForTempDownload(finalUrl: destUrl) {
-            self.downloadInfos.append(DownloadInfo(task: task, fileName: fileName, url: partUrl))
+            self.downloadInfos.append(DownloadInfo(task: task, fileName: fileName, url: partUrl, deviceName: deviceName))
             task.delegate = self
             task.start(withStream: tempStream.transfer())
         }
         else {
-            self.showDownloadFinishNotification(fileName: fileName, downloadTask: task, succeeded: false)
+            self.showDownloadFinishNotification(fileName: fileName, deviceName: deviceName, downloadTask: task, succeeded: false)
         }
     }
     
@@ -573,8 +574,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         }
     }
     
-    private func showDownloadStartNotification(fileName: String?, downloadTask task: DownloadTask) {
-        let deviceName = (try? task.connection.identity?.getDeviceName()) ?? "Unknown Device"
+    private func showDownloadStartNotification(fileName: String?, deviceName: String, downloadTask task: DownloadTask) {
         let title = deviceName
         let subtitle = "Inbound Transfer in Progress"
         let body = "Receiving File from \(deviceName)"
@@ -643,8 +643,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         }
     }
     
-    private func showDownloadFinishNotification(fileName: String?, downloadTask task: DownloadTask, succeeded: Bool, finalUrl: URL? = nil) {
-        let deviceName = (try? task.connection.identity?.getDeviceName()) ?? "Unknown Device"
+    private func showDownloadFinishNotification(fileName: String?, deviceName: String, downloadTask task: DownloadTask, succeeded: Bool, finalUrl: URL? = nil) {
         let title = deviceName
         let subtitle = succeeded ? "Inbound Transfer Successful" : "Inbound Transfer Failed"
         let body: String

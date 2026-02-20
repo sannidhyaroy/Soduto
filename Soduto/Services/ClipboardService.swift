@@ -41,13 +41,12 @@ public class ClipboardService: Service {
     public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.clipboardPacketType ])
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        
         guard dataPacket.isClipboardPacket else { return false }
         guard let contents = try? dataPacket.getContent() else { return true }
         
         self.lastExternalChangeDevice = device
         self.lastExternalChangeCount = NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([ contents as NSString ])
+        NSPasteboard.general.writeObjects([contents as NSString])
         
         return true
     }

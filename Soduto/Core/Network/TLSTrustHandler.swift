@@ -1,0 +1,129 @@
+//
+//  TLSTrustHandler.swift
+//  Soduto
+//
+//  Created by Sannidhya Roy on 15/02/26.
+//  Copyright © 2026 Soduto. All rights reserved.
+//
+
+import Foundation
+import NIOCore
+import NIOSSL
+import os
+
+/// A trust handler that accepts all certificates during TLS handshake.
+///
+/// KDE Connect's certificate pinning is handled differently with SwiftNIO:
+/// 1. During TLS handshake: Accept all certificates (like unpaired mode)
+/// 2. After handshake: Extract peer certificate from SSL session
+/// 3. Validate against stored certificate using existing `CertificateUtils`
+///
+/// This approach is necessary because:
+/// - NIOSSLCertificate doesn't expose public APIs to extract DER bytes
+/// - The internal BoringSSL APIs are version-dependent
+/// - Post-handshake validation provides equivalent security
+///
+/// The security model remains the same:
+/// - TLS encryption is established regardless
+/// - For paired devices, connection is closed if certificate doesn't match
+/// - This happens before any sensitive data is exchanged
+final class TrustHandler {
+    
+    /// The peer certificates received during handshake.
+    private(set) var peerCertificates: [NIOSSLCertificate] = []
+    
+    /// Whether this is for a paired device (affects logging only, validation is post-handshake).
+    private let isPaired: Bool
+    
+    init(isPaired: Bool = false) {
+        self.isPaired = isPaired
+    }
+    
+    /// The verification callback that accepts all certificates.
+    ///
+    /// Certificates are stored for reference but validation is deferred.
+    var verificationCallback: NIOSSLCustomVerificationCallback {
+        return { [weak self] certificates, promise in
+            // Store certificates
+            self?.peerCertificates = certificates
+            
+            // Accept all - validation happens post-handshake
+            promise.succeed(.certificateVerified)
+        }
+    }
+}
+
+// MARK: - Certificate Conversion Utilities
+
+/// Utilities for working with NIOSSLCertificate and SecCertificate.
+enum SSLCertificateUtils {
+    
+    /// Creates an NIOSSLCertificate from a SecCertificate.
+    ///
+    /// This direction (SecCertificate → NIOSSLCertificate) is straightforward
+    /// because we can get DER bytes from SecCertificate.
+    static func createSSLCertificate(from secCertificate: SecCertificate) throws -> NIOSSLCertificate {
+        let derData = SecCertificateCopyData(secCertificate) as Data
+        return try NIOSSLCertificate(bytes: Array(derData), format: .der)
+    }
+    
+    /// Creates a SecCertificate from an NIOSSLCertificate.
+    ///
+    /// Uses `toDERBytes()` available in swift-nio-ssl 2.23.0+ to extract DER bytes,
+    /// then creates a SecCertificate from those bytes.
+    static func createSecCertificate(from sslCertificate: NIOSSLCertificate) -> SecCertificate? {
+        do {
+            let derBytes = try sslCertificate.toDERBytes()
+            let derData = Data(derBytes) as CFData
+            return SecCertificateCreateWithData(nil, derData)
+        } catch {
+            Logger.network.error("Failed to convert NIOSSLCertificate to SecCertificate: \(error, privacy: .public)")
+            return nil
+        }
+    }
+    
+    /// Compares an NIOSSLCertificate with a SecCertificate.
+    ///
+    /// Since we can easily convert SecCertificate to NIOSSLCertificate,
+    /// we convert the stored certificate and use NIOSSLCertificate's Equatable.
+    static func certificatesMatch(_ sslCert: NIOSSLCertificate, _ secCert: SecCertificate) -> Bool {
+        do {
+            let convertedCert = try createSSLCertificate(from: secCert)
+            return sslCert == convertedCert
+        } catch {
+            Logger.network.error("Failed to convert SecCertificate for comparison: \(error, privacy: .public)")
+            return false
+        }
+    }
+}
+
+// MARK: - Post-Handshake Validator
+
+/// Validates the peer certificate after TLS handshake completes.
+///
+/// This is used with `TrustHandler` to implement certificate pinning:
+/// 1. TLS handshake accepts all certificates
+/// 2. After handshake, this validator checks if the peer certificate matches
+/// 3. If validation fails, the connection should be closed
+struct PostHandshakeValidator {
+    
+    /// The expected certificate (from device configuration).
+    let expectedCertificate: SecCertificate
+    
+    /// Validates that the peer certificate matches the expected certificate.
+    ///
+    /// - Parameter peerCertificates: The certificates received during handshake.
+    /// - Returns: `true` if the first peer certificate matches the expected certificate.
+    func validate(peerCertificates: [NIOSSLCertificate]) -> Bool {
+        guard let peerCert = peerCertificates.first else {
+            Logger.network.error("No peer certificate to validate")
+            return false
+        }
+        
+        let matches = SSLCertificateUtils.certificatesMatch(peerCert, expectedCertificate)
+        if !matches {
+            Logger.network.error("Post-handshake certificate validation failed")
+        }
+        return matches
+    }
+}
