@@ -78,7 +78,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     // MARK: Properties
     
     public weak var delegate: ConnectionDelegate?
-    public weak var pairingDelegate: PairableDelegate?
+    public weak var pairingDelegate: ConnectionPairingDelegate?
     
     public private(set) var state: State {
         didSet {
@@ -221,7 +221,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         self.pairingHandler!.delegate = self
         // Note: pairingHandler's pairingDelegate and impersonateAs are NOT set because
         // Connection handles pairing packets directly in handlePairingPacket()
-        // and uses PairableDelegate for pairing events
+        // and uses ConnectionPairingDelegate for pairing events
     }
     
     public func secureServer() {
@@ -364,7 +364,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         }
         return handler.pairingStatus
     }
-
+    
     public func requestPairing() {
         guard self.state == .Open, let handler = self.pairingHandler else {
             Logger.network.error("requestPairing called but connection not open or pairingHandler not set")
@@ -373,7 +373,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         }
         let previousStatus = handler.pairingStatus
         handler.requestPairing()
-
+        
         // Notify delegate about pairing status change
         let newStatus = handler.pairingStatus
         if newStatus != previousStatus {
@@ -383,7 +383,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             }
         }
     }
-
+    
     public func acceptPairing() {
         guard self.state == .Open, let handler = self.pairingHandler else {
             Logger.network.error("acceptPairing called but connection not open or pairingHandler not set")
@@ -391,7 +391,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             return
         }
         handler.acceptPairing()
-
+        
         // Notify delegate about pairing status change
         // (DefaultPairingHandler.pairingDelegate is nil for Connection, so we handle it here)
         if handler.pairingStatus == .Paired {
@@ -402,7 +402,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             }
         }
     }
-
+    
     public func declinePairing() {
         guard self.state == .Open, let handler = self.pairingHandler else {
             Logger.network.error("declinePairing called but connection not open or pairingHandler not set")
@@ -410,14 +410,14 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             return
         }
         handler.declinePairing()
-
+        
         // Notify delegate about pairing status change
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.pairingDelegate?.connection(self, pairingStatusChanged: .Unpaired)
         }
     }
-
+    
     public func unpair() {
         guard self.state == .Open, let handler = self.pairingHandler else {
             Logger.network.error("unpair called but connection not open or pairingHandler not set")
@@ -425,14 +425,14 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             return
         }
         handler.unpair()
-
+        
         // Notify delegate about pairing status change
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.pairingDelegate?.connection(self, pairingStatusChanged: .Unpaired)
         }
     }
-
+    
     public func updatePairingStatus(globalStatus: PairingStatus) {
         guard self.state == .Open, let handler = self.pairingHandler else {
             Logger.network.error("updatePairingStatus called but connection not open or pairingHandler not set")

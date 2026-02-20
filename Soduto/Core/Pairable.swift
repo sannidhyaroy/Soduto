@@ -20,7 +20,7 @@ public struct PairingRequest {
 }
 
 /// Delegate protocol for Connection pairing events.
-public protocol PairableDelegate: AnyObject {
+public protocol ConnectionPairingDelegate: AnyObject {
     func connection(_ connection: Connection, receivedPairingRequest request: PairingRequest)
     func connection(_ connection: Connection, pairingFailed error: Error)
     func connection(_ connection: Connection, pairingStatusChanged status: PairingStatus)
@@ -28,7 +28,7 @@ public protocol PairableDelegate: AnyObject {
 
 public protocol Pairable {
     
-    var pairingDelegate: PairableDelegate? { get set }
+    var pairingDelegate: ConnectionPairingDelegate? { get set }
     var pairingStatus: PairingStatus { get }
     
     func requestPairing()

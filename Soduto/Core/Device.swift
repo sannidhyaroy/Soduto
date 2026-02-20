@@ -48,7 +48,7 @@ public protocol DeviceDataPacketHandler: AnyObject {
 
 /// Device class represents a remote device. Multiple connections to the device may be used,
 /// but only one of the same kind (LAN, Bluetooth, etc.)
-public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStringConvertible {
+public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, CustomStringConvertible {
     
     // MARK: Types
     
@@ -275,7 +275,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     }
     
     
-    // MARK: PairableDelegate
+    // MARK: ConnectionPairingDelegate
     
     public func connection(_ connection: Connection, receivedPairingRequest request: PairingRequest) {
         Logger.device.debug("Connection received pairing request from \(connection.peerAddress.description, privacy: .public)")
@@ -295,7 +295,7 @@ public class Device: ConnectionDelegate, PairableDelegate, Pairable, CustomStrin
     // MARK: Pairable
     
     /// Not used - present only to comply Pairable protocol
-    public var pairingDelegate: PairableDelegate? = nil
+    public var pairingDelegate: ConnectionPairingDelegate? = nil
     
     public var pairingStatus: PairingStatus {
         didSet {

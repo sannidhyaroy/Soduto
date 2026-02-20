@@ -21,7 +21,7 @@ public protocol PairingHandlerDelegate: AnyObject {
 ///
 /// This class handles the pairing state transitions and certificate management.
 /// Connection uses this internally to track pairing state; all delegate callbacks
-/// are handled directly by Connection via PairableDelegate.
+/// are handled directly by Connection via ConnectionPairingDelegate.
 public class DefaultPairingHandler: Pairable {
     
     // MARK: Types
@@ -57,7 +57,7 @@ public class DefaultPairingHandler: Pairable {
     
     // MARK: Pairable
     
-    public var pairingDelegate: PairableDelegate? {
+    public var pairingDelegate: ConnectionPairingDelegate? {
         get { return nil }
         set { /* Connection handles delegate callbacks directly */ }
     }
@@ -87,7 +87,7 @@ public class DefaultPairingHandler: Pairable {
                     strongSelf.declinePairing()
                 }
             }
-            // Note: Connection handles pairingDelegate callbacks directly via PairableDelegate
+            // Note: Connection handles pairingDelegate callbacks directly via ConnectionPairingDelegate
         }
     }
     
