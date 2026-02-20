@@ -56,6 +56,9 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     /// The port the TCP server is listening on.
     private var tcpListeningPort: UInt16 = 0
     
+    /// mDNS discovery provider for instant device discovery.
+    private var mdnsProvider: MDNSDiscoveryProvider?
+    
     
     
     init(config: ConnectionConfiguration) {
@@ -94,6 +97,9 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         
         self.isStarted = true
         
+        // Start mDNS discovery after TCP server is ready
+        startMDNS()
+        
         // Start monitoring network reachability
         self.pathMonitor.start(queue: self.pathMonitorQueue)
         broadcastAnnouncement()
@@ -107,6 +113,7 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     public func stop() {
         self.isStarted = false
         self.pathMonitor.cancel()
+        stopMDNS()
         stopUdp()
         stopTcpServer()
     }
@@ -174,7 +181,7 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             let broadcastAddr = ipAddr | ~netmask
             
             // Convert to string
-            var addr = in_addr(s_addr: broadcastAddr)
+            let addr = in_addr(s_addr: broadcastAddr)
             guard let broadcastString = String(cString: inet_ntoa(addr), encoding: .ascii) else { continue }
             
             do {
@@ -441,6 +448,54 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         self.tcpListeningPort = 0
     }
     
+    // MARK: - mDNS Implementation
+    
+    /// Starts mDNS discovery and advertisement.
+    private func startMDNS() {
+        guard self.tcpListeningPort > 0 else {
+            Logger.network.notice("Cannot start mDNS: TCP server not ready")
+            return
+        }
+        
+        self.mdnsProvider = MDNSDiscoveryProvider(config: self.config)
+        self.mdnsProvider?.delegate = self
+        self.mdnsProvider?.start(tcpPort: self.tcpListeningPort)
+    }
+    
+    /// Stops mDNS discovery and advertisement.
+    private func stopMDNS() {
+        self.mdnsProvider?.stop()
+        self.mdnsProvider = nil
+    }
+    
+    /// Sends a UDP identity packet to a specific address (triggered by mDNS discovery).
+    private func sendDirectUdpPacket(to address: String) {
+        guard let channel = self.udpChannel else {
+            Logger.network.error("UDP channel not available for direct send")
+            return
+        }
+        guard self.tcpListeningPort > 0 else { return }
+        
+        let properties: DataPacket.Body = [
+            DataPacket.IdentityProperty.tcpPort.rawValue: Int(self.tcpListeningPort) as AnyObject
+        ]
+        let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
+        
+        guard let bytes = try? packet.serialize() else { return }
+        
+        do {
+            let targetAddress = try NIOCore.SocketAddress(ipAddress: address, port: Int(ConnectionProvider.udpPort))
+            var buffer = channel.allocator.buffer(capacity: bytes.count)
+            buffer.writeBytes(bytes)
+            let envelope = AddressedEnvelope(remoteAddress: targetAddress, data: buffer)
+            channel.writeAndFlush(envelope).whenFailure { error in
+                Logger.network.debug("mDNS-triggered UDP send to \(address, privacy: .public) failed: \(error, privacy: .public)")
+            }
+        } catch {
+            Logger.network.error("Failed to create target address for mDNS discovery: \(error, privacy: .public)")
+        }
+    }
+    
     /// Handles a new TCP connection accepted by the server.
     fileprivate func handleTcpConnection(channel: Channel, remoteAddress: NIOCore.SocketAddress) {
         Logger.network.debug("TCP accepted connection from \(String(describing: remoteAddress), privacy: .public)")
@@ -476,6 +531,29 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         Logger.network.debug("Became unreachable")
     }
     
+}
+
+// MARK: - MDNSDiscoveryProviderDelegate
+
+extension ConnectionProvider: MDNSDiscoveryProviderDelegate {
+    
+    public func mdnsProvider(_ provider: MDNSDiscoveryProvider,
+                             discoveredDeviceAt address: String,
+                             port: UInt16,
+                             deviceId: String) {
+        // Check if we need a new connection to this device
+        guard let delegate = self.delegate else { return }
+        guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else {
+            Logger.network.debug("mDNS: Connection to \(deviceId, privacy: .public) not needed")
+            return
+        }
+        
+        Logger.network.debug("mDNS: Triggering connection to \(deviceId, privacy: .public) at \(address, privacy: .public)")
+        
+        // Send UDP identity packet to trigger normal connection flow
+        // This is the recommended approach per KDE Connect protocol spec
+        sendDirectUdpPacket(to: address)
+    }
 }
 
 // MARK: - UDP Handler
