@@ -26,7 +26,7 @@ public struct DataPacket: CustomStringConvertible {
     
     // MARK: Properties
     
-    static let protocolVersion: UInt = 7
+    static let protocolVersion: UInt = 8
     private static var idCounter: Int64 = 0
     private static var idCounterLock: NSLock = NSLock()
     
