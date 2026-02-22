@@ -193,17 +193,6 @@ public class CertificateUtils {
         return data1.elementsEqual(data2)
     }
     
-    public class func digest(for certificate: SecCertificate) -> [UInt8] {
-        let data = SecCertificateCopyData(certificate) as Data
-        let hash = Insecure.SHA1.hash(data: data)
-        return Array(hash)
-    }
-    
-    public class func digestString(for certificate: SecCertificate) -> String {
-        let digest = self.digest(for: certificate)
-        let hexBytes = digest.map { String(format: "%02hhX", $0) }
-        return hexBytes.joined(separator: " ")
-    }
     
     // MARK: Protocol v8 SHA256 Functions
     
