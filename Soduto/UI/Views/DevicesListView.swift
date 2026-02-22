@@ -21,9 +21,8 @@ struct IdentifiableDevice: Identifiable {
 @MainActor
 class DevicesListViewModel: ObservableObject {
     @Published var devices: [Device] = []
-    @Published var selectedDeviceId: Device.Id?
     @Published var showingDeviceInfo: IdentifiableDevice?
-    
+
     weak var deviceDataSource: DeviceDataSource?
     weak var deviceManager: DeviceManager?
     
@@ -171,19 +170,23 @@ struct DevicesListView: View {
     // MARK: - Device List
     
     private var deviceListView: some View {
-        List(selection: $viewModel.selectedDeviceId) {
+        List {
             ForEach(viewModel.devices, id: \.id) { device in
                 DeviceRowView(
                     device: device,
                     isHovered: hoveredDeviceId == device.id,
                     onPairTap: { viewModel.requestPairing(for: device) },
                     onUnpairTap: { viewModel.unpair(device) },
-                    onInfoTap: { viewModel.showingDeviceInfo = IdentifiableDevice(device: device) }
+                    onInfoTap: {
+                        // Use Task to defer state update and avoid publishing during view update
+                        Task { @MainActor in
+                            viewModel.showingDeviceInfo = IdentifiableDevice(device: device)
+                        }
+                    }
                 )
                 .onHover { hovering in
                     hoveredDeviceId = hovering ? device.id : nil
                 }
-                .tag(device.id)
             }
         }
         .listStyle(.inset)
@@ -201,60 +204,83 @@ struct DeviceRowView: View {
     let onPairTap: () -> Void
     let onUnpairTap: () -> Void
     let onInfoTap: () -> Void
-    
-    @State private var showingInfo = false
-    
+
+    @State private var isBubbleHovered = false
+
     var body: some View {
         HStack(spacing: 12) {
-            // Device icon
-            Image(systemName: device.type.sfSymbolName)
-                .font(.system(size: 24))
-                .foregroundColor(device.isReachable ? .primary : .secondary)
-                .frame(width: 32, height: 32)
-                .opacity(device.isReachable ? 1.0 : 0.5)
-            
+            // Device icon bubble
+            ZStack {
+                // Background circle
+                Circle()
+                    .fill(isBubbleHovered
+                          ? Color.accentColor.opacity(0.15)
+                          : Color(nsColor: .controlBackgroundColor))
+                    .frame(width: 44, height: 44)
+
+                // Device icon
+                Image(systemName: device.type.sfSymbolName)
+                    .font(.system(size: 20))
+                    .foregroundColor(device.isReachable ? .primary : .secondary)
+                    .opacity(device.isReachable && !isBubbleHovered ? 1.0 : 0.5)
+
+                // Info icon overlay on hover
+                if isBubbleHovered {
+                    Circle()
+                        .fill(Color.black.opacity(0.6))
+                        .frame(width: 44, height: 44)
+
+                    Image(systemName: "info.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                }
+            }
+            .onHover { hovering in
+                isBubbleHovered = hovering
+            }
+            .onTapGesture {
+                // Single click on bubble (when info icon visible) opens device info
+                if isBubbleHovered {
+                    onInfoTap()
+                }
+            }
+            .help(isBubbleHovered ? "Show device info" : "")
+
             // Device info
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.name)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.primary)
                     .opacity(device.isReachable ? 1.0 : 0.5)
-                
+
                 HStack(spacing: 4) {
                     if device.type != .Unknown {
                         Text(deviceTypeString(device.type))
                     }
-                    
+
                     if device.type != .Unknown {
                         Text("•")
                             .foregroundColor(.secondary)
                     }
-                    
+
                     Text(device.isReachable ? "reachable" : "unreachable")
                         .foregroundColor(device.isReachable ? .green : .secondary)
                 }
                 .font(.system(size: 11))
                 .opacity(device.isReachable ? 0.8 : 0.4)
             }
-            
+
             Spacer()
-            
-            // Action buttons
-            HStack(spacing: 8) {
-                // Info button
-                Button(action: onInfoTap) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 16))
-                }
-                .buttonStyle(.borderless)
-                .help("Show device info")
-                
-                // Pair/Unpair button
-                pairButton
-            }
+
+            // Pair/Unpair button
+            pairButton
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            // Double-click anywhere on the row opens device info
+            onInfoTap()
+        }
     }
     
     @ViewBuilder

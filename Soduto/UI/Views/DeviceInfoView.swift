@@ -23,16 +23,14 @@ struct DeviceInfoView: View {
                 .padding(.bottom, 16)
             
             Divider()
-            
+
             // Content
-            ScrollView {
-                VStack(spacing: 24) {
-                    generalSection
-                    certificatesSection
-                }
-                .padding(20)
+            VStack(spacing: 24) {
+                generalSection
+                certificatesSection
             }
-            
+            .padding(20)
+
             Divider()
             
             // Footer
@@ -46,7 +44,8 @@ struct DeviceInfoView: View {
             }
             .padding(20)
         }
-        .frame(width: 500, height: 350)
+        .frame(width: 500)
+        .fixedSize(horizontal: true, vertical: true)
     }
     
     // MARK: - Header
@@ -158,5 +157,5 @@ struct DeviceInfoView: View {
     // Can't create Device without complex dependencies, so preview won't work
     // This is fine - we'll test in the actual app
     Text("Preview not available - needs Device instance")
-        .frame(width: 500, height: 350)
+        .frame(width: 500)
 }
