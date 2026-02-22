@@ -70,7 +70,20 @@ public struct SocketAddress: CustomStringConvertible {
                 var sin6Addr = ptr.pointee.sin6_addr
                 var cString = [Int8](repeating: 0, count: Int(INET6_ADDRSTRLEN))
                 inet_ntop(AF_INET6, &sin6Addr, &cString, socklen_t(cString.count));
-                let address = String(cString: cString)
+                var address = String(cString: cString)
+                
+                // Append scope ID for link-local addresses (required for routing)
+                let scopeId = ptr.pointee.sin6_scope_id
+                if scopeId != 0 {
+                    // Convert interface index to name (e.g., "en0")
+                    var ifnameBuf = [CChar](repeating: 0, count: Int(IFNAMSIZ))
+                    if if_indextoname(scopeId, &ifnameBuf) != nil {
+                        address += "%" + String(cString: ifnameBuf)
+                    } else {
+                        // Fallback to numeric scope ID
+                        address += "%\(scopeId)"
+                    }
+                }
                 
                 return "[\(address)]:\(self.port)"
             }

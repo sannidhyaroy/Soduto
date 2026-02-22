@@ -7,8 +7,51 @@
 //
 
 import Foundation
+import NIOCore
 
 public struct NetworkUtils {
+    
+    // MARK: - NIO SocketAddress with IPv6 Scope ID Support
+    
+    /// Creates a NIO SocketAddress from an IP address string, with proper support for
+    /// IPv6 link-local addresses that include scope IDs (e.g., "fe80::1234%en0").
+    ///
+    /// Standard NIO `SocketAddress(ipAddress:port:)` uses `inet_pton` which doesn't
+    /// support scope IDs. This function uses `getaddrinfo` which properly handles them.
+    ///
+    /// - Parameters:
+    ///   - address: IP address string (IPv4, IPv6, or IPv6 with scope ID)
+    ///   - port: Port number
+    /// - Returns: NIO SocketAddress, or nil if the address couldn't be parsed
+    public static func createSocketAddress(address: String, port: Int) -> NIOCore.SocketAddress? {
+        var hints = addrinfo()
+        hints.ai_family = AF_UNSPEC      // Allow both IPv4 and IPv6
+        hints.ai_socktype = SOCK_DGRAM   // UDP
+        hints.ai_flags = AI_NUMERICHOST  // Don't do DNS lookup, just parse the address
+        
+        var result: UnsafeMutablePointer<addrinfo>?
+        let status = getaddrinfo(address, String(port), &hints, &result)
+        
+        guard status == 0, let info = result else {
+            return nil
+        }
+        defer { freeaddrinfo(result) }
+        
+        // Convert the resolved address to NIO SocketAddress
+        guard let sockaddr = info.pointee.ai_addr else { return nil }
+        
+        if info.pointee.ai_family == AF_INET6 {
+            // IPv6 - includes proper scope ID handling
+            let sockaddr6 = sockaddr.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { $0.pointee }
+            return NIOCore.SocketAddress(sockaddr6)
+        } else if info.pointee.ai_family == AF_INET {
+            // IPv4
+            let sockaddr4 = sockaddr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
+            return NIOCore.SocketAddress(sockaddr4)
+        }
+        
+        return nil
+    }
     
     // MARK: Types
     
@@ -64,12 +107,12 @@ public struct NetworkUtils {
                     let dataOffset = MemoryLayout<sockaddr_dl>.offset(of: \.sdl_data)!
                     let sdlDataPtr = UnsafeRawPointer(sdl).advanced(by: dataOffset).assumingMemoryBound(to: UInt8.self)
                     hwAddressString = String(format: "%x:%x:%x:%x:%x:%x",
-                        sdlDataPtr.pointee,
-                        sdlDataPtr.advanced(by: 1).pointee,
-                        sdlDataPtr.advanced(by: 2).pointee,
-                        sdlDataPtr.advanced(by: 3).pointee,
-                        sdlDataPtr.advanced(by: 4).pointee,
-                        sdlDataPtr.advanced(by: 5).pointee)
+                                             sdlDataPtr.pointee,
+                                             sdlDataPtr.advanced(by: 1).pointee,
+                                             sdlDataPtr.advanced(by: 2).pointee,
+                                             sdlDataPtr.advanced(by: 3).pointee,
+                                             sdlDataPtr.advanced(by: 4).pointee,
+                                             sdlDataPtr.advanced(by: 5).pointee)
                 }
                 
                 let info = ArpInfo(sin_addr: sin_addr, ipAddressString: ipAddressString, hwAddressString: hwAddressString)

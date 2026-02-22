@@ -524,30 +524,32 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         
         // Convert to NIOCore.SocketAddress
         let targetAddress: NIOCore.SocketAddress
-        do {
-            let ipString: String
-            if address.isIPv4 {
-                // address.description for IPv4 is "ip:port", extract just the IP
-                let desc = address.description
-                ipString = String(desc.split(separator: ":").first ?? "")
-            } else if address.isIPv6 {
-                // address.description for IPv6 is "[ip]:port", extract just the IP
-                let desc = address.description
-                if let start = desc.firstIndex(of: "["), let end = desc.firstIndex(of: "]") {
-                    ipString = String(desc[desc.index(after: start)..<end])
-                } else {
-                    Logger.network.error("Failed to parse IPv6 address")
-                    return
-                }
+        let ipString: String
+        if address.isIPv4 {
+            // address.description for IPv4 is "ip:port", extract just the IP
+            let desc = address.description
+            ipString = String(desc.split(separator: ":").first ?? "")
+        } else if address.isIPv6 {
+            // address.description for IPv6 is "[ip]:port", extract just the IP
+            // May include scope ID for link-local (e.g., "fe80::1234%en0")
+            let desc = address.description
+            if let start = desc.firstIndex(of: "["), let end = desc.firstIndex(of: "]") {
+                ipString = String(desc[desc.index(after: start)..<end])
             } else {
-                Logger.network.error("Unsupported address type")
+                Logger.network.error("Failed to parse IPv6 address")
                 return
             }
-            targetAddress = try NIOCore.SocketAddress(ipAddress: ipString, port: Int(address.port))
-        } catch {
-            Logger.network.error("Failed to create address: \(error, privacy: .public)")
+        } else {
+            Logger.network.error("Unsupported address type")
             return
         }
+        
+        // Use NetworkUtils helper which supports IPv6 link-local addresses with scope IDs
+        guard let socketAddress = NetworkUtils.createSocketAddress(address: ipString, port: Int(address.port)) else {
+            Logger.network.error("Failed to create socket address for: \(ipString, privacy: .public)")
+            return
+        }
+        targetAddress = socketAddress
         
         bootstrap.connect(to: targetAddress).whenComplete { [weak self] result in
             switch result {

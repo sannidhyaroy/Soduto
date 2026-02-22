@@ -157,7 +157,10 @@ public class DownloadTask {
     
     private func connect() throws {
         // Create target address with the payload port
-        let targetAddress = try NIOCore.SocketAddress(ipAddress: self.peerHost, port: Int(self.payloadPort))
+        // Use NetworkUtils helper which supports IPv6 link-local addresses with scope IDs
+        guard let targetAddress = NetworkUtils.createSocketAddress(address: self.peerHost, port: Int(self.payloadPort)) else {
+            throw DownloadTaskError.invalidAddress
+        }
         
         // Create TLS configuration
         let tlsConfig = try self.createTLSConfiguration()
@@ -343,6 +346,7 @@ enum DownloadTaskError: Error {
     case failedToLoadCertificate
     case failedToLoadPrivateKey
     case trustVerificationFailed
+    case invalidAddress
 }
 
 // MARK: - Download Handler
