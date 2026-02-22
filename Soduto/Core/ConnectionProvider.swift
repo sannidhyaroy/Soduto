@@ -140,12 +140,6 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         stopTcpServer()
     }
     
-    public func restart() {
-        guard self.isStarted else { return }
-        self.stop()
-        self.start()
-    }
-    
     
     // MARK: Announcements broadcasting
     
@@ -267,12 +261,22 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     public func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
         Logger.network.debug("connection(<\(connection, privacy: .public)> didSendPacket:<\(packet, privacy: .public)>)")
         
-        // After sending identity packet (outgoing connection), secure as server
+        // Only process during initialization phase
+        guard connection.state == .Initializing else {
+            return
+        }
+        
+        // This callback handles outgoing connections after sending our identity packet.
+        // Per KDE Connect protocol:
+        // 1. We (TCP initiator) send identity
+        // 2. We start TLS as SERVER
+        // 3. Peer starts TLS as CLIENT
+        // Note: Incoming connections are handled in didReadPacket, not here.
         do {
             guard let identity = connection.identity else { throw ConnectionProviderError.IdentityAbsent }
             let protocolVersion = try identity.getProtocolVersion()
             if protocolVersion >= ConnectionProvider.minVersionWithSSLSupport {
-                // Beware that securing as server while connection initiated by self
+                // Outgoing connection: we initiated TCP, we secure as TLS server
                 connection.secureServer()
             }
             connection.finishInitialization()
@@ -291,12 +295,18 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             return
         }
         
-        // The only packet we are waiting for is first identity packet to initialize connection with
+        // This callback is only used for incoming connections receiving the peer's identity packet.
+        // Per KDE Connect protocol:
+        // 1. Peer (TCP initiator) sends identity
+        // 2. We receive identity, verify, start TLS as CLIENT
+        // 3. After TLS is established, we send our identity
         do {
             try connection.applyIdentity(packet: packet)
+            
+            // Start TLS immediately - we are the TCP acceptor, so we become TLS client
+            // Our identity packet will be sent AFTER TLS is established (in handleTLSEstablished)
             let protocolVersion = try packet.getProtocolVersion()
             if protocolVersion >= ConnectionProvider.minVersionWithSSLSupport {
-                // Beware that securing as client while connection initiated by the peer
                 connection.secureClient()
             }
             connection.finishInitialization()
@@ -344,14 +354,14 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             // This allows receiving both IPv4 and IPv6, including link-local IPv6
             let channel = try mainBootstrap.bind(host: "::", port: Int(ConnectionProvider.udpPort)).wait()
             self.udpChannel = channel
-            Logger.network.info("Listening for UDP broadcasts on port \(ConnectionProvider.udpPort, privacy: .public)")
+            Logger.network.info("Main UDP socket ready on port \(ConnectionProvider.udpPort, privacy: .public)")
         } catch {
             // Fallback to IPv4-only if IPv6 dual-stack fails
             Logger.network.notice("IPv6 dual-stack UDP failed, falling back to IPv4: \(error, privacy: .public)")
             do {
                 let channel = try mainBootstrap.bind(host: "0.0.0.0", port: Int(ConnectionProvider.udpPort)).wait()
                 self.udpChannel = channel
-                Logger.network.info("Listening for UDP broadcasts on port \(ConnectionProvider.udpPort, privacy: .public) (IPv4 only)")
+                Logger.network.info("Main UDP socket ready on port \(ConnectionProvider.udpPort, privacy: .public) (IPv4 only)")
             } catch {
                 Logger.network.error("Failed to start main UDP: \(error, privacy: .public)")
             }

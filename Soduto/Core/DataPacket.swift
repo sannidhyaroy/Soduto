@@ -166,6 +166,8 @@ extension DataPacket {
     
     public static let identityPacketType = "kdeconnect.identity"
     
+    var isIdentityPacket: Bool { return self.type == DataPacket.identityPacketType }
+    
     
     // MARK: Public static methods
     
