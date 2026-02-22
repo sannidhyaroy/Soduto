@@ -22,6 +22,7 @@ public enum DeviceType: String {
     case Laptop = "laptop"
     case Phone = "phone"
     case Tablet = "tablet"
+    case TV = "tv"
 }
 
 /// Errors thrown by Device instances.
