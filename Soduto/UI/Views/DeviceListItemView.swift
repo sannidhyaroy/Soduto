@@ -61,10 +61,10 @@ public class DeviceListItemView: NSTableCellView {
         switch device.pairingStatus {
         case .Unpaired:
             device.requestPairing()
-            break
+            // Show the pairing window with verification code
+            PairingWindowController.showOutgoingRequest(for: device)
         case .Paired:
             device.unpair()
-            break
         default:
             break
         }

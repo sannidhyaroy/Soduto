@@ -134,6 +134,22 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
                 self.serviceManager.cleanup(for: device)
             }
         }
+        
+        // Update pairing window based on status
+        DispatchQueue.main.async {
+            switch status {
+            case .Paired:
+                PairingInterfaceController.updatePairingUI(for: device.id, success: true)
+            case .Unpaired:
+                // If there's an active pairing window, it means pairing was rejected/cancelled
+                if PairingWindowController.isActive(for: device.id) {
+                    PairingWindowController.updateState(for: device.id, state: .failed("Pairing was declined"))
+                }
+            default:
+                break
+            }
+        }
+        
         self.delegate?.deviceManager(self, didChangeDeviceState: device)
     }
     

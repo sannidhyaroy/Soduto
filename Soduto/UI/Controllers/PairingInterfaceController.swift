@@ -35,39 +35,24 @@ public class PairingInterfaceController: UserNotificationActionHandler {
         }
     }
     
-    /// Shows a notification asking the user to pair with the specified device.
+    /// Shows the pairing window for an incoming pairing request.
     /// - Parameter device: The device requesting to be paired.
     public static func showPairingNotification(for device: Device) {
-        let un = UNUserNotificationCenter.current()
-        let notificationId = "com.soduto.pairinginterfacecontroller.device.\(device.id)"
-        
-        let notification = UNMutableNotificationContent()
-        notification.userInfo = [
-            deviceIdProperty: device.id,
-            UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(PairingInterfaceController.self)
-        ]
-        notification.title = device.name
-        
-        // Show verification code for protocol v8+ connections
-        if device.shouldShowVerificationCode, let code = device.verificationCode {
-            notification.body = "Do you want to pair this device?\n\nVerification code: \(code)\n\nConfirm this code matches the other device."
-        } else {
-            notification.body = "Do you want to pair this device?"
+        DispatchQueue.main.async {
+            PairingWindowController.showIncomingRequest(for: device)
         }
-        
-        notification.sound = .default
-        notification.categoryIdentifier = "PairDevice"
-        notification.setUrgency(.timeSensitive)
-        
-        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-        un.add(request) { error in
-            if let error = error {
-                print(error.localizedDescription)
+    }
+    
+    /// Updates the pairing window state for a device.
+    /// Call this when pairing succeeds or fails.
+    public static func updatePairingUI(for deviceId: Device.Id, success: Bool) {
+        DispatchQueue.main.async {
+            if success {
+                PairingWindowController.updateState(for: deviceId, state: .success)
+            } else {
+                // Close immediately on failure - the device will handle status reset
+                PairingWindowController.close(for: deviceId)
             }
-        }
-        
-        _ = Timer.compatScheduledTimer(withTimeInterval: DefaultPairingHandler.pairingTimoutInterval, repeats: false) { _ in
-            un.removeNotification(withId: notificationId)
         }
     }
     
