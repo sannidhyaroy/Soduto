@@ -185,15 +185,23 @@ public class UploadTask {
             .withChildTCPKeepalive()
         
         // Bind to the port - use a dispatch queue to avoid blocking event loop
+        // Use IPv6 dual-stack (::) to accept both IPv4 and IPv6 connections
         let semaphore = DispatchSemaphore(value: 0)
         var bindResult: Result<Channel, Error>?
         
         DispatchQueue.global().async {
+            // Try IPv6 dual-stack first
             do {
-                let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(port)).wait()
+                let channel = try bootstrap.bind(host: "::", port: Int(port)).wait()
                 bindResult = .success(channel)
             } catch {
-                bindResult = .failure(error)
+                // Fallback to IPv4-only
+                do {
+                    let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(port)).wait()
+                    bindResult = .success(channel)
+                } catch let ipv4Error {
+                    bindResult = .failure(ipv4Error)
+                }
             }
             semaphore.signal()
         }

@@ -47,8 +47,11 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     /// Event loop group for network operations.
     private var eventLoopGroup: MultiThreadedEventLoopGroup?
     
-    /// UDP channel for receiving broadcasts.
+    /// UDP channel for receiving broadcasts (dual-stack for IPv6 support).
     private var udpChannel: Channel?
+    
+    /// Dedicated IPv4 UDP channel for sending broadcasts (SO_BROADCAST requires IPv4).
+    private var broadcastChannel: Channel?
     
     /// TCP server channel for accepting connections.
     private var tcpServerChannel: Channel?
@@ -158,20 +161,20 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     }
     
     /// Sends the identity packet as a UDP broadcast.
+    /// Uses the dedicated IPv4 broadcast channel (SO_BROADCAST only works on IPv4 sockets).
     private func sendBroadcast(packet: DataPacket) {
-        guard let channel = self.udpChannel else {
-            Logger.network.error("UDP channel not available for broadcast")
+        guard let channel = self.broadcastChannel else {
+            Logger.network.error("Broadcast channel not available")
             return
         }
         guard let bytes = try? packet.serialize() else { return }
         
         // Get local interfaces and broadcast to each interface's broadcast address
-        // This avoids kernel errors from attempting to broadcast on interfaces that don't support it
         let localAddresses = NetworkUtils.localAddresses()
         var broadcastCount = 0
         
         for addressInfo in localAddresses {
-            // Only support IPv4 broadcast for now
+            // Only support IPv4 broadcast
             guard addressInfo.ip.isIPv4 else { continue }
             guard addressInfo.netmask.isIPv4 else { continue }
             
@@ -205,6 +208,11 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         }
         
         // Send explicit announcements to known hardware addresses
+        guard channel.isActive else {
+            Logger.network.debug("Broadcast channel closed, skipping known device announcements")
+            return
+        }
+        
         let knownDeviceConfigs = self.config.knownDeviceConfigs()
         let accessibleAddresses = (try? NetworkUtils.accessibleIPv4Addresses()) ?? []
         for accessibleAddress in accessibleAddresses {
@@ -297,7 +305,10 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     
     // MARK: - UDP Implementation
     
-    /// Starts the UDP channel for receiving and sending broadcasts.
+    /// Starts the UDP channels for receiving and sending.
+    /// Creates two sockets:
+    /// - Main socket: dual-stack (::) for receiving and IPv6 sends (mDNS link-local)
+    /// - Broadcast socket: IPv4-only (0.0.0.0) for sending broadcasts (SO_BROADCAST requires IPv4)
     private func startUdp() {
         // Create event loop group if needed
         if self.eventLoopGroup == nil {
@@ -309,10 +320,10 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             return
         }
         
-        let bootstrap = DatagramBootstrap(group: group)
+        // Main UDP socket - dual-stack for receiving and IPv6 sends
+        let mainBootstrap = DatagramBootstrap(group: group)
             .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .channelOption(ChannelOptions.Types.SocketOption(level: SOL_SOCKET, name: SO_REUSEPORT), value: 1)
-            .channelOption(ChannelOptions.socketOption(.so_broadcast), value: 1)
             .channelInitializer { [weak self] channel in
                 guard let self = self else {
                     return channel.eventLoop.makeSucceededVoidFuture()
@@ -322,18 +333,59 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             }
         
         do {
-            let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(ConnectionProvider.udpPort)).wait()
+            // Bind to IPv6 any address (::) which creates a dual-stack socket
+            // This allows receiving both IPv4 and IPv6, including link-local IPv6
+            let channel = try mainBootstrap.bind(host: "::", port: Int(ConnectionProvider.udpPort)).wait()
             self.udpChannel = channel
             Logger.network.info("Listening for UDP broadcasts on port \(ConnectionProvider.udpPort, privacy: .public)")
         } catch {
-            Logger.network.error("Failed to start UDP: \(error, privacy: .public)")
+            // Fallback to IPv4-only if IPv6 dual-stack fails
+            Logger.network.notice("IPv6 dual-stack UDP failed, falling back to IPv4: \(error, privacy: .public)")
+            do {
+                let channel = try mainBootstrap.bind(host: "0.0.0.0", port: Int(ConnectionProvider.udpPort)).wait()
+                self.udpChannel = channel
+                Logger.network.info("Listening for UDP broadcasts on port \(ConnectionProvider.udpPort, privacy: .public) (IPv4 only)")
+            } catch {
+                Logger.network.error("Failed to start main UDP: \(error, privacy: .public)")
+            }
+        }
+        
+        // Broadcast socket - IPv4-only with SO_BROADCAST for sending broadcasts
+        // SO_BROADCAST only works on IPv4 sockets, not dual-stack
+        let broadcastBootstrap = DatagramBootstrap(group: group)
+            .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .channelOption(ChannelOptions.socketOption(.so_broadcast), value: 1)
+        
+        do {
+            // Bind to any available port (port 0) - we only send from this socket
+            let channel = try broadcastBootstrap.bind(host: "0.0.0.0", port: 0).wait()
+            self.broadcastChannel = channel
+            Logger.network.debug("Broadcast UDP socket ready")
+        } catch {
+            Logger.network.error("Failed to start broadcast UDP: \(error, privacy: .public)")
         }
     }
     
-    /// Stops the UDP channel.
+    /// Stops the UDP channels.
     private func stopUdp() {
         self.udpChannel?.close(promise: nil)
         self.udpChannel = nil
+        self.broadcastChannel?.close(promise: nil)
+        self.broadcastChannel = nil
+    }
+    
+    /// Ensures the UDP channel is active, restarting if needed.
+    /// Returns true if channel is available for use.
+    private func ensureUdpChannelActive() -> Bool {
+        if let channel = self.udpChannel, channel.isActive {
+            return true
+        }
+        
+        // Channel is nil or inactive - restart it
+        Logger.network.notice("UDP channel inactive, restarting...")
+        stopUdp()
+        startUdp()
+        return self.udpChannel?.isActive ?? false
     }
     
     /// Handles incoming UDP packet.
@@ -425,16 +477,27 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             }
         
         // Try to bind to a port in the KDE Connect range
+        // Use IPv6 dual-stack (::) to accept both IPv4 and IPv6 connections,
+        // including link-local IPv6 (required when phone connects back to us)
         for port in ConnectionProvider.minTcpPort...ConnectionProvider.maxTcpPort {
             do {
-                let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(port)).wait()
+                let channel = try bootstrap.bind(host: "::", port: Int(port)).wait()
                 self.tcpServerChannel = channel
                 self.tcpListeningPort = port
                 Logger.network.info("Listening for TCP connections on port \(port, privacy: .public)")
                 return
-            } catch {
-                // Port in use, try next
-                continue
+            } catch let ipv6Error {
+                // IPv6 dual-stack failed, try IPv4-only fallback
+                do {
+                    let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(port)).wait()
+                    self.tcpServerChannel = channel
+                    self.tcpListeningPort = port
+                    Logger.network.notice("IPv6 TCP failed (\(ipv6Error, privacy: .public)), using IPv4 on port \(port, privacy: .public)")
+                    return
+                } catch {
+                    // Port in use, try next
+                    continue
+                }
             }
         }
         
@@ -469,8 +532,10 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     }
     
     /// Sends a UDP identity packet to a specific address (triggered by mDNS discovery).
+    /// Supports IPv6 link-local addresses with scope IDs (e.g., "fe80::1234%en0").
     private func sendDirectUdpPacket(to address: String) {
-        guard let channel = self.udpChannel else {
+        // Ensure UDP channel is active (may have been closed by broadcast errors)
+        guard ensureUdpChannelActive(), let channel = self.udpChannel else {
             Logger.network.error("UDP channel not available for direct send")
             return
         }
@@ -483,16 +548,23 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         
         guard let bytes = try? packet.serialize() else { return }
         
-        do {
-            let targetAddress = try NIOCore.SocketAddress(ipAddress: address, port: Int(ConnectionProvider.udpPort))
-            var buffer = channel.allocator.buffer(capacity: bytes.count)
-            buffer.writeBytes(bytes)
-            let envelope = AddressedEnvelope(remoteAddress: targetAddress, data: buffer)
-            channel.writeAndFlush(envelope).whenFailure { error in
+        // Use NetworkUtils helper which properly handles IPv6 scope IDs
+        guard let targetAddress = NetworkUtils.createSocketAddress(address: address, port: Int(ConnectionProvider.udpPort)) else {
+            Logger.network.error("Failed to create target address for mDNS discovery: \(address, privacy: .public)")
+            return
+        }
+        
+        var buffer = channel.allocator.buffer(capacity: bytes.count)
+        buffer.writeBytes(bytes)
+        let envelope = AddressedEnvelope(remoteAddress: targetAddress, data: buffer)
+        
+        channel.writeAndFlush(envelope).whenComplete { result in
+            switch result {
+            case .success:
+                Logger.network.debug("mDNS-triggered UDP sent to \(address, privacy: .public)")
+            case .failure(let error):
                 Logger.network.debug("mDNS-triggered UDP send to \(address, privacy: .public) failed: \(error, privacy: .public)")
             }
-        } catch {
-            Logger.network.error("Failed to create target address for mDNS discovery: \(error, privacy: .public)")
         }
     }
     
