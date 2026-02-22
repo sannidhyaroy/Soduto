@@ -375,6 +375,16 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         self.updatePairingStatus(globalStatus: .Unpaired)
     }
     
+    /// Close all TCP connections (force reconnect)
+    public func closeAllConnections() {
+        // Create a copy to avoid modifying array while iterating
+        // (connection close handlers remove from self.connections)
+        let connectionsCopy = self.connections
+        for connection in connectionsCopy {
+            connection.close()
+        }
+    }
+    
     public func updatePairingStatus(globalStatus: PairingStatus) {
         for connection in self.connections {
             connection.updatePairingStatus(globalStatus: globalStatus)

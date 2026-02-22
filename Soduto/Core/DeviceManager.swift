@@ -184,6 +184,12 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
         return actions
     }
     
+    /// Close all TCP connections for all devices (force reconnect)
+    public func closeAllConnections() {
+        for device in self.devices.values {
+            device.closeAllConnections()
+        }
+    }
     
     // MARK: Private methods
     

@@ -8,103 +8,86 @@
 
 import Foundation
 import Cocoa
+import SwiftUI
+import os
 
+/// Modern SwiftUI-based device list controller
+/// Maintains backward compatibility with storyboard-based preferences
 class DeviceListController: NSViewController {
- 
-    var deviceDataSource: DeviceDataSource?
-    @IBOutlet weak var deviceList: NSTableView!
     
+    var deviceDataSource: DeviceDataSource? {
+        didSet {
+            viewModel?.deviceDataSource = deviceDataSource
+            viewModel?.refreshDevices()
+        }
+    }
+    
+    @IBOutlet weak var deviceList: NSTableView? // Kept for storyboard compatibility, not used
+    
+    private var viewModel: DevicesListViewModel?
+    private var hostingView: NSHostingView<DevicesListView>?
     
     func refreshDeviceList() {
-        self.deviceList.reloadData()
+        viewModel?.refreshDevices()
     }
     
     override func viewDidLoad() {
-        refreshDeviceList()
-        ModernUIStyleKit.applyModernStyleToTableView(to: deviceList)
+        super.viewDidLoad()
+        setupSwiftUIView()
     }
     
     override func viewWillAppear() {
-        // Resize first column to full table width
-        self.deviceList.tableColumns.first?.width = self.deviceList.frame.width - self.deviceList.intercellSpacing.width - 8
+        super.viewWillAppear()
+        // Removed automatic broadcast - not part of official KDE Connect protocol
+        // Only broadcast on: app start, network change, manual Cmd+R
         
-        NotificationCenter.default.post(name: ConnectionProvider.broadcastAnnouncementNotification, object: nil)
-    }
-    
-    override public func keyDown(with event: NSEvent) {
-        if event.charactersIgnoringModifiers?.lowercased() == "r" && event.modifierFlags.contains(.command) {
-            NotificationCenter.default.post(name: ConnectionProvider.broadcastAnnouncementNotification, object: nil)
+        // Setup SwiftUI view if not already done (in case viewDidLoad was too early)
+        if viewModel == nil {
+            setupSwiftUIView()
         }
+        
+        viewModel?.refreshDevices()
     }
     
+    private func setupSwiftUIView() {
+        // Get deviceManager safely
+        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else {
+            Logger.ui.notice("AppDelegate not available yet, will setup later")
+            return
+        }
+        
+        let deviceManager = appDelegate.deviceManager
+        
+        // Create view model
+        let viewModel = DevicesListViewModel(
+            deviceDataSource: deviceDataSource,
+            deviceManager: deviceManager
+        )
+        self.viewModel = viewModel
+        
+        // Create SwiftUI view
+        let swiftUIView = DevicesListView(viewModel: viewModel)
+        let hostingView = NSHostingView(rootView: swiftUIView)
+        self.hostingView = hostingView
+        
+        // Remove existing subviews and add hosting view
+        view.subviews.forEach { $0.removeFromSuperview() }
+        view.addSubview(hostingView)
+        
+        // Setup constraints
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            hostingView.topAnchor.constraint(equalTo: view.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
+    }
+
     @IBAction func showDeviceInfo(_ sender: Any?) {
-        guard self.deviceList.clickedRow >= 0 else { return }
-        guard let rowView = self.deviceList.rowView(atRow: self.deviceList.clickedRow, makeIfNecessary: false) else { return }
-        guard let cellView = rowView.view(atColumn: 0) as? DeviceListItemView else { return }
-        guard let device = cellView.device else { return }
-        
-        let controller = DeviceInfoWindowController.loadController()
-        controller.device = device
-        
-        guard let window = controller.window else { return }
-        self.view.window?.beginSheet(window) { _ in
-            controller.window = nil // just to keep controller until sheet ends
-        }
+        // This action is now handled internally by SwiftUI view
+        // Kept for storyboard compatibility
     }
     
 }
 
-// MARK: - DeviceListController DataSource
-
-extension DeviceListController : NSTableViewDataSource {
-    
-    public func numberOfRows(in tableView: NSTableView) -> Int {
-        guard let deviceDataSource = self.deviceDataSource else { return 0 }
-        return deviceDataSource.pairedDevices.count + deviceDataSource.unpairedDevices.count + deviceDataSource.unavailableDevices.count
-    }
-    
-}
-
-
-// MARK: - DeviceListController Delegate
-
-extension DeviceListController: NSTableViewDelegate {
-    
-    public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        
-        guard let deviceDataSource = self.deviceDataSource else { return nil }
-        
-        let device: Device
-        var i = row
-        if i < deviceDataSource.pairedDevices.count {
-            device = deviceDataSource.pairedDevices[i]
-        }
-        else {
-            i = i - deviceDataSource.pairedDevices.count
-            if i < deviceDataSource.unpairedDevices.count {
-                device = deviceDataSource.unpairedDevices[i]
-            }
-            else {
-                i = i - deviceDataSource.unpairedDevices.count
-                if i < deviceDataSource.unavailableDevices.count {
-                    device = deviceDataSource.unavailableDevices[i]
-                }
-                else {
-                    return nil
-                }
-            }
-        }
-        
-        if let view = tableView.makeView(withIdentifier: NSUserInterfaceItemIdentifier(rawValue: "DeviceItemID"), owner: nil) as? DeviceListItemView {
-            view.device = device
-            return view
-        }
-        
-        return nil
-    }
-    
-    public func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        let rowView = ModernTableRowView()
-        return rowView
-    }
-}

@@ -66,6 +66,8 @@
 		31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareExtensionController.swift */; };
 		31F8A6042F4A53DC00CA5A61 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6032F4A53DC00CA5A61 /* PairingView.swift */; };
 		31F8A6062F4A555D00CA5A61 /* PairingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6052F4A555D00CA5A61 /* PairingWindowController.swift */; };
+		31F8A60B2F4A642E00CA5A61 /* DeviceInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6092F4A642E00CA5A61 /* DeviceInfoView.swift */; };
+		31F8A60C2F4A642E00CA5A61 /* DevicesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A60A2F4A642E00CA5A61 /* DevicesListView.swift */; };
 		840538201ED62282003798AA /* WelcomeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8405381F1ED62282003798AA /* WelcomeWindowController.swift */; };
 		840FC2F91DEF6AF400AC4824 /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */; };
 		84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */; };
@@ -149,7 +151,6 @@
 		F80E30722DBE0D880047D068 /* MacToRemoteInputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */; };
 		F826E6C72DB302F000E736CE /* RunCommandService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6C62DB302F000E736CE /* RunCommandService.swift */; };
 		F826E6C92DB419AF00E736CE /* RunCommandsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6C82DB419AF00E736CE /* RunCommandsWindowController.swift */; };
-		F826E6CD2DB4F12500E736CE /* ModernUIStyleKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6CC2DB4F12500E736CE /* ModernUIStyleKit.swift */; };
 		F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */; };
 /* End PBXBuildFile section */
 
@@ -270,6 +271,8 @@
 		31F3A159293B5EA300550088 /* Soduto_Share.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto_Share.entitlements; sourceTree = "<group>"; };
 		31F8A6032F4A53DC00CA5A61 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
 		31F8A6052F4A555D00CA5A61 /* PairingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingWindowController.swift; sourceTree = "<group>"; };
+		31F8A6092F4A642E00CA5A61 /* DeviceInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceInfoView.swift; sourceTree = "<group>"; };
+		31F8A60A2F4A642E00CA5A61 /* DevicesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicesListView.swift; sourceTree = "<group>"; };
 		8405381F1ED62282003798AA /* WelcomeWindowController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WelcomeWindowController.swift; sourceTree = "<group>"; };
 		840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ClipboardService.swift; sourceTree = "<group>"; };
 		841E814C1D809C360096A846 /* Soduto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto.entitlements; sourceTree = "<group>"; };
@@ -368,7 +371,6 @@
 		F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacToRemoteInputService.swift; sourceTree = "<group>"; };
 		F826E6C62DB302F000E736CE /* RunCommandService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCommandService.swift; sourceTree = "<group>"; };
 		F826E6C82DB419AF00E736CE /* RunCommandsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCommandsWindowController.swift; sourceTree = "<group>"; };
-		F826E6CC2DB4F12500E736CE /* ModernUIStyleKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernUIStyleKit.swift; sourceTree = "<group>"; };
 		F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityReportService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -526,8 +528,9 @@
 		8421A8E41D761271008AC833 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				F826E6CC2DB4F12500E736CE /* ModernUIStyleKit.swift */,
+				31F8A6092F4A642E00CA5A61 /* DeviceInfoView.swift */,
 				84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */,
+				31F8A60A2F4A642E00CA5A61 /* DevicesListView.swift */,
 				8492379C1DE1C55900D95BBA /* DeviceMenu.swift */,
 				84651A731E59F9C900D17601 /* MenuView.swift */,
 				31F8A6032F4A53DC00CA5A61 /* PairingView.swift */,
@@ -1065,7 +1068,6 @@
 				311BC2912F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */,
 				F80E30722DBE0D880047D068 /* MacToRemoteInputService.swift in Sources */,
 				84FA45E81DDE088B00EF3992 /* ServiceManager.swift in Sources */,
-				F826E6CD2DB4F12500E736CE /* ModernUIStyleKit.swift in Sources */,
 				F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */,
 				0236B63C1F9936C80020DA9F /* AboutWindowController.swift in Sources */,
 				84FA45DB1DDDCB3D00EF3992 /* DeviceManager.swift in Sources */,
@@ -1136,6 +1138,8 @@
 				84FA45ED1DDF525200EF3992 /* PingService.swift in Sources */,
 				31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */,
 				31366D3A2F412C7E0013911D /* TLSTrustHandler.swift in Sources */,
+				31F8A60B2F4A642E00CA5A61 /* DeviceInfoView.swift in Sources */,
+				31F8A60C2F4A642E00CA5A61 /* DevicesListView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
