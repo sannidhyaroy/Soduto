@@ -55,8 +55,8 @@ class DeviceInfoWindowController: NSWindowController {
             let deviceStatusInfo: String = device.isReachable ? NSLocalizedString("Reachable", comment: "Device status") : NSLocalizedString("Unreachable", comment: "Device status")
             self.statusLabel?.stringValue = deviceTypeInfo.isEmpty ? deviceStatusInfo : "\(deviceTypeInfo) - \(deviceStatusInfo)"
             self.deviceIDLabel?.stringValue = device.id
-            self.localCertificateLabel?.stringValue = device.hostCertificate != nil ? CertificateUtils.digestString(for: device.hostCertificate!) : "-"
-            self.remoteCertificateLabel?.stringValue = device.peerCertificate != nil ? CertificateUtils.digestString(for: device.peerCertificate!) : "-"
+            self.localCertificateLabel?.stringValue = device.hostCertificate != nil ? CertificateUtils.sha256FormattedDigestString(for: device.hostCertificate!) : "-"
+            self.remoteCertificateLabel?.stringValue = device.peerCertificate != nil ? CertificateUtils.sha256FormattedDigestString(for: device.peerCertificate!) : "-"
         }
         else {
             self.deviceTypeImage?.image = nil
