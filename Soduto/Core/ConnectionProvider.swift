@@ -28,7 +28,6 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     static public let minTcpPort: UInt16 = 1716
     static public let maxTcpPort: UInt16 = 1764
     static public let minVersionWithSSLSupport: UInt = 6
-    static public let minAnnouncementInterval: TimeInterval = 30.0
     static public let broadcastAnnouncementNotification: Notification.Name = Notification.Name(rawValue: "com.soduto.ConnectionProvider.broadcastAnnouncement")
     static public let networkBecameReachableNotification: Notification.Name = Notification.Name(rawValue: "com.soduto.ConnectionProvider.networkBecameReachable")
     
@@ -39,8 +38,12 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     private let pathMonitorQueue: DispatchQueue = DispatchQueue(label: "com.soduto.NetworkMonitor")
     private var pendingConnections: Set<Connection> = Set<Connection>()
     private var isStarted: Bool = false
-    private var lastAnnouncementTime: TimeInterval = 0.0
-    private var announcementTimer: Timer? = nil
+    
+    /// Timestamp when network services were last started (for cooldown).
+    private var lastStartTime: Date?
+    
+    /// Minimum time between network restarts to avoid race conditions.
+    private static let restartCooldown: TimeInterval = 3.0
     
     // MARK: Network Properties
     
@@ -91,6 +94,28 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     }
     
     public func start() {
+        // Only start monitoring network reachability.
+        // Actual network services (UDP, TCP, mDNS) are started by becameReachable()
+        // when NWPathMonitor confirms the network is available.
+        self.pathMonitor.start(queue: self.pathMonitorQueue)
+    }
+    
+    public func stop() {
+        self.pathMonitor.cancel()
+        stopNetworkServices()
+    }
+    
+    public func restart() {
+        guard self.isStarted else { return }
+        stopNetworkServices()
+        startNetworkServices()
+    }
+    
+    // MARK: - Network Services Lifecycle
+    
+    /// Starts all network services (UDP, TCP, mDNS) and broadcasts announcement.
+    private func startNetworkServices() {
+        self.lastStartTime = Date()
         
         // Listen for device announcement broadcasts
         startUdp()
@@ -103,19 +128,13 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         // Start mDNS discovery after TCP server is ready
         startMDNS()
         
-        // Start monitoring network reachability
-        self.pathMonitor.start(queue: self.pathMonitorQueue)
+        // Broadcast our presence
         broadcastAnnouncement()
-        
-        // Speculative broadcasts after some intervals.
-        _ = Timer.compatScheduledTimer(withTimeInterval: 40.0, repeats: false) { _ in self.broadcastAnnouncement() }
-        _ = Timer.compatScheduledTimer(withTimeInterval: 80.0, repeats: false) { _ in self.broadcastAnnouncement() }
-        _ = Timer.compatScheduledTimer(withTimeInterval: 120.0, repeats: false) { _ in self.broadcastAnnouncement() }
     }
     
-    public func stop() {
+    /// Stops all network services.
+    private func stopNetworkServices() {
         self.isStarted = false
-        self.pathMonitor.cancel()
         stopMDNS()
         stopUdp()
         stopTcpServer()
@@ -136,28 +155,16 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         guard self.tcpListeningPort > 0 else { return }
         let tcpPort = self.tcpListeningPort
         
-        guard self.announcementTimer == nil else { return }
+        Logger.network.debug("Broadcasting self-announcement")
         
-        if self.lastAnnouncementTime + ConnectionProvider.minAnnouncementInterval < CACurrentMediaTime() {
-            
-            Logger.network.debug("Broadcasting self-announcement")
-            
-            // Try to fill ARP table with all reachable addresses
-            NetworkUtils.pingLocalNetwork()
-            
-            let properties: DataPacket.Body = [
-                DataPacket.IdentityProperty.tcpPort.rawValue: Int(tcpPort) as AnyObject
-            ]
-            let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
-            sendBroadcast(packet: packet)
-            self.lastAnnouncementTime = CACurrentMediaTime()
-        }
-        else {
-            self.announcementTimer = Timer.compatScheduledTimer(withTimeInterval: ConnectionProvider.minAnnouncementInterval, repeats: false) { _ in
-                self.announcementTimer = nil
-                self.broadcastAnnouncement()
-            }
-        }
+        // Try to fill ARP table with all reachable addresses
+        NetworkUtils.pingLocalNetwork()
+        
+        let properties: DataPacket.Body = [
+            DataPacket.IdentityProperty.tcpPort.rawValue: Int(tcpPort) as AnyObject
+        ]
+        let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
+        sendBroadcast(packet: packet)
     }
     
     /// Sends the identity packet as a UDP broadcast.
@@ -594,13 +601,34 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     // MARK: Private methods
     
     private func becameReachable() {
-        Logger.network.debug("Became reachable")
+        Logger.network.debug("Network became reachable")
         NotificationCenter.default.post(name: ConnectionProvider.networkBecameReachableNotification, object: self)
-        self.restart()
+        
+        if self.isStarted {
+            // Check cooldown to avoid race conditions from rapid NWPathMonitor callbacks
+            if let lastStart = self.lastStartTime,
+               Date().timeIntervalSince(lastStart) < ConnectionProvider.restartCooldown {
+                // Schedule restart after cooldown expires
+                let delay = ConnectionProvider.restartCooldown - Date().timeIntervalSince(lastStart)
+                Logger.network.debug("Network services recently started, delaying restart by \(delay, privacy: .public)s")
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.restart()
+                }
+                return
+            }
+            
+            // Network changed (e.g., WiFi → Ethernet) - restart to pick up new interfaces
+            Logger.network.debug("Network change detected - restarting network services")
+            stopNetworkServices()
+        }
+        
+        startNetworkServices()
     }
     
     private func becameUnreachable() {
-        Logger.network.debug("Became unreachable")
+        Logger.network.debug("Network became unreachable")
+        // Optionally stop services when network is down
+        // For now, keep them running - they'll fail gracefully and resume when network returns
     }
     
 }
