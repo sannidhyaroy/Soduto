@@ -94,6 +94,12 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         return self.connections.first?.shouldShowVerificationCode ?? false
     }
     
+    /// The peer's protocol version from the active connection.
+    /// Returns nil if no connection is active.
+    public var protocolVersion: UInt? {
+        return self.connections.first?.peerProtocolVersion
+    }
+    
     public private(set) var isReachable: Bool = false {
         didSet {
             if oldValue != self.isReachable {

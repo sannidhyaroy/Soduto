@@ -44,6 +44,10 @@ public class DefaultPairingHandler: Pairable {
     private var pairingTimeout: Timer? = nil
     private var pairingTimestamp: Int64? = nil
     
+    /// The peer's protocol version. Defaults to 7 for compatibility.
+    /// Updated by Connection when peer's version is known.
+    private var peerProtocolVersion: UInt = 7
+    
     /// The pair verification code for protocol v8+.
     /// This 8-character code (formatted as "XXXX XXXX") should be displayed to users
     /// during pairing so they can verify both devices show the same code.
@@ -105,7 +109,10 @@ public class DefaultPairingHandler: Pairable {
         
         switch self.pairingStatus {
         case .Unpaired:
-            self.pairingTimestamp = Int64(Date().timeIntervalSince1970)
+            // Only set timestamp for v8+ peers to ensure verification codes match
+            // v7: timestamp is nil → code without timestamp (stable)
+            // v8: timestamp set → code with timestamp (dynamic, per KDE security advisory)
+            self.pairingTimestamp = (peerProtocolVersion >= 8) ? Int64(Date().timeIntervalSince1970) : nil
             self.pairingStatus = .Requested
             _ = self.delegate!.send(DataPacket.pairPacket(timestamp: self.pairingTimestamp))
             self.generateVerificationCode()
@@ -187,6 +194,12 @@ public class DefaultPairingHandler: Pairable {
         generateVerificationCode()
     }
     
+    /// Sets the peer's protocol version.
+    /// Should be called by Connection when the peer's version is known.
+    internal func setPeerProtocolVersion(_ version: UInt) {
+        self.peerProtocolVersion = version
+    }
+    
     // MARK: Private methods
     
     private func canSetPaired() -> Bool {
@@ -212,6 +225,7 @@ public class DefaultPairingHandler: Pairable {
             return
         }
         
+        // Returns nil if public key extraction fails
         verificationCode = CertificateUtils.pairVerificationCode(
             localCert: hostCert,
             remoteCert: peerCert,

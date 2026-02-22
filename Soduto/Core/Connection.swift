@@ -246,6 +246,9 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         // Store peer's protocol version (default to 7 for backwards compatibility)
         self.peerProtocolVersion = (try? packet.getProtocolVersion()) ?? 7
         
+        // Pass protocol version to pairing handler so it can generate correct verification codes
+        self.pairingHandler!.setPeerProtocolVersion(self.peerProtocolVersion)
+        
         // Note: pairingHandler's pairingDelegate and impersonateAs are NOT set because
         // Connection handles incoming pairing packets directly in handlePairingPacket(),
         // while outgoing pairing actions (requestPairing, acceptPairing, etc.) delegate
@@ -793,10 +796,11 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             if pairFlag {
                 switch pairingHandler.pairingStatus {
                 case .Unpaired:
-                    if self.peerProtocolVersion >= 8 {
-                        let requestTimestamp = try? packet.getPairingTimestamp()
-                        pairingHandler.setPairingTimestamp(requestTimestamp)
-                    }
+                    // Always call setPairingTimestamp to trigger verification code generation
+                    // v7: timestamp is nil (packet doesn't include it) → generates code without timestamp
+                    // v8: timestamp extracted from packet → generates code with timestamp
+                    let requestTimestamp = (self.peerProtocolVersion >= 8) ? (try? packet.getPairingTimestamp()) : nil
+                    pairingHandler.setPairingTimestamp(requestTimestamp)
                     
                     // Peer initiates pairing - notify delegate with PairingRequest
                     pairingHandler.setStatus(.RequestedByPeer)

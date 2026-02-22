@@ -23,14 +23,14 @@ struct DeviceInfoView: View {
                 .padding(.bottom, 16)
             
             Divider()
-
+            
             // Content
             VStack(spacing: 24) {
                 generalSection
                 certificatesSection
             }
             .padding(20)
-
+            
             Divider()
             
             // Footer
@@ -84,6 +84,11 @@ struct DeviceInfoView: View {
             sectionHeader(title: "General")
             
             infoRow(label: "Device ID", value: device.id, monospaced: true)
+            
+            // Only show protocol version when device is reachable
+            if device.isReachable, let protocolVersion = device.protocolVersion {
+                infoRow(label: "Protocol Version", value: String(protocolVersion))
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
