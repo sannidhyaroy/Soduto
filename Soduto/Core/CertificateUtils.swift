@@ -301,16 +301,16 @@ public class CertificateUtils {
     /// - Parameters:
     ///   - localCert: The local device's certificate
     ///   - remoteCert: The remote device's certificate
-    /// - Returns: An 8-character verification code formatted as "XXXX XXXX"
-    public class func pairVerificationCode(localCert: SecCertificate, remoteCert: SecCertificate, timestamp: Int64? = nil) -> String {
-        if let localPublicKey = publicKeyDERBytes(for: localCert),
-           let remotePublicKey = publicKeyDERBytes(for: remoteCert) {
-            return pairVerificationCode(localPublicKey: localPublicKey, remotePublicKey: remotePublicKey, timestamp: timestamp)
+    ///   - timestamp: Optional pairing timestamp (required for protocol v8 requests)
+    /// - Returns: An 8-character verification code formatted as "XXXX XXXX", or nil if public key extraction fails
+    public class func pairVerificationCode(localCert: SecCertificate, remoteCert: SecCertificate, timestamp: Int64? = nil) -> String? {
+        guard let localPublicKey = publicKeyDERBytes(for: localCert),
+              let remotePublicKey = publicKeyDERBytes(for: remoteCert) else {
+            Logger.config.error("Failed to extract public keys for verification code generation")
+            return nil
         }
         
-        let localHash = sha256DigestString(for: localCert)
-        let remoteHash = sha256DigestString(for: remoteCert)
-        return pairVerificationCode(localCertHash: localHash, remoteCertHash: remoteHash, timestamp: timestamp)
+        return pairVerificationCode(localPublicKey: localPublicKey, remotePublicKey: remotePublicKey, timestamp: timestamp)
     }
     
     public class func validate(certificate: SecCertificate) -> Bool {
