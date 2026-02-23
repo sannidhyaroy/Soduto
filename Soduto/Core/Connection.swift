@@ -104,10 +104,6 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     /// Defaults to 7 for backwards compatibility with older devices.
     public private(set) var peerProtocolVersion: UInt = 7
     
-    /// Whether this is an incoming connection (peer initiated TCP to us).
-    /// Used to determine TLS role: incoming = TLS client, outgoing = TLS server.
-    public private(set) var isIncomingConnection: Bool = false
-    
     /// The pair verification code for protocol v8+ pairing.
     /// This code should be displayed to users during pairing so they can verify
     /// both devices show the same code (MITM protection).
@@ -205,8 +201,6 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         self.state = .Initializing
         self.uploadQueue = Connection.createDispatchQueue(withLabel: "Payload upload queue")
         self.downloadQueue = Connection.createDispatchQueue(withLabel: "Payload download queue")
-        self.isIncomingConnection = true
-        
         super.init()
         
         // Set up the channel pipeline
@@ -236,6 +230,13 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         self.identity = packet
         self.pairingHandler = DefaultPairingHandler(config: deviceConfig)
         self.pairingHandler!.delegate = self
+        self.pairingHandler!.timeoutHandler = { [weak self] in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                self.pairingDelegate?.connection(self, pairingFailed: DefaultPairingHandler.Error.timedOut)
+                self.pairingDelegate?.connection(self, pairingStatusChanged: .Unpaired)
+            }
+        }
         
         // Store peer's protocol version (default to 7 for backwards compatibility)
         self.peerProtocolVersion = (try? packet.getProtocolVersion()) ?? 7

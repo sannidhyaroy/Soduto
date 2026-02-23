@@ -30,12 +30,13 @@ public class DefaultPairingHandler: Pairable {
         case alreadyPaired
         case pairingAlreadyRequested
         case declinedByPeer
+        case timedOut
     }
     
     
     // MARK: Properties
     
-    static let pairingTimoutInterval: TimeInterval = 30.0
+    static let pairingTimoutInterval: TimeInterval = 25.0
     
     /// A delegate object providing needed services for this handler (like packet sending)
     public weak var delegate: PairingHandlerDelegate? = nil
@@ -43,6 +44,9 @@ public class DefaultPairingHandler: Pairable {
     private let config: DeviceConfiguration
     private var pairingTimeout: Timer? = nil
     private var pairingTimestamp: Int64? = nil
+    
+    /// Called when pairing times out while still in requested/requestedByPeer state.
+    internal var timeoutHandler: (() -> Void)?
     
     /// The peer's protocol version. Defaults to 7 for compatibility.
     /// Updated by Connection when peer's version is known.
@@ -92,12 +96,22 @@ public class DefaultPairingHandler: Pairable {
             if self.pairingStatus == .Requested || self.pairingStatus == .RequestedByPeer {
                 let status = self.pairingStatus
                 let timeoutInterval = DefaultPairingHandler.pairingTimoutInterval
-                self.pairingTimeout = Timer.compatScheduledTimer(withTimeInterval: timeoutInterval, repeats: false) { [weak self] (timer) in
+                
+                // Pairing status changes can come from network threads. Schedule timeout
+                // on main run loop so the timer fires reliably for both incoming/outgoing requests.
+                DispatchQueue.main.async { [weak self] in
                     guard let strongSelf = self else { return }
-                    // Every change to pairingStatus should invalidate previous timeout,
-                    // so if we are here, pairingStatus should still be the same
-                    assert(strongSelf.pairingStatus == status, "pairingStatus expected to not be changed")
-                    strongSelf.declinePairing()
+                    guard strongSelf.pairingStatus == status else { return }
+                    
+                    strongSelf.pairingTimeout?.invalidate()
+                    strongSelf.pairingTimeout = Timer.compatScheduledTimer(withTimeInterval: timeoutInterval, repeats: false) { [weak self] _ in
+                        guard let strongSelf = self else { return }
+                        // Every change to pairingStatus should invalidate previous timeout,
+                        // so if we are here, pairingStatus should still be the same.
+                        guard strongSelf.pairingStatus == status else { return }
+                        strongSelf.timeoutHandler?()
+                        strongSelf.declinePairing()
+                    }
                 }
             }
             // Note: Connection handles pairingDelegate callbacks directly via ConnectionPairingDelegate

@@ -26,6 +26,7 @@ class PairingWindowController: NSWindowController {
     private let viewModel: PairingViewModel
     private let deviceId: Device.Id
     private var stateCancellable: AnyCancellable?
+    private var suppressAutoDeclineOnClose = false
     
     private static let touchBarCancelItemId = NSTouchBarItem.Identifier("com.soduto.soduto.pairing.touchbar.cancel")
     private static let touchBarAcceptItemId = NSTouchBarItem.Identifier("com.soduto.soduto.pairing.touchbar.accept")
@@ -107,10 +108,9 @@ class PairingWindowController: NSWindowController {
         controller.viewModel.state = state
     }
     
-    /// Update the verification code for a device's pairing window
-    static func updateVerificationCode(for deviceId: Device.Id, code: String?) {
-        guard let controller = activeWindows[deviceId] else { return }
-        controller.viewModel.verificationCode = code
+    /// Get current pairing window state for a device.
+    static func state(for deviceId: Device.Id) -> PairingState? {
+        return activeWindows[deviceId]?.viewModel.state
     }
     
     /// Close the pairing window for a device
@@ -185,6 +185,7 @@ class PairingWindowController: NSWindowController {
         viewModel.onDecline = { [weak self, weak device] in
             guard let self = self, let device = device else { return }
             Logger.ui.debug("Pairing window: user declined pairing for \(device.name, privacy: .public)")
+            self.suppressAutoDeclineOnClose = true
             device.declinePairing()
             self.close()
         }
@@ -192,6 +193,7 @@ class PairingWindowController: NSWindowController {
         viewModel.onCancel = { [weak self, weak device] in
             guard let self = self, let device = device else { return }
             Logger.ui.debug("Pairing window: user cancelled pairing for \(device.name, privacy: .public)")
+            self.suppressAutoDeclineOnClose = true
             device.declinePairing()
             self.close()
         }
@@ -376,7 +378,7 @@ extension PairingWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         // If pairing is still in progress when window closes, cancel it
         let state = viewModel.state
-        if state == .outgoingRequest || state == .incomingRequest {
+        if !suppressAutoDeclineOnClose && (state == .outgoingRequest || state == .incomingRequest) {
             Logger.ui.debug("Pairing window closed while pairing in progress - cancelling")
             viewModel.device?.declinePairing()
         }

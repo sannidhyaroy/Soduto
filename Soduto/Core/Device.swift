@@ -36,6 +36,7 @@ public enum DeviceError: Error {
 public protocol DeviceDelegate: AnyObject {
     func device(_ device: Device, didChangePairingStatus pairingStatus: PairingStatus)
     func device(_ device: Device, didReceivePairingRequest pairingRequest: PairingRequest)
+    func device(_ device: Device, pairingFailed error: Error)
     func device(_ device: Device, didChangeReachabilityStatus isReachable: Bool)
     func serviceActions(for device: Device) -> [ServiceAction]
 }
@@ -299,6 +300,7 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
     
     public func connection(_ connection: Connection, pairingFailed error: Error) {
         Logger.device.debug("Connection pairing failed: \(error, privacy: .public)")
+        self.delegate?.device(self, pairingFailed: error)
     }
     
     public func connection(_ connection: Connection, pairingStatusChanged status: PairingStatus) {

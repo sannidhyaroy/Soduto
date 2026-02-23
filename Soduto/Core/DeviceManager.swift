@@ -143,7 +143,11 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
             case .Unpaired:
                 // If there's an active pairing window, it means pairing was rejected/cancelled
                 if PairingWindowController.isActive(for: device.id) {
-                    PairingWindowController.updateState(for: device.id, state: .failed)
+                    // Preserve explicit timeout state if it was already set by pairingFailed callback.
+                    if let state = PairingWindowController.state(for: device.id),
+                       state == .outgoingRequest || state == .incomingRequest {
+                        PairingWindowController.updateState(for: device.id, state: .failed)
+                    }
                 }
             default:
                 break
@@ -155,6 +159,21 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     
     public func device(_ device: Device, didReceivePairingRequest request: PairingRequest) {
         self.delegate?.deviceManager(self, didReceivePairingRequest: request, forDevice: device)
+    }
+    
+    public func device(_ device: Device, pairingFailed error: Error) {
+        Logger.device.debug("device(<\(String(describing: device), privacy: .public)> pairingFailed:<\(error, privacy: .public)>)")
+        
+        DispatchQueue.main.async {
+            guard PairingWindowController.isActive(for: device.id) else { return }
+            
+            if let pairingError = error as? DefaultPairingHandler.Error,
+               pairingError == .timedOut {
+                PairingWindowController.updateState(for: device.id, state: .timeout)
+            } else {
+                PairingWindowController.updateState(for: device.id, state: .failed)
+            }
+        }
     }
     
     
