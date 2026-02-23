@@ -22,7 +22,7 @@ struct IdentifiableDevice: Identifiable {
 class DevicesListViewModel: ObservableObject {
     @Published var devices: [Device] = []
     @Published var showingDeviceInfo: IdentifiableDevice?
-
+    
     weak var deviceDataSource: DeviceDataSource?
     weak var deviceManager: DeviceManager?
     
@@ -96,6 +96,7 @@ class DevicesListViewModel: ObservableObject {
 struct DevicesListView: View {
     @ObservedObject var viewModel: DevicesListViewModel
     @State private var hoveredDeviceId: Device.Id?
+    @State private var showingForceReconnectAlert = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -114,17 +115,19 @@ struct DevicesListView: View {
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.borderless)
+                .foregroundStyle(.yellow)
                 .help("Discover devices (⌘R)")
                 .keyboardShortcut("r", modifiers: .command)
                 
                 Button(action: {
-                    viewModel.forceReconnect()
+                    showingForceReconnectAlert = true
                 }) {
                     Label("Force Reconnect", systemImage: "bolt.slash")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.borderless)
-                .help("⚠ Force reconnect: Closes all TCP connections and rediscovers devices. Do not use during file transfers, notification syncing, or other important tasks.")
+                .foregroundStyle(.red)
+                .help("⚠ Zap reconnect: closes active TCP connections, waits for teardown, then rediscovers devices.")
             }
             .padding(.horizontal, 16)
             .padding(.vertical,6)
@@ -140,6 +143,18 @@ struct DevicesListView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 300)
+        .alert(isPresented: $showingForceReconnectAlert) {
+            Alert(
+                title: Text("Zap Connections and Reconnect?"),
+                message: Text(
+                    "⚠ WARNING: EXPERIMENTAL FEATURE AHEAD\n\nThis will immediately closes all active TCP connections, waits about 10 seconds for teardown, then triggers rediscovery and reconnect.\nUse this to immediately hard refresh available devices.\n\nTIP: If devices do not reconnect automatically, use the Refresh (⌘R) button."
+                ),
+                primaryButton: .destructive(Text("Proceed")) {
+                    viewModel.forceReconnect()
+                },
+                secondaryButton: .cancel()
+            )
+        }
     }
     
     // MARK: - Empty State
@@ -204,9 +219,9 @@ struct DeviceRowView: View {
     let onPairTap: () -> Void
     let onUnpairTap: () -> Void
     let onInfoTap: () -> Void
-
+    
     @State private var isBubbleHovered = false
-
+    
     var body: some View {
         HStack(spacing: 12) {
             // Device icon bubble
@@ -217,19 +232,19 @@ struct DeviceRowView: View {
                           ? Color.accentColor.opacity(0.15)
                           : Color(nsColor: .controlBackgroundColor))
                     .frame(width: 44, height: 44)
-
+                
                 // Device icon
                 Image(systemName: device.type.sfSymbolName)
                     .font(.system(size: 20))
                     .foregroundColor(device.isReachable ? .primary : .secondary)
                     .opacity(device.isReachable && !isBubbleHovered ? 1.0 : 0.5)
-
+                
                 // Info icon overlay on hover
                 if isBubbleHovered {
                     Circle()
                         .fill(Color.black.opacity(0.6))
                         .frame(width: 44, height: 44)
-
+                    
                     Image(systemName: "info.circle.fill")
                         .font(.system(size: 18))
                         .foregroundColor(.white)
@@ -245,33 +260,33 @@ struct DeviceRowView: View {
                 }
             }
             .help(isBubbleHovered ? "Show device info" : "")
-
+            
             // Device info
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.name)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.primary)
                     .opacity(device.isReachable ? 1.0 : 0.5)
-
+                
                 HStack(spacing: 4) {
                     if device.type != .Unknown {
                         Text(deviceTypeString(device.type))
                     }
-
+                    
                     if device.type != .Unknown {
                         Text("•")
                             .foregroundColor(.secondary)
                     }
-
+                    
                     Text(device.isReachable ? "reachable" : "unreachable")
                         .foregroundColor(device.isReachable ? .green : .secondary)
                 }
                 .font(.system(size: 11))
                 .opacity(device.isReachable ? 0.8 : 0.4)
             }
-
+            
             Spacer()
-
+            
             // Pair/Unpair button
             pairButton
         }
