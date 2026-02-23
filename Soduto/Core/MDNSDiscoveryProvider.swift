@@ -119,15 +119,6 @@ public class MDNSDiscoveryProvider {
         Logger.network.info("mDNS provider stopped")
     }
     
-    /// Restarts mDNS services (useful after network changes).
-    public func restart() {
-        let port = tcpPort
-        stop()
-        if port > 0 {
-            start(tcpPort: port)
-        }
-    }
-    
     // MARK: - Advertisement (NetService)
     
     /// Starts advertising this device via mDNS using NetService.
@@ -290,20 +281,19 @@ public class MDNSDiscoveryProvider {
     
     // MARK: - Endpoint Resolution
     
-    /// Resolves an NWEndpoint to an IP address, preferring IPv4.
+    /// Resolves an NWEndpoint to an IP address.
     private func resolveEndpoint(_ endpoint: NWEndpoint, deviceId: String, tcpPort: UInt16) {
-        // First try to extract any IPv4 address directly from connection paths
-        resolveWithIPv4Preference(endpoint: endpoint, deviceId: deviceId, tcpPort: tcpPort)
+        // Resolve endpoint using Network framework path resolution.
+        resolveEndpointAddress(endpoint: endpoint, deviceId: deviceId, tcpPort: tcpPort)
     }
     
     /// Resolves an mDNS endpoint to an IP address using NWConnection.
     /// Once resolved, notifies the delegate which will send UDP via the normal channel.
     /// Now supports link-local IPv6 addresses (e.g., "fe80::1234%en0") thanks to
     /// NetworkUtils.createSocketAddress() using getaddrinfo().
-    private func resolveWithIPv4Preference(endpoint: NWEndpoint, deviceId: String, tcpPort: UInt16) {
-        // Create parameters - prefer wifi interface
+    private func resolveEndpointAddress(endpoint: NWEndpoint, deviceId: String, tcpPort: UInt16) {
+        // Resolve using whatever interface is active (Wi-Fi, Ethernet, etc.).
         let parameters = NWParameters.udp
-        parameters.requiredInterfaceType = .wifi
         
         // Create a temporary connection just to resolve the endpoint
         let connection = NWConnection(to: endpoint, using: parameters)
