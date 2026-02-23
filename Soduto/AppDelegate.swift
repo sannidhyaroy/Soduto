@@ -98,7 +98,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     
     func deviceManager(_ manager: DeviceManager, didReceivePairingRequest request: PairingRequest, forDevice device: Device) {
         Logger.general.debug("deviceManager(<\(String(describing: request), privacy: .public)> didReceivePairingRequest:<\(String(describing: request), privacy: .public)> forDevice:<\(String(describing: device), privacy: .public)>)")
-        PairingInterfaceController.showPairingNotification(for: device)
+        PairingInterfaceController.showPairingWindow(for: device)
     }
     
     

@@ -7,37 +7,13 @@
 //
 
 import Foundation
-import UserNotifications
 
-/// Handles the pairing notification UI and user responses.
-public class PairingInterfaceController: UserNotificationActionHandler {
-    
-    private static let deviceIdProperty = "com.soduto.pairinginterfacecontroller.deviceId"
-    
-    /// Handles user responses to pairing notifications.
-    ///
-    /// Supports the following actions:
-    /// - **pair**: Accepts the pairing request from the device
-    /// - **decline**: Declines the pairing request from the device
-    public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
-        
-        guard let deviceId = response.notification.request.content.userInfo[deviceIdProperty] as? Device.Id else {
-            fatalError("User info with device id property expected to be provided for pairing notification")
-        }
-        
-        switch response.actionIdentifier {
-        case "pair":
-            context.deviceManager.device(withId: deviceId)?.acceptPairing()
-        case "decline", UNNotificationDismissActionIdentifier:
-            context.deviceManager.device(withId: deviceId)?.declinePairing()
-        default:
-            break
-        }
-    }
+/// Handles the pairing window UI entry points and updates.
+public class PairingInterfaceController {
     
     /// Shows the pairing window for an incoming pairing request.
     /// - Parameter device: The device requesting to be paired.
-    public static func showPairingNotification(for device: Device) {
+    public static func showPairingWindow(for device: Device) {
         DispatchQueue.main.async {
             PairingWindowController.showIncomingRequest(for: device)
         }
