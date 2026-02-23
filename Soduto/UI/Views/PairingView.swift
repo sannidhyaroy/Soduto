@@ -11,10 +11,10 @@ import SwiftUI
 // MARK: - Pairing State
 
 enum PairingState: Equatable {
-    case outgoingRequest      // We initiated pairing, waiting for response
+    case outgoingRequest      // Initiated pairing, waiting for response
     case incomingRequest      // Remote device requested pairing
     case success              // Pairing completed successfully
-    case failed(String)       // Pairing failed with error message
+    case failed               // Pairing failed
     case timeout              // Pairing request timed out
 }
 
@@ -26,6 +26,7 @@ class PairingViewModel: ObservableObject {
     @Published var deviceName: String
     @Published var deviceType: DeviceType
     @Published var verificationCode: String?
+    @Published var peerProtocolVersion: UInt?
     
     weak var device: Device?
     var onAccept: (() -> Void)?
@@ -39,15 +40,17 @@ class PairingViewModel: ObservableObject {
         self.deviceName = device.name
         self.deviceType = device.type
         self.verificationCode = device.verificationCode
+        self.peerProtocolVersion = device.protocolVersion
         self.state = state
     }
     
     /// Initialize without a Device (for previews/testing)
-    init(deviceName: String, deviceType: DeviceType, verificationCode: String?, state: PairingState) {
+    init(deviceName: String, deviceType: DeviceType, verificationCode: String?, peerProtocolVersion: UInt? = nil, state: PairingState) {
         self.device = nil
         self.deviceName = deviceName
         self.deviceType = deviceType
         self.verificationCode = verificationCode
+        self.peerProtocolVersion = peerProtocolVersion
         self.state = state
     }
     
@@ -77,45 +80,84 @@ struct PairingView: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-                .frame(height: 24)
-            
-            // Soduto app icon
-            Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSImage())
-                .resizable()
-                .frame(width: 64, height: 64)
-            
+                .frame(height: 10)
+
+            // Status icon or device info based on state
+            statusSection
+
             Spacer()
-                .frame(height: 16)
-            
-            // Device info row
-            HStack(spacing: 8) {
-                Image(systemName: viewModel.deviceType.sfSymbolName)
-                    .font(.system(size: 16))
-                    .foregroundColor(.secondary)
-                
-                Text(titleText)
-                    .font(.headline)
-            }
-            
-            Spacer()
-                .frame(height: 24)
-            
+                .frame(height: 22)
+
             // Content based on state
             contentView
-            
+
             Spacer()
-                .frame(height: 24)
-            
+                .frame(height: spacingBeforeButtons)
+
             // Action buttons
             actionButtons
-            
+                .frame(maxWidth: .infinity)
+
             Spacer()
-                .frame(height: 20)
+                .frame(height: spacingAfterButtons)
         }
-        .frame(width: 320)
+        .frame(maxWidth: 280)
         .padding(.horizontal, 24)
         .onChange(of: viewModel.state) { _, newState in
             handleStateChange(newState)
+        }
+    }
+    
+    private var spacingBeforeButtons: CGFloat {
+        viewModel.state == .incomingRequest ? 20 : 24
+    }
+    
+    private var spacingAfterButtons: CGFloat {
+        viewModel.state == .incomingRequest ? 32 : 24
+    }
+    
+    // MARK: - Status Section
+    
+    @ViewBuilder
+    private var statusSection: some View {
+        VStack(spacing: 10) {
+            ZStack(alignment: .bottomTrailing) {
+                // Soduto app icon
+                Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSImage())
+                    .resizable()
+                    .frame(width: 56, height: 56)
+                
+                // Status badge
+                if viewModel.state == .success {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.green)
+                        .background(Circle().fill(Color(nsColor: .windowBackgroundColor)).frame(width: 24, height: 24))
+                } else if case .failed = viewModel.state {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.red)
+                        .background(Circle().fill(Color(nsColor: .windowBackgroundColor)).frame(width: 24, height: 24))
+                } else if case .timeout = viewModel.state {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.red)
+                        .background(Circle().fill(Color(nsColor: .windowBackgroundColor)).frame(width: 24, height: 24))
+                }
+            }
+            
+            HStack(spacing: 6) {
+                Image(systemName: viewModel.deviceType.sfSymbolName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                Text(titleText)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
     
@@ -124,13 +166,15 @@ struct PairingView: View {
     private var titleText: String {
         switch viewModel.state {
         case .outgoingRequest:
-            return "Pairing with \(viewModel.deviceName)"
+            return "Waiting for \(viewModel.deviceName)"
         case .incomingRequest:
             return "\(viewModel.deviceName) wants to pair"
         case .success:
-            return "Paired with \(viewModel.deviceName)"
-        case .failed, .timeout:
-            return "Pairing with \(viewModel.deviceName)"
+            return viewModel.deviceName
+        case .failed:
+            return viewModel.deviceName
+        case .timeout:
+            return viewModel.deviceName
         }
     }
     
@@ -142,11 +186,9 @@ struct PairingView: View {
         case .outgoingRequest, .incomingRequest:
             verificationCodeView
         case .success:
-            successView
-        case .failed(let message):
-            failedView(message: message)
-        case .timeout:
-            failedView(message: "Request timed out")
+            successMessageView
+        case .failed, .timeout:
+            errorMessageView
         }
     }
     
@@ -154,60 +196,132 @@ struct PairingView: View {
     
     @ViewBuilder
     private var verificationCodeView: some View {
-        VStack(spacing: 12) {
-            Text("Verification Code")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            
+        VStack(spacing: 16) {
+            // Show verification code if available
             if let code = viewModel.verificationCode {
-                Text(code)
-                    .font(.system(size: 28, weight: .medium, design: .monospaced))
-                    .tracking(2)
+                VStack(spacing: 12) {
+                    Text("Verification Code")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+
+                    Text(code)
+                        .font(.system(size: 36, weight: .semibold, design: .monospaced))
+                        .tracking(3)
+                        .lineLimit(1)
+
+                    Text("Confirm this matches the other device")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .background(Color.green.opacity(0.08))
+                .cornerRadius(10)
             } else {
-                Text("---")
-                    .font(.system(size: 28, weight: .medium, design: .monospaced))
-                    .foregroundColor(.secondary)
+                // Generation failed
+                VStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+
+                        Text("Manual Verification")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+
+                    Text("Verification code generation failed. Accept only if you trust this device")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(10)
             }
-            
-            Text("Confirm this matches the other device")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+
+            // Protocol version warnings (show regardless of code generation)
+            if isOlderProtocol {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.circle")
+                        .foregroundColor(.red)
+                        .font(.caption2)
+
+                    Text("This device uses an older protocol version which may be less secure")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(3)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(6)
+            }
+
+            if isFutureProtocol {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.circle")
+                        .foregroundColor(.blue)
+                        .font(.caption2)
+
+                    Text("This device uses a newer protocol version that may not be compatible with Soduto")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(3)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .background(Color.accentColor.opacity(0.1))
+                .cornerRadius(6)
+            }
         }
     }
     
-    // MARK: - Success View
+    // MARK: - Success Message View
     
     @ViewBuilder
-    private var successView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 48))
-                .foregroundColor(.green)
+    private var successMessageView: some View {
+        VStack(spacing: 8) {
+            Text("Secure pairing completed successfully")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.center)
             
-            Text("Paired successfully!")
-                .font(.headline)
-                .foregroundColor(.primary)
-        }
-    }
-    
-    // MARK: - Failed View
-    
-    @ViewBuilder
-    private func failedView(message: String) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 48))
-                .foregroundColor(.red)
-            
-            Text("Pairing failed")
-                .font(.headline)
-                .foregroundColor(.primary)
-            
-            Text(message)
+            Text("You can now send and receive data with this device")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                .lineLimit(nil)
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
+    // MARK: - Error Message View
+    
+    @ViewBuilder
+    private var errorMessageView: some View {
+        if case .failed = viewModel.state {
+            VStack(spacing: 8) {
+                Text("The peer device rejected this pairing request")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+            }
+        } else if case .timeout = viewModel.state {
+            VStack(spacing: 8) {
+                Text("The pairing request timed out. Make sure the other device is online and accepting connections")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+            }
         }
     }
     
@@ -217,37 +331,80 @@ struct PairingView: View {
     private var actionButtons: some View {
         switch viewModel.state {
         case .outgoingRequest:
-            Button("Cancel Pairing") {
+            Button(role: .cancel) {
                 viewModel.cancel()
+            } label: {
+                Text("Cancel")
+                    .frame(maxWidth: .infinity)
             }
             .keyboardShortcut(.cancelAction)
+            .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .controlSize(.large)
             
         case .incomingRequest:
-            HStack(spacing: 12) {
-                Button("Decline") {
-                    viewModel.decline()
-                }
-                .keyboardShortcut(.cancelAction)
-                
-                Button("Accept") {
+            VStack(spacing: 10) {
+                Button {
                     viewModel.accept()
+                } label: {
+                    Text("Accept")
+                        .frame(maxWidth: .infinity)
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
+                .controlSize(.large)
+                
+                Button(role: .cancel) {
+                    viewModel.decline()
+                } label: {
+                    Text("Decline")
+                        .frame(maxWidth: .infinity)
+                }
+                .keyboardShortcut(.cancelAction)
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+                .controlSize(.large)
             }
+            .frame(maxWidth: .infinity)
             
         case .success:
-            Button("Done") {
+            Button {
                 viewModel.dismiss()
+            } label: {
+                Text("Done")
+                    .frame(maxWidth: .infinity)
             }
             .keyboardShortcut(.defaultAction)
+            .buttonStyle(.borderedProminent)
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .controlSize(.large)
             
         case .failed, .timeout:
-            Button("Close") {
+            Button(role: .destructive) {
                 viewModel.dismiss()
+            } label: {
+                Text("Close")
+                    .frame(maxWidth: .infinity)
             }
             .keyboardShortcut(.defaultAction)
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .controlSize(.large)
         }
+    }
+    
+    // MARK: - Protocol Version Helpers
+
+    private var isOlderProtocol: Bool {
+        guard let version = viewModel.peerProtocolVersion else { return false }
+        return version < DataPacket.protocolVersion
+    }
+
+    private var isFutureProtocol: Bool {
+        guard let version = viewModel.peerProtocolVersion else { return false }
+        return version > DataPacket.protocolVersion
     }
     
     // MARK: - State Change Handler
@@ -274,33 +431,77 @@ struct PairingView: View {
         deviceName: "Galaxy S24",
         deviceType: .Phone,
         verificationCode: "A1B2 C3D4",
+        peerProtocolVersion: 8,
         state: .outgoingRequest
     ))
 }
 
 #Preview("Incoming Request") {
     PairingView(viewModel: PairingViewModel(
-        deviceName: "Galaxy S24",
-        deviceType: .Phone,
-        verificationCode: "A1B2 C3D4",
+        deviceName: "ThinkStation",
+        deviceType: .Desktop,
+        verificationCode: "X1Y2 Z3W4",
+        peerProtocolVersion: 8,
+        state: .incomingRequest
+    ))
+}
+
+#Preview("Incoming Request (Future Protocol)") {
+    PairingView(viewModel: PairingViewModel(
+        deviceName: "Shiny PC",
+        deviceType: .Desktop,
+        verificationCode: "X1Y1 Z3W4",
+        peerProtocolVersion: 9,
+        state: .incomingRequest
+    ))
+}
+
+#Preview("Incoming Request (Older Protocol)") {
+    PairingView(viewModel: PairingViewModel(
+        deviceName: "Potato PC",
+        deviceType: .Unknown,
+        verificationCode: "X1Y2 Z3W4",
+        peerProtocolVersion: 7,
         state: .incomingRequest
     ))
 }
 
 #Preview("Success") {
     PairingView(viewModel: PairingViewModel(
-        deviceName: "Galaxy S24",
-        deviceType: .Phone,
+        deviceName: "ThinkPad T14",
+        deviceType: .Laptop,
         verificationCode: nil,
+        peerProtocolVersion: 8,
         state: .success
     ))
 }
 
 #Preview("Failed") {
     PairingView(viewModel: PairingViewModel(
-        deviceName: "Galaxy S24",
+        deviceName: "Sony Bravia",
+        deviceType: .TV,
+        verificationCode: nil,
+        peerProtocolVersion: 8,
+        state: .failed
+    ))
+}
+
+#Preview("Timeout") {
+    PairingView(viewModel: PairingViewModel(
+        deviceName: "Pixel 9",
         deviceType: .Phone,
         verificationCode: nil,
-        state: .failed("Connection was rejected")
+        peerProtocolVersion: 8,
+        state: .timeout
+    ))
+}
+
+#Preview("Manual Verification") {
+    PairingView(viewModel: PairingViewModel(
+        deviceName: "iPad",
+        deviceType: .Tablet,
+        verificationCode: nil,
+        peerProtocolVersion: 8,
+        state: .incomingRequest
     ))
 }

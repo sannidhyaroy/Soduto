@@ -108,12 +108,6 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     /// Used to determine TLS role: incoming = TLS client, outgoing = TLS server.
     public private(set) var isIncomingConnection: Bool = false
     
-    /// Whether to show the pair verification code during pairing.
-    /// Only true when both devices support protocol v8+.
-    public var shouldShowVerificationCode: Bool {
-        return peerProtocolVersion >= 8
-    }
-    
     /// The pair verification code for protocol v8+ pairing.
     /// This code should be displayed to users during pairing so they can verify
     /// both devices show the same code (MITM protection).

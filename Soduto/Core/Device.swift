@@ -88,12 +88,6 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         return self.connections.first?.verificationCode
     }
     
-    /// Whether to show the pair verification code during pairing.
-    /// Only true when both devices support protocol v8+.
-    public var shouldShowVerificationCode: Bool {
-        return self.connections.first?.shouldShowVerificationCode ?? false
-    }
-    
     /// The peer's protocol version from the active connection.
     /// Returns nil if no connection is active.
     public var protocolVersion: UInt? {

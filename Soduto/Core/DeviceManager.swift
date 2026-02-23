@@ -143,7 +143,7 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
             case .Unpaired:
                 // If there's an active pairing window, it means pairing was rejected/cancelled
                 if PairingWindowController.isActive(for: device.id) {
-                    PairingWindowController.updateState(for: device.id, state: .failed("Pairing was declined"))
+                    PairingWindowController.updateState(for: device.id, state: .failed)
                 }
             default:
                 break
