@@ -204,52 +204,12 @@ public class CertificateUtils {
         return Array(hash)
     }
     
-    /// Returns the SHA256 digest of a certificate as a lowercase hex string.
-    /// Used for protocol v8 pair verification code generation.
-    public class func sha256DigestString(for certificate: SecCertificate) -> String {
-        let digest = sha256Digest(for: certificate)
-        return digest.map { String(format: "%02x", $0) }.joined()
-    }
-    
     /// Returns the SHA256 digest of a certificate formatted for display.
     /// Format: uppercase hex bytes separated by spaces (e.g., "A1 B2 C3...").
     public class func sha256FormattedDigestString(for certificate: SecCertificate) -> String {
         let digest = sha256Digest(for: certificate)
         let hexBytes = digest.map { String(format: "%02hhX", $0) }
         return hexBytes.joined(separator: " ")
-    }
-    
-    /// Generates a pair verification code from two certificate SHA256 hashes.
-    ///
-    /// The verification code is calculated as:
-    /// 1. Sort the two certificate hashes alphabetically
-    /// 2. Concatenate them
-    /// 3. Take SHA256 of the concatenation
-    /// 4. Take the first 8 hex characters, formatted as "XXXX XXXX"
-    ///
-    /// Both devices will show the same code, allowing users to verify
-    /// they are pairing with the correct device (MITM protection).
-    ///
-    /// - Parameters:
-    ///   - localCertHash: SHA256 hex string of the local certificate
-    ///   - remoteCertHash: SHA256 hex string of the remote certificate
-    /// - Returns: An 8-character verification code formatted as "XXXX XXXX"
-    public class func pairVerificationCode(localCertHash: String, remoteCertHash: String, timestamp: Int64? = nil) -> String {
-        // Sort and concatenate (ensures both devices get same result)
-        var combined = [localCertHash, remoteCertHash].sorted().joined()
-        if let timestamp = timestamp {
-            combined += String(timestamp)
-        }
-        
-        // SHA256 of combined string
-        let hash = SHA256.hash(data: Data(combined.utf8))
-        
-        // Take first 4 bytes (8 hex chars) and format as "XXXX XXXX"
-        let hexChars = Array(hash.prefix(4)).map { String(format: "%02X", $0) }.joined()
-        let firstHalf = String(hexChars.prefix(4))
-        let secondHalf = String(hexChars.suffix(4))
-        
-        return "\(firstHalf) \(secondHalf)"
     }
     
     /// Generates a pair verification code from two public keys.
