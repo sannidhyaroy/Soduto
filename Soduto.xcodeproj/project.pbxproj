@@ -68,6 +68,9 @@
 		31F8A6062F4A555D00CA5A61 /* PairingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6052F4A555D00CA5A61 /* PairingWindowController.swift */; };
 		31F8A60B2F4A642E00CA5A61 /* DeviceInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6092F4A642E00CA5A61 /* DeviceInfoView.swift */; };
 		31F8A60C2F4A642E00CA5A61 /* DevicesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A60A2F4A642E00CA5A61 /* DevicesListView.swift */; };
+		31F8A6102F4EEC9D00CA5A61 /* MDNSAdvertisementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A60F2F4EEC9D00CA5A61 /* MDNSAdvertisementService.swift */; };
+		31F8A6122F4EECB800CA5A61 /* MDNSBrowseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6112F4EECB800CA5A61 /* MDNSBrowseService.swift */; };
+		31F8A6142F4EECD600CA5A61 /* MDNSEndpointResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6132F4EECD600CA5A61 /* MDNSEndpointResolver.swift */; };
 		840538201ED62282003798AA /* WelcomeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8405381F1ED62282003798AA /* WelcomeWindowController.swift */; };
 		840FC2F91DEF6AF400AC4824 /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */; };
 		84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */; };
@@ -273,6 +276,9 @@
 		31F8A6052F4A555D00CA5A61 /* PairingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingWindowController.swift; sourceTree = "<group>"; };
 		31F8A6092F4A642E00CA5A61 /* DeviceInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceInfoView.swift; sourceTree = "<group>"; };
 		31F8A60A2F4A642E00CA5A61 /* DevicesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicesListView.swift; sourceTree = "<group>"; };
+		31F8A60F2F4EEC9D00CA5A61 /* MDNSAdvertisementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDNSAdvertisementService.swift; sourceTree = "<group>"; };
+		31F8A6112F4EECB800CA5A61 /* MDNSBrowseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDNSBrowseService.swift; sourceTree = "<group>"; };
+		31F8A6132F4EECD600CA5A61 /* MDNSEndpointResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDNSEndpointResolver.swift; sourceTree = "<group>"; };
 		8405381F1ED62282003798AA /* WelcomeWindowController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WelcomeWindowController.swift; sourceTree = "<group>"; };
 		840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ClipboardService.swift; sourceTree = "<group>"; };
 		841E814C1D809C360096A846 /* Soduto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto.entitlements; sourceTree = "<group>"; };
@@ -641,7 +647,10 @@
 				84FA45D21DDDCB3D00EF3992 /* Device.swift */,
 				84FA45D31DDDCB3D00EF3992 /* DeviceManager.swift */,
 				31A421972F43B8C2003B97FC /* DownloadTask.swift */,
+				31F8A60F2F4EEC9D00CA5A61 /* MDNSAdvertisementService.swift */,
+				31F8A6112F4EECB800CA5A61 /* MDNSBrowseService.swift */,
 				3105288A2F49274400488ED4 /* MDNSDiscoveryProvider.swift */,
+				31F8A6132F4EECD600CA5A61 /* MDNSEndpointResolver.swift */,
 				31366D352F412C4A0013911D /* PacketCodec.swift */,
 				8456F4A71D7DE393006EFE19 /* Pairable.swift */,
 				31A421942F43B526003B97FC /* PayloadPortRegistry.swift */,
@@ -1079,6 +1088,7 @@
 				8438A9261E45145F00922155 /* StatusBarApplication.swift in Sources */,
 				847E9D2B1DF5E2640042D3CE /* TelephonyService.swift in Sources */,
 				31366D382F412C6F0013911D /* STARTTLSHandler.swift in Sources */,
+				31F8A6142F4EECD600CA5A61 /* MDNSEndpointResolver.swift in Sources */,
 				84FA45DA1DDDCB3D00EF3992 /* Device.swift in Sources */,
 				84651A721E599A3C00D17601 /* BatteryService.swift in Sources */,
 				849237EC1DE5FC9600D95BBA /* PairingInterfaceController.swift in Sources */,
@@ -1111,6 +1121,7 @@
 				31A0A3C52F2C7C6100CDA243 /* ShareSheetView.swift in Sources */,
 				8436DEFA1E958ABA00529362 /* FileManager.swift in Sources */,
 				0225F6111F06E2380021BFE2 /* NSAttributedString.swift in Sources */,
+				31F8A6122F4EECB800CA5A61 /* MDNSBrowseService.swift in Sources */,
 				843B670C1DF3087800289EC9 /* URL.swift in Sources */,
 				8492379D1DE1C55900D95BBA /* DeviceMenu.swift in Sources */,
 				0223974F1F0908FB00B0C70A /* TextFieldWithLinks.swift in Sources */,
@@ -1133,6 +1144,7 @@
 				84D903A21DC696A600E61DA7 /* CertificateUtils.swift in Sources */,
 				84FA45DD1DDDCB3D00EF3992 /* SocketAddress.swift in Sources */,
 				840538201ED62282003798AA /* WelcomeWindowController.swift in Sources */,
+				31F8A6102F4EEC9D00CA5A61 /* MDNSAdvertisementService.swift in Sources */,
 				84FA45E61DDDE87F00EF3992 /* AppDelegate.swift in Sources */,
 				84651A741E59F9C900D17601 /* MenuView.swift in Sources */,
 				84FA45ED1DDF525200EF3992 /* PingService.swift in Sources */,

@@ -8,7 +8,6 @@
 
 import Foundation
 import Network
-import dnssd
 import os
 
 // MARK: - Delegate Protocol
@@ -44,20 +43,40 @@ public class MDNSDiscoveryProvider {
     /// The domain for local network services.
     private static let serviceDomain = "local"
     
+    /// Default TCP port when TXT record is not available yet.
+    private static let defaultTcpPort: UInt16 = 1716
+    
+    /// Delay before restarting browsing after a failure.
+    private static let browseRestartDelay: TimeInterval = 5.0
+    
     // MARK: Properties
     
     /// The host configuration providing device identity information.
     private let config: HostConfiguration
     
-    /// The NWBrowser for discovering other KDE Connect devices.
-    private var browser: NWBrowser?
-    
-    /// DNS-SD service reference used for Bonjour advertisement.
-    private var advertisementServiceRef: DNSServiceRef?
-    
-    /// Dispatch queue for browser operations.
+    /// Dispatch queue for browse, advertisement, and endpoint resolution operations.
     private let browserQueue = DispatchQueue(label: "com.soduto.MDNSBrowser")
-    private static let browserQueueSpecificKey = DispatchSpecificKey<UInt8>()
+    
+    /// Dedicated mDNS advertisement service (DNS-SD registration wrapper).
+    private lazy var advertisementService: MDNSAdvertisementService = {
+        let service = MDNSAdvertisementService(queue: self.browserQueue)
+        service.delegate = self
+        return service
+    }()
+    
+    /// Dedicated mDNS browse service (NWBrowser wrapper).
+    private lazy var browseService: MDNSBrowseService = {
+        let service = MDNSBrowseService(queue: self.browserQueue)
+        service.delegate = self
+        return service
+    }()
+    
+    /// Dedicated endpoint resolver for service endpoints.
+    private lazy var endpointResolver: MDNSEndpointResolver = {
+        let resolver = MDNSEndpointResolver(queue: self.browserQueue)
+        resolver.delegate = self
+        return resolver
+    }()
     
     /// Set of discovered device IDs to avoid duplicate notifications.
     private var discoveredDeviceIds = Set<String>()
@@ -74,30 +93,12 @@ public class MDNSDiscoveryProvider {
     /// Delegate for discovery events.
     public weak var delegate: MDNSDiscoveryProviderDelegate?
     
-    /// Callback for DNSServiceRegister result events.
-    private static let serviceRegistrationCallback: DNSServiceRegisterReply = {
-        _, _, errorCode, name, _, domain, context in
-        guard let context = context else { return }
-        let provider = Unmanaged<MDNSDiscoveryProvider>.fromOpaque(context).takeUnretainedValue()
-        
-        if errorCode == kDNSServiceErr_NoError {
-            let resolvedName = name.map { String(cString: $0) } ?? provider.config.hostDeviceId
-            let resolvedDomain = domain.map { String(cString: $0) } ?? MDNSDiscoveryProvider.serviceDomain
-            Logger.network.info("mDNS registration confirmed: \(resolvedName, privacy: .public).\(resolvedDomain, privacy: .public)")
-            return
-        }
-        
-        Logger.network.error("mDNS registration callback error: \(errorCode, privacy: .public)")
-        provider.stopAdvertising()
-    }
-    
     // MARK: Initialization
     
     /// Creates a new MDNSDiscoveryProvider.
     /// - Parameter config: The host configuration providing device identity.
     public init(config: HostConfiguration) {
         self.config = config
-        self.browserQueue.setSpecific(key: type(of: self).browserQueueSpecificKey, value: 1)
     }
     
     deinit {
@@ -126,10 +127,8 @@ public class MDNSDiscoveryProvider {
         
         isRunning = false
         
-        browser?.cancel()
-        browser = nil
-        
-        stopAdvertising()
+        browseService.stop()
+        advertisementService.stop()
         
         lock.lock()
         discoveredDeviceIds.removeAll()
@@ -138,147 +137,32 @@ public class MDNSDiscoveryProvider {
         Logger.network.info("mDNS provider stopped")
     }
     
-    // MARK: - Advertisement
+    // MARK: Private Methods
     
-    /// Starts advertising this device via Bonjour using DNSServiceRegister.
     private func startAdvertising() {
-        var txtRecordRef = TXTRecordRef()
-        TXTRecordCreate(&txtRecordRef, 0, nil)
-        defer { TXTRecordDeallocate(&txtRecordRef) }
-        
-        let txtValues = [
-            ("id", self.config.hostDeviceId),
-            ("name", self.config.hostDeviceName),
-            ("type", self.config.hostDeviceType.rawValue),
-            ("protocol", String(DataPacket.protocolVersion)),
-            ("port", String(self.tcpPort))
-        ]
-        
-        for (key, value) in txtValues {
-            let status = value.withCString { rawValue in
-                TXTRecordSetValue(&txtRecordRef, key, UInt8(strlen(rawValue)), rawValue)
-            }
-            if status != kDNSServiceErr_NoError {
-                Logger.network.error("mDNS TXT record setup failed for key \(key, privacy: .public): \(status, privacy: .public)")
-                return
-            }
-        }
-        
-        let txtLength = UInt16(TXTRecordGetLength(&txtRecordRef))
-        let txtBytes = TXTRecordGetBytesPtr(&txtRecordRef)
-        
-        var serviceRef: DNSServiceRef?
-        let registrationError = DNSServiceRegister(
-            &serviceRef,
-            DNSServiceFlags(kDNSServiceFlagsIncludeP2P),
-            0,
-            self.config.hostDeviceId,
-            MDNSDiscoveryProvider.serviceType,
-            MDNSDiscoveryProvider.serviceDomain,
-            nil,
-            CFSwapInt16HostToBig(self.tcpPort),
-            txtLength,
-            txtBytes,
-            MDNSDiscoveryProvider.serviceRegistrationCallback,
-            Unmanaged.passUnretained(self).toOpaque()
+        let started = advertisementService.start(
+            deviceId: config.hostDeviceId,
+            deviceName: config.hostDeviceName,
+            deviceType: config.hostDeviceType.rawValue,
+            protocolVersion: DataPacket.protocolVersion,
+            tcpPort: tcpPort,
+            serviceType: type(of: self).serviceType,
+            serviceDomain: type(of: self).serviceDomain
         )
         
-        guard registrationError == kDNSServiceErr_NoError, let activeRef = serviceRef else {
-            Logger.network.error("mDNS registration failed: \(registrationError, privacy: .public)")
-            return
-        }
-        
-        let queueError = DNSServiceSetDispatchQueue(activeRef, self.browserQueue)
-        guard queueError == kDNSServiceErr_NoError else {
-            Logger.network.error("mDNS dispatch queue setup failed: \(queueError, privacy: .public)")
-            DNSServiceRefDeallocate(activeRef)
-            return
-        }
-        
-        self.advertisementServiceRef = activeRef
-        Logger.network.info("mDNS advertisement started for \(self.config.hostDeviceId, privacy: .public)")
-    }
-    
-    /// Stops Bonjour advertisement if active.
-    private func stopAdvertising() {
-        guard let activeRef = self.advertisementServiceRef else { return }
-        
-        self.advertisementServiceRef = nil
-        
-        if DispatchQueue.getSpecific(key: type(of: self).browserQueueSpecificKey) != nil {
-            DNSServiceRefDeallocate(activeRef)
-        } else {
-            self.browserQueue.sync {
-                DNSServiceRefDeallocate(activeRef)
-            }
+        if started {
+            Logger.network.info("mDNS advertisement started for \(self.config.hostDeviceId, privacy: .public)")
         }
     }
     
-    // MARK: - Discovery (NWBrowser)
-    
-    /// Starts browsing for other KDE Connect devices.
     private func startBrowsing() {
-        let descriptor = NWBrowser.Descriptor.bonjour(
-            type: MDNSDiscoveryProvider.serviceType,
-            domain: MDNSDiscoveryProvider.serviceDomain
-        )
-        
-        let parameters = NWParameters()
-        parameters.includePeerToPeer = true
-        
-        browser = NWBrowser(for: descriptor, using: parameters)
-        
-        browser?.stateUpdateHandler = { [weak self] state in
-            self?.handleBrowserState(state)
-        }
-        
-        browser?.browseResultsChangedHandler = { [weak self] results, changes in
-            self?.handleBrowseResults(results, changes: changes)
-        }
-        
-        browser?.start(queue: browserQueue)
+        browseService.start(serviceType: type(of: self).serviceType, serviceDomain: type(of: self).serviceDomain)
     }
     
-    /// Handles browser state changes.
-    private func handleBrowserState(_ state: NWBrowser.State) {
-        switch state {
-        case .setup:
-            break
-        case .ready:
-            Logger.network.info("mDNS browser ready")
-        case .failed(let error):
-            Logger.network.error("mDNS browser failed: \(error, privacy: .public)")
-            // Attempt restart after delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-                guard let self = self, self.isRunning else { return }
-                self.browser?.cancel()
-                self.startBrowsing()
-            }
-        case .cancelled:
-            Logger.network.debug("mDNS browser cancelled")
-        case .waiting(let error):
-            Logger.network.notice("mDNS browser waiting: \(error, privacy: .public)")
-        @unknown default:
-            break
-        }
-    }
-    
-    /// Handles browse result changes.
-    private func handleBrowseResults(_ results: Set<NWBrowser.Result>, changes: Set<NWBrowser.Result.Change>) {
-        for change in changes {
-            switch change {
-            case .added(let result):
-                handleDeviceDiscovered(result)
-            case .removed(let result):
-                handleDeviceRemoved(result)
-            case .changed(old: _, new: let result, flags: _):
-                handleDeviceDiscovered(result)
-            case .identical:
-                // No change, ignore
-                break
-            @unknown default:
-                break
-            }
+    private func scheduleBrowseRestart() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + type(of: self).browseRestartDelay) { [weak self] in
+            guard let self = self, self.isRunning else { return }
+            self.startBrowsing()
         }
     }
     
@@ -290,157 +174,107 @@ public class MDNSDiscoveryProvider {
             return
         }
         
-        // The service name is the device ID in KDE Connect
         let deviceId = name
         
         // Skip self-discovery
-        guard deviceId != config.hostDeviceId else {
-            return
-        }
+        guard deviceId != config.hostDeviceId else { return }
         
-        // Try to get TXT record for port information
-        var tcpPort: UInt16 = 1716  // Default KDE Connect port
-        
+        // Try to get TCP port from TXT record, otherwise fall back to default KDE Connect port.
+        var discoveredTcpPort = type(of: self).defaultTcpPort
         if case .bonjour(let txtRecord) = result.metadata {
-            // Try to get port from TXT record
-            if let portString = MDNSDiscoveryProvider.getTXTEntry(from: txtRecord, key: "port"),
-               let port = UInt16(portString) {
-                tcpPort = port
+            if let portString = txtRecord["port"],
+               let parsedPort = UInt16(portString) {
+                discoveredTcpPort = parsedPort
             }
         } else {
-            // TXT record not available yet - this is common on initial discovery
-            // We'll use the standard KDE Connect port and let UDP discovery handle it
             Logger.network.debug("mDNS discovery: TXT record not yet available for \(deviceId, privacy: .public), using default port")
         }
         
-        // Check if we've already notified about this device
         lock.lock()
         let isNew = discoveredDeviceIds.insert(deviceId).inserted
         lock.unlock()
         
-        guard isNew else {
-            return
-        }
+        guard isNew else { return }
         
         Logger.network.debug("mDNS discovered device: \(deviceId, privacy: .public) at \(result.endpoint.debugDescription, privacy: .public)")
         
-        // Resolve the endpoint to get IP address
-        resolveEndpoint(result.endpoint, deviceId: deviceId, tcpPort: tcpPort)
+        endpointResolver.resolve(endpoint: result.endpoint, deviceId: deviceId, tcpPort: discoveredTcpPort)
     }
     
     /// Handles a removed device.
     private func handleDeviceRemoved(_ result: NWBrowser.Result) {
-        // Extract device ID from endpoint name
-        guard case .service(let name, _, _, _) = result.endpoint else {
-            return
-        }
-        
-        let deviceId = name
+        guard case .service(let name, _, _, _) = result.endpoint else { return }
         
         lock.lock()
-        discoveredDeviceIds.remove(deviceId)
+        discoveredDeviceIds.remove(name)
         lock.unlock()
         
-        Logger.network.debug("mDNS device removed: \(deviceId, privacy: .public)")
+        Logger.network.debug("mDNS device removed: \(name, privacy: .public)")
+    }
+}
+
+// MARK: - MDNSAdvertisementServiceDelegate
+
+extension MDNSDiscoveryProvider: MDNSAdvertisementServiceDelegate {
+    func mdnsAdvertisementService(_ service: MDNSAdvertisementService, didRegisterWithName name: String, domain: String) {
+        let resolvedName = name.isEmpty ? self.config.hostDeviceId : name
+        let resolvedDomain = domain.isEmpty ? type(of: self).serviceDomain : domain
+        Logger.network.info("mDNS registration confirmed: \(resolvedName, privacy: .public).\(resolvedDomain, privacy: .public)")
     }
     
-    // MARK: - Endpoint Resolution
-    
-    /// Resolves an NWEndpoint to an IP address.
-    private func resolveEndpoint(_ endpoint: NWEndpoint, deviceId: String, tcpPort: UInt16) {
-        // Resolve endpoint using Network framework path resolution.
-        resolveEndpointAddress(endpoint: endpoint, deviceId: deviceId, tcpPort: tcpPort)
-    }
-    
-    /// Resolves an mDNS endpoint to an IP address using NWConnection.
-    /// Once resolved, notifies the delegate which will send UDP via the normal channel.
-    /// Now supports link-local IPv6 addresses (e.g., "fe80::1234%en0") thanks to
-    /// NetworkUtils.createSocketAddress() using getaddrinfo().
-    private func resolveEndpointAddress(endpoint: NWEndpoint, deviceId: String, tcpPort: UInt16) {
-        // Resolve using whatever interface is active (Wi-Fi, Ethernet, etc.).
-        let parameters = NWParameters.udp
-        
-        // Create a temporary connection just to resolve the endpoint
-        let connection = NWConnection(to: endpoint, using: parameters)
-        
-        connection.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready:
-                guard let self = self else {
-                    connection.cancel()
-                    return
-                }
-                
-                // Extract the resolved IP address (including scope ID for link-local IPv6)
-                if let path = connection.currentPath,
-                   let remoteEndpoint = path.remoteEndpoint,
-                   let ipAddress = self.extractIPAddress(from: remoteEndpoint) {
-                    
-                    Logger.network.debug("mDNS resolved \(deviceId, privacy: .public) to \(ipAddress, privacy: .public):\(tcpPort, privacy: .public)")
-                    
-                    // Notify delegate - it will send UDP via normal channel (port 1716)
-                    // NetworkUtils.createSocketAddress() handles IPv6 scope IDs properly
-                    DispatchQueue.main.async {
-                        self.delegate?.mdnsProvider(self, discoveredDeviceAt: ipAddress, port: tcpPort, deviceId: deviceId)
-                    }
-                } else {
-                    Logger.network.debug("mDNS: could not extract address for \(deviceId, privacy: .public)")
-                }
-                
-                connection.cancel()
-                
-            case .failed(let error):
-                Logger.network.debug("mDNS endpoint resolution failed for \(deviceId, privacy: .public): \(error, privacy: .public)")
-                connection.cancel()
-                
-            case .cancelled:
-                break
-                
-            default:
-                break
-            }
-        }
-        
-        connection.start(queue: browserQueue)
-        
-        // Timeout resolution after 5 seconds
-        browserQueue.asyncAfter(deadline: .now() + 5.0) {
-            if connection.state != .cancelled {
-                Logger.network.debug("mDNS endpoint resolution timeout for \(deviceId, privacy: .public)")
-                connection.cancel()
-            }
-        }
-    }
-    
-    /// Extracts an IP address string from an NWEndpoint.
-    /// Returns the full address including scope ID for link-local IPv6 (e.g., "fe80::1234%en0").
-    /// ConnectionProvider.sendDirectUdpPacket() now properly handles these via getaddrinfo().
-    private func extractIPAddress(from endpoint: NWEndpoint) -> String? {
-        switch endpoint {
-        case .hostPort(let host, _):
-            switch host {
-            case .ipv4(let addr):
-                return "\(addr)"
-            case .ipv6(let addr):
-                // Return the full address string including scope ID (e.g., %en0)
-                // Our NetworkUtils.createSocketAddress() uses getaddrinfo() which
-                // properly handles IPv6 scope IDs for link-local addresses
-                return "\(addr)"
-            default:
-                return nil
-            }
-        default:
-            return nil
+    func mdnsAdvertisementService(_ service: MDNSAdvertisementService, didFailWithErrorCode errorCode: Int32) {
+        Logger.network.error("mDNS registration failed: \(errorCode, privacy: .public)")
+        if isRunning {
+            advertisementService.stop()
         }
     }
 }
 
-// MARK: - NWTXTRecord Helper
+// MARK: - MDNSBrowseServiceDelegate
 
-extension MDNSDiscoveryProvider {
-    /// Gets a string value for a key from the TXT record.
-    /// NWTXTRecord subscript returns String? directly.
-    static func getTXTEntry(from txtRecord: NWTXTRecord, key: String) -> String? {
-        return txtRecord[key]
+extension MDNSDiscoveryProvider: MDNSBrowseServiceDelegate {
+    func mdnsBrowseService(_ service: MDNSBrowseService, didUpdateState state: NWBrowser.State) {
+        switch state {
+        case .setup:
+            break
+        case .ready:
+            Logger.network.info("mDNS browser ready")
+        case .failed(let error):
+            Logger.network.error("mDNS browser failed: \(error, privacy: .public)")
+            scheduleBrowseRestart()
+        case .cancelled:
+            Logger.network.debug("mDNS browser cancelled")
+        case .waiting(let error):
+            Logger.network.notice("mDNS browser waiting: \(error, privacy: .public)")
+        @unknown default:
+            break
+        }
+    }
+    
+    func mdnsBrowseService(_ service: MDNSBrowseService, didReceiveChanges changes: Set<NWBrowser.Result.Change>) {
+        for change in changes {
+            switch change {
+            case .added(let result):
+                handleDeviceDiscovered(result)
+            case .removed(let result):
+                handleDeviceRemoved(result)
+            case .changed(old: _, new: let result, flags: _):
+                handleDeviceDiscovered(result)
+            case .identical:
+                break
+            @unknown default:
+                break
+            }
+        }
+    }
+}
+
+// MARK: - MDNSEndpointResolverDelegate
+
+extension MDNSDiscoveryProvider: MDNSEndpointResolverDelegate {
+    func mdnsEndpointResolver(_ resolver: MDNSEndpointResolver, didResolveAddress address: String, forDeviceId deviceId: String, tcpPort: UInt16) {
+        DispatchQueue.main.async {
+            self.delegate?.mdnsProvider(self, discoveredDeviceAt: address, port: tcpPort, deviceId: deviceId)
+        }
     }
 }
