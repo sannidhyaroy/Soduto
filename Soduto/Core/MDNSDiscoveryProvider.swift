@@ -8,6 +8,7 @@
 
 import Foundation
 import Network
+import dnssd
 import os
 
 // MARK: - Delegate Protocol
@@ -51,11 +52,12 @@ public class MDNSDiscoveryProvider {
     /// The NWBrowser for discovering other KDE Connect devices.
     private var browser: NWBrowser?
     
-    /// The NetService for advertising this device via Bonjour.
-    private var netService: NetService?
+    /// DNS-SD service reference used for Bonjour advertisement.
+    private var advertisementServiceRef: DNSServiceRef?
     
     /// Dispatch queue for browser operations.
     private let browserQueue = DispatchQueue(label: "com.soduto.MDNSBrowser")
+    private static let browserQueueSpecificKey = DispatchSpecificKey<UInt8>()
     
     /// Set of discovered device IDs to avoid duplicate notifications.
     private var discoveredDeviceIds = Set<String>()
@@ -72,12 +74,30 @@ public class MDNSDiscoveryProvider {
     /// Delegate for discovery events.
     public weak var delegate: MDNSDiscoveryProviderDelegate?
     
+    /// Callback for DNSServiceRegister result events.
+    private static let serviceRegistrationCallback: DNSServiceRegisterReply = {
+        _, _, errorCode, name, _, domain, context in
+        guard let context = context else { return }
+        let provider = Unmanaged<MDNSDiscoveryProvider>.fromOpaque(context).takeUnretainedValue()
+        
+        if errorCode == kDNSServiceErr_NoError {
+            let resolvedName = name.map { String(cString: $0) } ?? provider.config.hostDeviceId
+            let resolvedDomain = domain.map { String(cString: $0) } ?? MDNSDiscoveryProvider.serviceDomain
+            Logger.network.info("mDNS registration confirmed: \(resolvedName, privacy: .public).\(resolvedDomain, privacy: .public)")
+            return
+        }
+        
+        Logger.network.error("mDNS registration callback error: \(errorCode, privacy: .public)")
+        provider.stopAdvertising()
+    }
+    
     // MARK: Initialization
     
     /// Creates a new MDNSDiscoveryProvider.
     /// - Parameter config: The host configuration providing device identity.
     public init(config: HostConfiguration) {
         self.config = config
+        self.browserQueue.setSpecific(key: type(of: self).browserQueueSpecificKey, value: 1)
     }
     
     deinit {
@@ -109,8 +129,7 @@ public class MDNSDiscoveryProvider {
         browser?.cancel()
         browser = nil
         
-        netService?.stop()
-        netService = nil
+        stopAdvertising()
         
         lock.lock()
         discoveredDeviceIds.removeAll()
@@ -119,34 +138,80 @@ public class MDNSDiscoveryProvider {
         Logger.network.info("mDNS provider stopped")
     }
     
-    // MARK: - Advertisement (NetService)
+    // MARK: - Advertisement
     
-    /// Starts advertising this device via mDNS using NetService.
+    /// Starts advertising this device via Bonjour using DNSServiceRegister.
     private func startAdvertising() {
-        // Create NetService for Bonjour advertisement
-        // Note: NetService is deprecated but is the correct API for pure service advertisement
-        netService = NetService(
-            domain: MDNSDiscoveryProvider.serviceDomain,
-            type: MDNSDiscoveryProvider.serviceType,
-            name: config.hostDeviceId,
-            port: Int32(tcpPort)
+        var txtRecordRef = TXTRecordRef()
+        TXTRecordCreate(&txtRecordRef, 0, nil)
+        defer { TXTRecordDeallocate(&txtRecordRef) }
+        
+        let txtValues = [
+            ("id", self.config.hostDeviceId),
+            ("name", self.config.hostDeviceName),
+            ("type", self.config.hostDeviceType.rawValue),
+            ("protocol", String(DataPacket.protocolVersion)),
+            ("port", String(self.tcpPort))
+        ]
+        
+        for (key, value) in txtValues {
+            let status = value.withCString { rawValue in
+                TXTRecordSetValue(&txtRecordRef, key, UInt8(strlen(rawValue)), rawValue)
+            }
+            if status != kDNSServiceErr_NoError {
+                Logger.network.error("mDNS TXT record setup failed for key \(key, privacy: .public): \(status, privacy: .public)")
+                return
+            }
+        }
+        
+        let txtLength = UInt16(TXTRecordGetLength(&txtRecordRef))
+        let txtBytes = TXTRecordGetBytesPtr(&txtRecordRef)
+        
+        var serviceRef: DNSServiceRef?
+        let registrationError = DNSServiceRegister(
+            &serviceRef,
+            DNSServiceFlags(kDNSServiceFlagsIncludeP2P),
+            0,
+            self.config.hostDeviceId,
+            MDNSDiscoveryProvider.serviceType,
+            MDNSDiscoveryProvider.serviceDomain,
+            nil,
+            CFSwapInt16HostToBig(self.tcpPort),
+            txtLength,
+            txtBytes,
+            MDNSDiscoveryProvider.serviceRegistrationCallback,
+            Unmanaged.passUnretained(self).toOpaque()
         )
         
-        // Build TXT record with device information
-        let txtDict: [String: Data] = [
-            "id": Data(config.hostDeviceId.utf8),
-            "name": Data(config.hostDeviceName.utf8),
-            "type": Data(config.hostDeviceType.rawValue.utf8),
-            "protocol": Data(String(DataPacket.protocolVersion).utf8),
-            "port": Data(String(tcpPort).utf8)
-        ]
-        let txtData = NetService.data(fromTXTRecord: txtDict)
-        netService?.setTXTRecord(txtData)
+        guard registrationError == kDNSServiceErr_NoError, let activeRef = serviceRef else {
+            Logger.network.error("mDNS registration failed: \(registrationError, privacy: .public)")
+            return
+        }
         
-        // Start publishing
-        netService?.publish()
+        let queueError = DNSServiceSetDispatchQueue(activeRef, self.browserQueue)
+        guard queueError == kDNSServiceErr_NoError else {
+            Logger.network.error("mDNS dispatch queue setup failed: \(queueError, privacy: .public)")
+            DNSServiceRefDeallocate(activeRef)
+            return
+        }
         
+        self.advertisementServiceRef = activeRef
         Logger.network.info("mDNS advertisement started for \(self.config.hostDeviceId, privacy: .public)")
+    }
+    
+    /// Stops Bonjour advertisement if active.
+    private func stopAdvertising() {
+        guard let activeRef = self.advertisementServiceRef else { return }
+        
+        self.advertisementServiceRef = nil
+        
+        if DispatchQueue.getSpecific(key: type(of: self).browserQueueSpecificKey) != nil {
+            DNSServiceRefDeallocate(activeRef)
+        } else {
+            self.browserQueue.sync {
+                DNSServiceRefDeallocate(activeRef)
+            }
+        }
     }
     
     // MARK: - Discovery (NWBrowser)
