@@ -26,7 +26,7 @@ public struct NetworkUtils {
     public static func createSocketAddress(address: String, port: Int) -> NIOCore.SocketAddress? {
         var hints = addrinfo()
         hints.ai_family = AF_UNSPEC      // Allow both IPv4 and IPv6
-        hints.ai_socktype = SOCK_DGRAM   // UDP
+        hints.ai_socktype = 0            // Unspecified: allow both UDP and TCP
         hints.ai_flags = AI_NUMERICHOST  // Don't do DNS lookup, just parse the address
         
         var result: UnsafeMutablePointer<addrinfo>?
