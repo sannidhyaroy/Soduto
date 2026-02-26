@@ -148,6 +148,8 @@ extension DataPacket {
         case outgoingCapabilities = "outgoingCapabilities"
         case protocolVersion = "protocolVersion"
         case tcpPort = "tcpPort"
+        case targetDeviceId = "targetDeviceId"
+        case targetProtocolVersion = "targetProtocolVersion"
     }
     
     public enum IdentityError: Error {

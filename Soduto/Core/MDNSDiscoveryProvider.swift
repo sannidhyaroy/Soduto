@@ -194,9 +194,11 @@ public class MDNSDiscoveryProvider {
         let isNew = discoveredDeviceIds.insert(deviceId).inserted
         lock.unlock()
         
-        guard isNew else { return }
-        
-        Logger.network.debug("mDNS discovered device: \(deviceId, privacy: .public) at \(result.endpoint.debugDescription, privacy: .public)")
+        if isNew {
+            Logger.network.debug("mDNS discovered new device: \(deviceId, privacy: .public) at \(result.endpoint.debugDescription, privacy: .public)")
+        } else {
+            Logger.network.debug("mDNS re-resolving changed device: \(deviceId, privacy: .public) at \(result.endpoint.debugDescription, privacy: .public)")
+        }
         
         endpointResolver.resolve(endpoint: result.endpoint, deviceId: deviceId, tcpPort: discoveredTcpPort)
     }

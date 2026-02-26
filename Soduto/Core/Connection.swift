@@ -128,6 +128,9 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     private var packetsExpected: Int = 0
     private var waitingToSecure: Bool = false
     private var shouldFinishInitializationWhenSecured: Bool = false
+    /// True while waiting for a v8 peer's post-TLS identity packet.
+    /// ConnectionProvider reads this to defer handoff to DeviceManager.
+    public private(set) var waitingForV8PostTLSIdentity: Bool = false
     private var pairingHandler: DefaultPairingHandler? = nil
     
     /// Trust handler for TLS verification.
@@ -255,6 +258,10 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             Logger.network.error("secureServer called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
             return
         }
+        guard !self.waitingToSecure && !self.shouldFinishInitializationWhenSecured else {
+            Logger.network.debug("secureServer called but TLS already in progress or completed")
+            return
+        }
         guard self.identity != nil else {
             Logger.network.error("secureServer called but identity not set")
             assertionFailure("Identity expected to be known before securing connection")
@@ -271,6 +278,10 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             Logger.network.error("secureClient called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
             return
         }
+        guard !self.waitingToSecure && !self.shouldFinishInitializationWhenSecured else {
+            Logger.network.debug("secureClient called but TLS already in progress or completed")
+            return
+        }
         guard self.identity != nil else {
             Logger.network.error("secureClient called but identity not set")
             assertionFailure("Identity expected to be known before securing connection")
@@ -285,6 +296,10 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     public func finishInitialization() {
         guard self.state == .Initializing else {
             Logger.network.error("finishInitialization called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
+            return
+        }
+        guard !self.shouldFinishInitializationWhenSecured else {
+            Logger.network.debug("finishInitialization already called, ignoring duplicate")
             return
         }
         guard self.identity != nil else {
@@ -741,6 +756,22 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         Logger.network.debug("handle(packet type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(self, privacy: .public)]")
 #endif
         
+        // For protocol v8: intercept the peer's post-TLS identity packet.
+        // After TLS, v8 connections stay in .Initializing until this arrives.
+        // We must handle it BEFORE the .Initializing guard (which would forward
+        // it to ConnectionProvider as a pre-TLS identity). Once we have the full
+        // identity, transition to .Open
+        if self.waitingForV8PostTLSIdentity && packet.isIdentityPacket {
+            self.identity = packet
+            self.waitingForV8PostTLSIdentity = false
+            self.peerProtocolVersion = (try? packet.getProtocolVersion()) ?? self.peerProtocolVersion
+            Logger.network.debug("Updated identity from v8 post-TLS packet for \(self, privacy: .public)")
+            // Transition to Open now that we have the full identity.
+            self.state = .Open
+            Logger.network.debug("Connection \(self, privacy: .public) is now Open (v8 post-TLS identity received)")
+            return
+        }
+        
         // During initialization, pass all packets to delegate (e.g., identity packet)
         // The delegate (ConnectionProvider) will call applyIdentity() and finish initialization
         if self.state == .Initializing {
@@ -757,9 +788,9 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             return
         }
         
-        // Identity packets after TLS are normal - just ignore them (we already have identity)
+        // Ignore duplicate identity packets after connection is already Open
         if packet.isIdentityPacket {
-            Logger.network.debug("Ignoring post-TLS identity packet from \(self, privacy: .public)")
+            Logger.network.debug("Ignoring identity packet on already-open connection \(self, privacy: .public)")
             return
         }
         
@@ -890,13 +921,17 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         }
         
         if self.shouldFinishInitializationWhenSecured {
-            self.state = .Open
-            Logger.network.debug("Connection \(self, privacy: .public) is now Open (after TLS)")
-            
-            // Protocol v8 requires both sides to exchange identity again over TLS.
             if self.peerProtocolVersion >= 8 {
-                Logger.network.debug("Sending identity packet after TLS for protocol v8 connection")
+                // Protocol v8 requires both sides to exchange identity again over TLS.
+                // Send our full identity now. Stay in .Initializing — the peer's
+                // post-TLS identity (with capabilities, deviceName, etc.) will arrive
+                // shortly and handle(packet:) will transition to .Open.
+                Logger.network.debug("Sending post-TLS identity for v8, waiting for peer's full identity")
+                self.waitingForV8PostTLSIdentity = true
                 _ = self.send(DataPacket.identityPacket(config: self.config))
+            } else {
+                self.state = .Open
+                Logger.network.debug("Connection \(self, privacy: .public) is now Open (after TLS)")
             }
         }
     }

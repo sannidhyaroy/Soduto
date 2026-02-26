@@ -246,8 +246,8 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             self.pendingConnections.remove(connection)
         case .Open:
             if let delegate = self.delegate {
-                connection.readPackets()
                 self.pendingConnections.remove(connection)
+                connection.readPackets()
                 delegate.connectionProvider(self, didCreateConnection: connection)
             } else {
                 Logger.network.error("No connection provider delegate to take new connection - closing")
@@ -444,8 +444,21 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             connection.delegate = self
             self.pendingConnections.insert(connection)
             
-            // Send initial identity packet
-            _ = connection.send(DataPacket.identityPacket(config: self.config))
+            // Send initial (pre-TLS) identity packet.
+            // For v8 peers, add targetDeviceId/targetProtocolVersion to the full identity
+            // packet, matching the Android KDE Connect implementation. The full identity
+            // is sent again post-TLS (the post-TLS version is the one that's trusted).
+            let peerVersion = (try? packet.getProtocolVersion()) ?? 7
+            if peerVersion >= 8,
+               let targetDeviceId = try? packet.getDeviceId() {
+                let additionalProps: DataPacket.Body = [
+                    DataPacket.IdentityProperty.targetDeviceId.rawValue: targetDeviceId as AnyObject,
+                    DataPacket.IdentityProperty.targetProtocolVersion.rawValue: NSNumber(value: peerVersion)
+                ]
+                _ = connection.send(DataPacket.identityPacket(additionalProperties: additionalProps, config: self.config))
+            } else {
+                _ = connection.send(DataPacket.identityPacket(config: self.config))
+            }
         } else {
             Logger.network.error("Failed to create outgoing connection")
         }
