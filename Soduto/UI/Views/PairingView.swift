@@ -106,6 +106,10 @@ struct PairingView: View {
         .onChange(of: viewModel.state) { _, newState in
             handleStateChange(newState)
         }
+        .onDisappear {
+            autoCloseTask?.cancel()
+            autoCloseTask = nil
+        }
     }
     
     private var spacingBeforeButtons: CGFloat {
