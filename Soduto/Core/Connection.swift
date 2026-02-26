@@ -793,8 +793,14 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
                 case .Unpaired:
                     // Always call setPairingTimestamp to trigger verification code generation
                     // v7: timestamp is nil (packet doesn't include it) → generates code without timestamp
-                    // v8: timestamp extracted from packet → generates code with timestamp
-                    let requestTimestamp = (self.peerProtocolVersion >= 8) ? (try? packet.getPairingTimestamp()) : nil
+                    // v8: timestamp is required; missing/invalid timestamp is a protocol error
+                    let requestTimestamp: Int64?
+                    if self.peerProtocolVersion >= 8 {
+                        // For protocol v8, a missing/invalid timestamp is a protocol error — reject pairing
+                        requestTimestamp = try packet.getPairingTimestamp()
+                    } else {
+                        requestTimestamp = nil
+                    }
                     pairingHandler.setPairingTimestamp(requestTimestamp)
                     
                     // Peer initiates pairing - notify delegate with PairingRequest
