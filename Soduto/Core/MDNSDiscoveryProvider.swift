@@ -3,7 +3,7 @@
 //  Soduto
 //
 //  Created by Sannidhya Roy on 21/02/26.
-//  Copyright © 2025 Soduto. All rights reserved.
+//  Copyright © 2026 Soduto. All rights reserved.
 //
 
 import Foundation

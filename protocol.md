@@ -12,7 +12,7 @@ We make an effort to keep this document useful, accurate and up-to-date, althoug
     * [`kdeconnect.*`](#kdeconnect)
 * [Device Discovery](#device-discovery)
     * [UDP discovery](#udp-discovery)
-    * [mDSN discovery](#mdsn-discovery)
+    * [mDNS discovery](#mdns-discovery)
 * [Device Connection](#device-connection)
     * [`kdeconnect.identity`](#kdeconnectidentity)
 * [Device Pairing](#device-pairing)
@@ -171,7 +171,7 @@ When KDE Connect connects to a new network or at boot, it will broadcast a UDP d
 }
 ```
 
-### mDSN discovery
+### mDNS discovery
 
 Devices will advertise a service with type `_kdeconnect._udp` and their own device ID as name. In the TXT records, they will include the fields `id` (the device ID again) and `protocol` (its own protocol version, currently 8). At the same time, devices will start discovering devices with that service type. When a peer is found, a TCP connection can be established. Note that, for backwards compatibility with protocol version 7, most implementations don't establish a TCP connection and instead send a UDP packet to trigger the UDP discovery mechanism response.
 

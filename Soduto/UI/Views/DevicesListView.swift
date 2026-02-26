@@ -147,7 +147,7 @@ struct DevicesListView: View {
             Alert(
                 title: Text("Zap Connections and Reconnect?"),
                 message: Text(
-                    "⚠ WARNING: EXPERIMENTAL FEATURE AHEAD\n\nThis will immediately closes all active TCP connections, waits about 10 seconds for teardown, then triggers rediscovery and reconnect.\nUse this to immediately hard refresh available devices.\n\nTIP: If devices do not reconnect automatically, use the Refresh (⌘R) button."
+                    "⚠ WARNING: EXPERIMENTAL FEATURE AHEAD\n\nThis will immediately close all active TCP connections, wait about 10 seconds for teardown, then trigger rediscovery and reconnect.\nUse this to immediately hard refresh available devices.\n\nTIP: If devices do not reconnect automatically, use the Refresh (⌘R) button."
                 ),
                 primaryButton: .destructive(Text("Proceed")) {
                     viewModel.forceReconnect()
