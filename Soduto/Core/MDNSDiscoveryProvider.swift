@@ -160,7 +160,7 @@ public class MDNSDiscoveryProvider {
     }
     
     private func scheduleBrowseRestart() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + type(of: self).browseRestartDelay) { [weak self] in
+        browserQueue.asyncAfter(deadline: .now() + type(of: self).browseRestartDelay) { [weak self] in
             guard let self = self, self.isRunning else { return }
             self.startBrowsing()
         }
