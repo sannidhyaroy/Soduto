@@ -34,10 +34,7 @@ final class MDNSAdvertisementService {
     @discardableResult
     func start(
         deviceId: String,
-        deviceName: String,
-        deviceType: String,
         protocolVersion: UInt,
-        tcpPort: UInt16,
         serviceType: String,
         serviceDomain: String
     ) -> Bool {
@@ -47,12 +44,10 @@ final class MDNSAdvertisementService {
         TXTRecordCreate(&txtRecordRef, 0, nil)
         defer { TXTRecordDeallocate(&txtRecordRef) }
         
+        // Per the KDE Connect protocol spec, the TXT record should only contain `id` and `protocol`.
         let txtValues = [
             ("id", deviceId),
-            ("name", deviceName),
-            ("type", deviceType),
-            ("protocol", String(protocolVersion)),
-            ("port", String(tcpPort))
+            ("protocol", String(protocolVersion))
         ]
         
         for (key, value) in txtValues {
@@ -68,6 +63,10 @@ final class MDNSAdvertisementService {
         let txtLength = UInt16(TXTRecordGetLength(&txtRecordRef))
         let txtBytes = TXTRecordGetBytesPtr(&txtRecordRef)
         
+        // For _kdeconnect._udp the SRV port is always the standard KDE Connect UDP discovery port (1716).
+        // The TCP connection port is communicated via the UDP identity packet, not via the SRV record.
+        let udpDiscoveryPort: UInt16 = 1716
+        
         var createdServiceRef: DNSServiceRef?
         let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         let registrationError = DNSServiceRegister(
@@ -78,7 +77,7 @@ final class MDNSAdvertisementService {
             serviceType,
             serviceDomain,
             nil,
-            CFSwapInt16HostToBig(tcpPort),
+            CFSwapInt16HostToBig(udpDiscoveryPort),
             txtLength,
             txtBytes,
             type(of: self).registrationCallback,

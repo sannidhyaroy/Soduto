@@ -242,6 +242,13 @@ extension DataPacket {
         return Set(capabilities)
     }
     
+    /// Returns `targetDeviceId` from the identity packet body, or `nil` if the field is absent.
+    /// This field is optional (v7 peers omit it) but when present it must match the receiving device's ID.
+    public func getTargetDeviceId() throws -> String? {
+        try self.validateIdentityType()
+        return body[IdentityProperty.targetDeviceId.rawValue] as? String
+    }
+
     public func validateIdentityType() throws {
         guard type == DataPacket.identityPacketType else { throw IdentityError.wrongType }
     }

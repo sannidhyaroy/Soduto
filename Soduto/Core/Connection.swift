@@ -48,6 +48,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         case initializationAlreadyFinished
         case tlsUpgradeFailed(Error)
         case serializationFailed
+        case targetDeviceIdMismatch
     }
     
     public enum State {
@@ -228,6 +229,14 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         
         try packet.validateIdentityType()
         let deviceId = try packet.getDeviceId()
+        
+        // If targetDeviceId is present it must match our own device ID; reject otherwise.
+        if let targetId = try packet.getTargetDeviceId(), !targetId.isEmpty,
+           targetId != self.config.hostDeviceId {
+            Logger.network.error("Rejecting identity packet: targetDeviceId '\(targetId, privacy: .public)' does not match our ID '\(self.config.hostDeviceId, privacy: .public)'")
+            throw ConnectionError.targetDeviceIdMismatch
+        }
+        
         let deviceConfig = self.config.deviceConfig(for: deviceId)
         
         self.identity = packet
@@ -762,6 +771,13 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         // it to ConnectionProvider as a pre-TLS identity). Once we have the full
         // identity, transition to .Open
         if self.waitingForV8PostTLSIdentity && packet.isIdentityPacket {
+            // If targetDeviceId is present it must match our own device ID; reject otherwise.
+            if let targetId = try? packet.getTargetDeviceId(), !targetId.isEmpty,
+               targetId != self.config.hostDeviceId {
+                Logger.network.error("Closing connection: v8 post-TLS targetDeviceId '\(targetId, privacy: .public)' does not match our ID '\(self.config.hostDeviceId, privacy: .public)'")
+                self.close()
+                return
+            }
             self.identity = packet
             self.waitingForV8PostTLSIdentity = false
             self.peerProtocolVersion = (try? packet.getProtocolVersion()) ?? self.peerProtocolVersion

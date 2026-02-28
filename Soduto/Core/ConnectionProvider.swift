@@ -151,8 +151,10 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         
         Logger.network.debug("Broadcasting self-announcement")
         
-        // Try to fill ARP table with all reachable addresses
-        NetworkUtils.pingLocalNetwork()
+        // Fill ARP table in the background to avoid blocking the caller
+        DispatchQueue.global(qos: .background).async {
+            NetworkUtils.pingLocalNetwork()
+        }
         
         let properties: DataPacket.Body = [
             DataPacket.IdentityProperty.tcpPort.rawValue: Int(tcpPort) as AnyObject

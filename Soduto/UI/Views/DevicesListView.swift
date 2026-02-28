@@ -71,17 +71,19 @@ class DevicesListViewModel: ObservableObject {
         // This prevents race conditions where new connections try to establish
         // while old ones are still being torn down
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-            // Ping local network to fill ARP table
-            NetworkUtils.pingLocalNetwork()
-            
-            // Trigger UDP broadcast to rediscover devices
-            NotificationCenter.default.post(
-                name: ConnectionProvider.broadcastAnnouncementNotification,
-                object: nil
-            )
-            
-            // Refresh device list
-            self?.refreshDevices()
+            DispatchQueue.global(qos: .background).async { [weak self] in
+                // Ping local network to fill ARP table
+                NetworkUtils.pingLocalNetwork()
+                
+                // Trigger UDP broadcast and refresh device list on the main actor
+                DispatchQueue.main.async { [weak self] in
+                    NotificationCenter.default.post(
+                        name: ConnectionProvider.broadcastAnnouncementNotification,
+                        object: nil
+                    )
+                    self?.refreshDevices()
+                }
+            }
         }
     }
     

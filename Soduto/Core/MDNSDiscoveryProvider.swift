@@ -142,10 +142,7 @@ public class MDNSDiscoveryProvider {
     private func startAdvertising() {
         let started = advertisementService.start(
             deviceId: config.hostDeviceId,
-            deviceName: config.hostDeviceName,
-            deviceType: config.hostDeviceType.rawValue,
             protocolVersion: DataPacket.protocolVersion,
-            tcpPort: tcpPort,
             serviceType: type(of: self).serviceType,
             serviceDomain: type(of: self).serviceDomain
         )
