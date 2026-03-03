@@ -300,6 +300,23 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         // 1. Peer (TCP initiator) sends identity
         // 2. We receive identity, verify, start TLS as CLIENT
         // 3. After TLS is established, we send our identity
+        
+        // Validate targetDeviceId / targetProtocolVersion if present (v8+).
+        // These fields are optional — v7 peers won't include them. and v8 peers may or may not include them.
+        // If present and mismatched, the identity was not intended for us.
+        if let targetDeviceId = packet.body[DataPacket.IdentityProperty.targetDeviceId.rawValue] as? String,
+           targetDeviceId != self.config.hostDeviceId {
+            Logger.network.warning("Rejecting identity: targetDeviceId \(targetDeviceId, privacy: .public) does not match our ID \(self.config.hostDeviceId, privacy: .public)")
+            connection.close()
+            return
+        }
+        if let targetVersion = packet.body[DataPacket.IdentityProperty.targetProtocolVersion.rawValue] as? Int,
+           targetVersion != DataPacket.protocolVersion {
+            Logger.network.warning("Rejecting identity: targetProtocolVersion \(targetVersion) does not match ours (\(DataPacket.protocolVersion))")
+            connection.close()
+            return
+        }
+        
         do {
             try connection.applyIdentity(packet: packet)
             
