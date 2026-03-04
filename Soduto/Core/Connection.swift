@@ -762,9 +762,27 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         // it to ConnectionProvider as a pre-TLS identity). Once we have the full
         // identity, transition to .Open
         if self.waitingForV8PostTLSIdentity && packet.isIdentityPacket {
+            // Validate that deviceId and protocolVersion match the pre-TLS identity.
+            /// Per the KDE Connect protocol spec: "If the `deviceId` or the `protocolVersion` don't match those used earlier to determine if the device is paired or not, the connection must be aborted."
+            let preTLSDeviceId = try? self.identity?.getDeviceId()
+            let postTLSDeviceId = try? packet.getDeviceId()
+            if preTLSDeviceId != nil && postTLSDeviceId != preTLSDeviceId {
+                Logger.network.error("v8 post-TLS deviceId mismatch: pre-TLS=\(preTLSDeviceId ?? "nil", privacy: .public) post-TLS=\(postTLSDeviceId ?? "nil", privacy: .public) — aborting connection")
+                self.waitingForV8PostTLSIdentity = false
+                self.close()
+                return
+            }
+            let postTLSProtocolVersion = (try? packet.getProtocolVersion()) ?? self.peerProtocolVersion
+            if postTLSProtocolVersion != self.peerProtocolVersion {
+                Logger.network.error("v8 post-TLS protocolVersion mismatch: pre-TLS=\(self.peerProtocolVersion) post-TLS=\(postTLSProtocolVersion) — aborting connection")
+                self.waitingForV8PostTLSIdentity = false
+                self.close()
+                return
+            }
+            
             self.identity = packet
             self.waitingForV8PostTLSIdentity = false
-            self.peerProtocolVersion = (try? packet.getProtocolVersion()) ?? self.peerProtocolVersion
+            self.peerProtocolVersion = postTLSProtocolVersion
             Logger.network.debug("Updated identity from v8 post-TLS packet for \(self, privacy: .public)")
             // Transition to Open now that we have the full identity.
             self.state = .Open
