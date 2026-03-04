@@ -22,6 +22,7 @@ public enum DeviceType: String {
     case Laptop = "laptop"
     case Phone = "phone"
     case Tablet = "tablet"
+    case TV = "tv"
 }
 
 /// Errors thrown by Device instances.
@@ -35,6 +36,7 @@ public enum DeviceError: Error {
 public protocol DeviceDelegate: AnyObject {
     func device(_ device: Device, didChangePairingStatus pairingStatus: PairingStatus)
     func device(_ device: Device, didReceivePairingRequest pairingRequest: PairingRequest)
+    func device(_ device: Device, pairingFailed error: Error)
     func device(_ device: Device, didChangeReachabilityStatus isReachable: Bool)
     func serviceActions(for device: Device) -> [ServiceAction]
 }
@@ -78,6 +80,19 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
     }
     public var hostCertificate: SecCertificate? {
         return self.config.hostCertificate?.certificate
+    }
+    
+    /// The pair verification code for protocol v8+ pairing.
+    /// This code is displayed to users during pairing so they can verify
+    /// both devices show the same code (MITM protection).
+    public var verificationCode: String? {
+        return self.connections.first?.verificationCode
+    }
+    
+    /// The peer's protocol version from the active connection.
+    /// Returns nil if no connection is active.
+    public var protocolVersion: UInt? {
+        return self.connections.first?.peerProtocolVersion
     }
     
     public private(set) var isReachable: Bool = false {
@@ -285,6 +300,7 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
     
     public func connection(_ connection: Connection, pairingFailed error: Error) {
         Logger.device.debug("Connection pairing failed: \(error, privacy: .public)")
+        self.delegate?.device(self, pairingFailed: error)
     }
     
     public func connection(_ connection: Connection, pairingStatusChanged status: PairingStatus) {
@@ -359,6 +375,16 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         
         // Device might be unavailable and no connections present - update status once more to be sure
         self.updatePairingStatus(globalStatus: .Unpaired)
+    }
+    
+    /// Close all TCP connections (force reconnect)
+    public func closeAllConnections() {
+        // Create a copy to avoid modifying array while iterating
+        // (connection close handlers remove from self.connections)
+        let connectionsCopy = self.connections
+        for connection in connectionsCopy {
+            connection.close()
+        }
     }
     
     public func updatePairingStatus(globalStatus: PairingStatus) {

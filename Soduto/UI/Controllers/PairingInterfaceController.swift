@@ -7,60 +7,28 @@
 //
 
 import Foundation
-import UserNotifications
 
-/// Handles the pairing notification UI and user responses.
-public class PairingInterfaceController: UserNotificationActionHandler {
+/// Handles the pairing window UI entry points and updates.
+public class PairingInterfaceController {
     
-    private static let deviceIdProperty = "com.soduto.pairinginterfacecontroller.deviceId"
-    
-    /// Handles user responses to pairing notifications.
-    ///
-    /// Supports the following actions:
-    /// - **pair**: Accepts the pairing request from the device
-    /// - **decline**: Declines the pairing request from the device
-    public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
-        
-        guard let deviceId = response.notification.request.content.userInfo[deviceIdProperty] as? Device.Id else {
-            fatalError("User info with device id property expected to be provided for pairing notification")
-        }
-        
-        switch response.actionIdentifier {
-        case "pair":
-            context.deviceManager.device(withId: deviceId)?.acceptPairing()
-        case "decline", UNNotificationDismissActionIdentifier:
-            context.deviceManager.device(withId: deviceId)?.declinePairing()
-        default:
-            break
+    /// Shows the pairing window for an incoming pairing request.
+    /// - Parameter device: The device requesting to be paired.
+    public static func showPairingWindow(for device: Device) {
+        DispatchQueue.main.async {
+            PairingWindowController.showIncomingRequest(for: device)
         }
     }
     
-    /// Shows a notification asking the user to pair with the specified device.
-    /// - Parameter device: The device requesting to be paired.
-    public static func showPairingNotification(for device: Device) {
-        let un = UNUserNotificationCenter.current()
-        let notificationId = "com.soduto.pairinginterfacecontroller.device.\(device.id)"
-        
-        let notification = UNMutableNotificationContent()
-        notification.userInfo = [
-            deviceIdProperty: device.id,
-            UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(PairingInterfaceController.self)
-        ]
-        notification.title = device.name
-        notification.body = "Do you want to pair this device?"
-        notification.sound = .default
-        notification.categoryIdentifier = "PairDevice"
-        notification.setUrgency(.timeSensitive)
-        
-        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
-        un.add(request) { error in
-            if let error = error {
-                print(error.localizedDescription)
+    /// Updates the pairing window state for a device.
+    /// Call this when pairing succeeds or fails.
+    public static func updatePairingUI(for deviceId: Device.Id, success: Bool) {
+        DispatchQueue.main.async {
+            if success {
+                PairingWindowController.updateState(for: deviceId, state: .success)
+            } else {
+                // Close immediately on failure - the device will handle status reset
+                PairingWindowController.close(for: deviceId)
             }
-        }
-        
-        _ = Timer.compatScheduledTimer(withTimeInterval: DefaultPairingHandler.pairingTimoutInterval, repeats: false) { _ in
-            un.removeNotification(withId: notificationId)
         }
     }
     

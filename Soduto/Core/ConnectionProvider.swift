@@ -28,7 +28,6 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     static public let minTcpPort: UInt16 = 1716
     static public let maxTcpPort: UInt16 = 1764
     static public let minVersionWithSSLSupport: UInt = 6
-    static public let minAnnouncementInterval: TimeInterval = 30.0
     static public let broadcastAnnouncementNotification: Notification.Name = Notification.Name(rawValue: "com.soduto.ConnectionProvider.broadcastAnnouncement")
     static public let networkBecameReachableNotification: Notification.Name = Notification.Name(rawValue: "com.soduto.ConnectionProvider.networkBecameReachable")
     
@@ -39,22 +38,32 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     private let pathMonitorQueue: DispatchQueue = DispatchQueue(label: "com.soduto.NetworkMonitor")
     private var pendingConnections: Set<Connection> = Set<Connection>()
     private var isStarted: Bool = false
-    private var lastAnnouncementTime: TimeInterval = 0.0
-    private var announcementTimer: Timer? = nil
+    
+    /// Timestamp when network services were last started (for cooldown).
+    private var lastStartTime: Date?
+    
+    /// Minimum time between network restarts to avoid race conditions.
+    private static let restartCooldown: TimeInterval = 3.0
     
     // MARK: Network Properties
     
     /// Event loop group for network operations.
     private var eventLoopGroup: MultiThreadedEventLoopGroup?
     
-    /// UDP channel for receiving broadcasts.
+    /// UDP channel for receiving broadcasts (dual-stack for IPv6 support).
     private var udpChannel: Channel?
+    
+    /// Dedicated IPv4 UDP channel for sending broadcasts (SO_BROADCAST requires IPv4).
+    private var broadcastChannel: Channel?
     
     /// TCP server channel for accepting connections.
     private var tcpServerChannel: Channel?
     
     /// The port the TCP server is listening on.
     private var tcpListeningPort: UInt16 = 0
+    
+    /// mDNS discovery provider for instant device discovery.
+    private var mdnsProvider: MDNSDiscoveryProvider?
     
     
     
@@ -85,6 +94,28 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     }
     
     public func start() {
+        // Only start monitoring network reachability.
+        // Actual network services (UDP, TCP, mDNS) are started by becameReachable()
+        // when NWPathMonitor confirms the network is available.
+        self.pathMonitor.start(queue: self.pathMonitorQueue)
+    }
+    
+    public func stop() {
+        self.pathMonitor.cancel()
+        stopNetworkServices()
+    }
+    
+    public func restart() {
+        guard self.isStarted else { return }
+        stopNetworkServices()
+        startNetworkServices()
+    }
+    
+    // MARK: - Network Services Lifecycle
+    
+    /// Starts all network services (UDP, TCP, mDNS) and broadcasts announcement.
+    private func startNetworkServices() {
+        self.lastStartTime = Date()
         
         // Listen for device announcement broadcasts
         startUdp()
@@ -94,27 +125,19 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         
         self.isStarted = true
         
-        // Start monitoring network reachability
-        self.pathMonitor.start(queue: self.pathMonitorQueue)
-        broadcastAnnouncement()
+        // Start mDNS discovery after TCP server is ready
+        startMDNS()
         
-        // Speculative broadcasts after some intervals.
-        _ = Timer.compatScheduledTimer(withTimeInterval: 40.0, repeats: false) { _ in self.broadcastAnnouncement() }
-        _ = Timer.compatScheduledTimer(withTimeInterval: 80.0, repeats: false) { _ in self.broadcastAnnouncement() }
-        _ = Timer.compatScheduledTimer(withTimeInterval: 120.0, repeats: false) { _ in self.broadcastAnnouncement() }
+        // Broadcast our presence
+        broadcastAnnouncement()
     }
     
-    public func stop() {
+    /// Stops all network services.
+    private func stopNetworkServices() {
         self.isStarted = false
-        self.pathMonitor.cancel()
+        stopMDNS()
         stopUdp()
         stopTcpServer()
-    }
-    
-    public func restart() {
-        guard self.isStarted else { return }
-        self.stop()
-        self.start()
     }
     
     
@@ -126,45 +149,33 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         guard self.tcpListeningPort > 0 else { return }
         let tcpPort = self.tcpListeningPort
         
-        guard self.announcementTimer == nil else { return }
+        Logger.network.debug("Broadcasting self-announcement")
         
-        if self.lastAnnouncementTime + ConnectionProvider.minAnnouncementInterval < CACurrentMediaTime() {
-            
-            Logger.network.debug("Broadcasting self-announcement")
-            
-            // Try to fill ARP table with all reachable addresses
-            NetworkUtils.pingLocalNetwork()
-            
-            let properties: DataPacket.Body = [
-                DataPacket.IdentityProperty.tcpPort.rawValue: Int(tcpPort) as AnyObject
-            ]
-            let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
-            sendBroadcast(packet: packet)
-            self.lastAnnouncementTime = CACurrentMediaTime()
-        }
-        else {
-            self.announcementTimer = Timer.compatScheduledTimer(withTimeInterval: ConnectionProvider.minAnnouncementInterval, repeats: false) { _ in
-                self.announcementTimer = nil
-                self.broadcastAnnouncement()
-            }
-        }
+        // Try to fill ARP table with all reachable addresses
+        NetworkUtils.pingLocalNetwork()
+        
+        let properties: DataPacket.Body = [
+            DataPacket.IdentityProperty.tcpPort.rawValue: Int(tcpPort) as AnyObject
+        ]
+        let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
+        sendBroadcast(packet: packet)
     }
     
     /// Sends the identity packet as a UDP broadcast.
+    /// Uses the dedicated IPv4 broadcast channel (SO_BROADCAST only works on IPv4 sockets).
     private func sendBroadcast(packet: DataPacket) {
-        guard let channel = self.udpChannel else {
-            Logger.network.error("UDP channel not available for broadcast")
+        guard let channel = self.broadcastChannel else {
+            Logger.network.error("Broadcast channel not available")
             return
         }
         guard let bytes = try? packet.serialize() else { return }
         
         // Get local interfaces and broadcast to each interface's broadcast address
-        // This avoids kernel errors from attempting to broadcast on interfaces that don't support it
         let localAddresses = NetworkUtils.localAddresses()
         var broadcastCount = 0
         
         for addressInfo in localAddresses {
-            // Only support IPv4 broadcast for now
+            // Only support IPv4 broadcast
             guard addressInfo.ip.isIPv4 else { continue }
             guard addressInfo.netmask.isIPv4 else { continue }
             
@@ -174,7 +185,7 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             let broadcastAddr = ipAddr | ~netmask
             
             // Convert to string
-            var addr = in_addr(s_addr: broadcastAddr)
+            let addr = in_addr(s_addr: broadcastAddr)
             guard let broadcastString = String(cString: inet_ntoa(addr), encoding: .ascii) else { continue }
             
             do {
@@ -198,6 +209,11 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         }
         
         // Send explicit announcements to known hardware addresses
+        guard channel.isActive else {
+            Logger.network.debug("Broadcast channel closed, skipping known device announcements")
+            return
+        }
+        
         let knownDeviceConfigs = self.config.knownDeviceConfigs()
         let accessibleAddresses = (try? NetworkUtils.accessibleIPv4Addresses()) ?? []
         for accessibleAddress in accessibleAddresses {
@@ -230,8 +246,8 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             self.pendingConnections.remove(connection)
         case .Open:
             if let delegate = self.delegate {
-                connection.readPackets()
                 self.pendingConnections.remove(connection)
+                connection.readPackets()
                 delegate.connectionProvider(self, didCreateConnection: connection)
             } else {
                 Logger.network.error("No connection provider delegate to take new connection - closing")
@@ -245,12 +261,22 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     public func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
         Logger.network.debug("connection(<\(connection, privacy: .public)> didSendPacket:<\(packet, privacy: .public)>)")
         
-        // After sending identity packet (outgoing connection), secure as server
+        // Only process during initialization phase
+        guard connection.state == .Initializing else {
+            return
+        }
+        
+        // This callback handles outgoing connections after sending our identity packet.
+        // Per KDE Connect protocol:
+        // 1. We (TCP initiator) send identity
+        // 2. We start TLS as SERVER
+        // 3. Peer starts TLS as CLIENT
+        // Note: Incoming connections are handled in didReadPacket, not here.
         do {
             guard let identity = connection.identity else { throw ConnectionProviderError.IdentityAbsent }
             let protocolVersion = try identity.getProtocolVersion()
             if protocolVersion >= ConnectionProvider.minVersionWithSSLSupport {
-                // Beware that securing as server while connection initiated by self
+                // Outgoing connection: we initiated TCP, we secure as TLS server
                 connection.secureServer()
             }
             connection.finishInitialization()
@@ -269,12 +295,39 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             return
         }
         
-        // The only packet we are waiting for is first identity packet to initialize connection with
+        // This callback is only used for incoming connections receiving the peer's identity packet.
+        // Per KDE Connect protocol:
+        // 1. Peer (TCP initiator) sends identity
+        // 2. We receive identity, verify, start TLS as CLIENT
+        // 3. After TLS is established, we send our identity
+        
+        // Validate targetDeviceId / targetProtocolVersion if present (v8+).
+        // These fields are optional — v7 peers won't include them. and v8 peers may or may not include them.
+        // If present and mismatched, the identity was not intended for us.
+        if let targetDeviceId = packet.body[DataPacket.IdentityProperty.targetDeviceId.rawValue] as? String,
+           targetDeviceId != self.config.hostDeviceId {
+            Logger.network.warning("Rejecting identity: targetDeviceId \(targetDeviceId, privacy: .public) does not match our ID \(self.config.hostDeviceId, privacy: .public)")
+            connection.close()
+            return
+        }
+        /// Android sends targetProtocolVersion as a JSON string (e.g. "8") due to using `getString()` when reading `protocolVersion`
+        /// KDE Desktop sends it as a JSON number.
+        // Handle both: try `Int` first (Desktop/Soduto), then String→Int fallback (Android).
+        let rawTargetVersion = packet.body[DataPacket.IdentityProperty.targetProtocolVersion.rawValue]
+        if let targetVersion = (rawTargetVersion as? Int) ?? (rawTargetVersion as? String).flatMap({ Int($0) }),
+           targetVersion != DataPacket.protocolVersion {
+            Logger.network.warning("Rejecting identity: targetProtocolVersion \(targetVersion) does not match ours (\(DataPacket.protocolVersion))")
+            connection.close()
+            return
+        }
+        
         do {
             try connection.applyIdentity(packet: packet)
+            
+            // Start TLS immediately - we are the TCP acceptor, so we become TLS client
+            // Our identity packet will be sent AFTER TLS is established (in handleTLSEstablished)
             let protocolVersion = try packet.getProtocolVersion()
             if protocolVersion >= ConnectionProvider.minVersionWithSSLSupport {
-                // Beware that securing as client while connection initiated by the peer
                 connection.secureClient()
             }
             connection.finishInitialization()
@@ -290,7 +343,10 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     
     // MARK: - UDP Implementation
     
-    /// Starts the UDP channel for receiving and sending broadcasts.
+    /// Starts the UDP channels for receiving and sending.
+    /// Creates two sockets:
+    /// - Main socket: dual-stack (::) for receiving and IPv6 sends (mDNS link-local)
+    /// - Broadcast socket: IPv4-only (0.0.0.0) for sending broadcasts (SO_BROADCAST requires IPv4)
     private func startUdp() {
         // Create event loop group if needed
         if self.eventLoopGroup == nil {
@@ -302,10 +358,10 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             return
         }
         
-        let bootstrap = DatagramBootstrap(group: group)
+        // Main UDP socket - dual-stack for receiving and IPv6 sends
+        let mainBootstrap = DatagramBootstrap(group: group)
             .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .channelOption(ChannelOptions.Types.SocketOption(level: SOL_SOCKET, name: SO_REUSEPORT), value: 1)
-            .channelOption(ChannelOptions.socketOption(.so_broadcast), value: 1)
             .channelInitializer { [weak self] channel in
                 guard let self = self else {
                     return channel.eventLoop.makeSucceededVoidFuture()
@@ -315,18 +371,59 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             }
         
         do {
-            let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(ConnectionProvider.udpPort)).wait()
+            // Bind to IPv6 any address (::) which creates a dual-stack socket
+            // This allows receiving both IPv4 and IPv6, including link-local IPv6
+            let channel = try mainBootstrap.bind(host: "::", port: Int(ConnectionProvider.udpPort)).wait()
             self.udpChannel = channel
-            Logger.network.info("Listening for UDP broadcasts on port \(ConnectionProvider.udpPort, privacy: .public)")
+            Logger.network.info("Main UDP socket ready on port \(ConnectionProvider.udpPort, privacy: .public)")
         } catch {
-            Logger.network.error("Failed to start UDP: \(error, privacy: .public)")
+            // Fallback to IPv4-only if IPv6 dual-stack fails
+            Logger.network.notice("IPv6 dual-stack UDP failed, falling back to IPv4: \(error, privacy: .public)")
+            do {
+                let channel = try mainBootstrap.bind(host: "0.0.0.0", port: Int(ConnectionProvider.udpPort)).wait()
+                self.udpChannel = channel
+                Logger.network.info("Main UDP socket ready on port \(ConnectionProvider.udpPort, privacy: .public) (IPv4 only)")
+            } catch {
+                Logger.network.error("Failed to start main UDP: \(error, privacy: .public)")
+            }
+        }
+        
+        // Broadcast socket - IPv4-only with SO_BROADCAST for sending broadcasts
+        // SO_BROADCAST only works on IPv4 sockets, not dual-stack
+        let broadcastBootstrap = DatagramBootstrap(group: group)
+            .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .channelOption(ChannelOptions.socketOption(.so_broadcast), value: 1)
+        
+        do {
+            // Bind to any available port (port 0) - we only send from this socket
+            let channel = try broadcastBootstrap.bind(host: "0.0.0.0", port: 0).wait()
+            self.broadcastChannel = channel
+            Logger.network.debug("Broadcast UDP socket ready")
+        } catch {
+            Logger.network.error("Failed to start broadcast UDP: \(error, privacy: .public)")
         }
     }
     
-    /// Stops the UDP channel.
+    /// Stops the UDP channels.
     private func stopUdp() {
         self.udpChannel?.close(promise: nil)
         self.udpChannel = nil
+        self.broadcastChannel?.close(promise: nil)
+        self.broadcastChannel = nil
+    }
+    
+    /// Ensures the UDP channel is active, restarting if needed.
+    /// Returns true if channel is available for use.
+    private func ensureUdpChannelActive() -> Bool {
+        if let channel = self.udpChannel, channel.isActive {
+            return true
+        }
+        
+        // Channel is nil or inactive - restart it
+        Logger.network.notice("UDP channel inactive, restarting...")
+        stopUdp()
+        startUdp()
+        return self.udpChannel?.isActive ?? false
     }
     
     /// Handles incoming UDP packet.
@@ -368,8 +465,21 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             connection.delegate = self
             self.pendingConnections.insert(connection)
             
-            // Send initial identity packet
-            _ = connection.send(DataPacket.identityPacket(config: self.config))
+            // Send initial (pre-TLS) identity packet.
+            // For v8 peers, add targetDeviceId/targetProtocolVersion to the full identity
+            // packet, matching the Android KDE Connect implementation. The full identity
+            // is sent again post-TLS (the post-TLS version is the one that's trusted).
+            let peerVersion = (try? packet.getProtocolVersion()) ?? 7
+            if peerVersion >= 8,
+               let targetDeviceId = try? packet.getDeviceId() {
+                let additionalProps: DataPacket.Body = [
+                    DataPacket.IdentityProperty.targetDeviceId.rawValue: targetDeviceId as AnyObject,
+                    DataPacket.IdentityProperty.targetProtocolVersion.rawValue: NSNumber(value: peerVersion)
+                ]
+                _ = connection.send(DataPacket.identityPacket(additionalProperties: additionalProps, config: self.config))
+            } else {
+                _ = connection.send(DataPacket.identityPacket(config: self.config))
+            }
         } else {
             Logger.network.error("Failed to create outgoing connection")
         }
@@ -418,16 +528,27 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             }
         
         // Try to bind to a port in the KDE Connect range
+        // Use IPv6 dual-stack (::) to accept both IPv4 and IPv6 connections,
+        // including link-local IPv6 (required when phone connects back to us)
         for port in ConnectionProvider.minTcpPort...ConnectionProvider.maxTcpPort {
             do {
-                let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(port)).wait()
+                let channel = try bootstrap.bind(host: "::", port: Int(port)).wait()
                 self.tcpServerChannel = channel
                 self.tcpListeningPort = port
                 Logger.network.info("Listening for TCP connections on port \(port, privacy: .public)")
                 return
-            } catch {
-                // Port in use, try next
-                continue
+            } catch let ipv6Error {
+                // IPv6 dual-stack failed, try IPv4-only fallback
+                do {
+                    let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(port)).wait()
+                    self.tcpServerChannel = channel
+                    self.tcpListeningPort = port
+                    Logger.network.notice("IPv6 TCP failed (\(ipv6Error, privacy: .public)), using IPv4 on port \(port, privacy: .public)")
+                    return
+                } catch {
+                    // Port in use, try next
+                    continue
+                }
             }
         }
         
@@ -439,6 +560,63 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         self.tcpServerChannel?.close(promise: nil)
         self.tcpServerChannel = nil
         self.tcpListeningPort = 0
+    }
+    
+    // MARK: - mDNS Implementation
+    
+    /// Starts mDNS discovery and advertisement.
+    private func startMDNS() {
+        guard self.tcpListeningPort > 0 else {
+            Logger.network.notice("Cannot start mDNS: TCP server not ready")
+            return
+        }
+        
+        self.mdnsProvider = MDNSDiscoveryProvider(config: self.config)
+        self.mdnsProvider?.delegate = self
+        self.mdnsProvider?.start(tcpPort: self.tcpListeningPort)
+    }
+    
+    /// Stops mDNS discovery and advertisement.
+    private func stopMDNS() {
+        self.mdnsProvider?.stop()
+        self.mdnsProvider = nil
+    }
+    
+    /// Sends a UDP identity packet to a specific address (triggered by mDNS discovery).
+    /// Supports IPv6 link-local addresses with scope IDs (e.g., "fe80::1234%en0").
+    private func sendDirectUdpPacket(to address: String) {
+        // Ensure UDP channel is active (may have been closed by broadcast errors)
+        guard ensureUdpChannelActive(), let channel = self.udpChannel else {
+            Logger.network.error("UDP channel not available for direct send")
+            return
+        }
+        guard self.tcpListeningPort > 0 else { return }
+        
+        let properties: DataPacket.Body = [
+            DataPacket.IdentityProperty.tcpPort.rawValue: Int(self.tcpListeningPort) as AnyObject
+        ]
+        let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
+        
+        guard let bytes = try? packet.serialize() else { return }
+        
+        // Use NetworkUtils helper which properly handles IPv6 scope IDs
+        guard let targetAddress = NetworkUtils.createSocketAddress(address: address, port: Int(ConnectionProvider.udpPort)) else {
+            Logger.network.error("Failed to create target address for mDNS discovery: \(address, privacy: .public)")
+            return
+        }
+        
+        var buffer = channel.allocator.buffer(capacity: bytes.count)
+        buffer.writeBytes(bytes)
+        let envelope = AddressedEnvelope(remoteAddress: targetAddress, data: buffer)
+        
+        channel.writeAndFlush(envelope).whenComplete { result in
+            switch result {
+            case .success:
+                Logger.network.debug("mDNS-triggered UDP sent to \(address, privacy: .public)")
+            case .failure(let error):
+                Logger.network.debug("mDNS-triggered UDP send to \(address, privacy: .public) failed: \(error, privacy: .public)")
+            }
+        }
     }
     
     /// Handles a new TCP connection accepted by the server.
@@ -467,15 +645,59 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     // MARK: Private methods
     
     private func becameReachable() {
-        Logger.network.debug("Became reachable")
+        Logger.network.debug("Network became reachable")
         NotificationCenter.default.post(name: ConnectionProvider.networkBecameReachableNotification, object: self)
-        self.restart()
+        
+        if self.isStarted {
+            // Check cooldown to avoid race conditions from rapid NWPathMonitor callbacks
+            if let lastStart = self.lastStartTime,
+               Date().timeIntervalSince(lastStart) < ConnectionProvider.restartCooldown {
+                // Schedule restart after cooldown expires
+                let delay = ConnectionProvider.restartCooldown - Date().timeIntervalSince(lastStart)
+                Logger.network.debug("Network services recently started, delaying restart by \(delay, privacy: .public)s")
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.restart()
+                }
+                return
+            }
+            
+            // Network changed (e.g., WiFi → Ethernet) - restart to pick up new interfaces
+            Logger.network.debug("Network change detected - restarting network services")
+            stopNetworkServices()
+        }
+        
+        startNetworkServices()
     }
     
     private func becameUnreachable() {
-        Logger.network.debug("Became unreachable")
+        Logger.network.debug("Network became unreachable")
+        // Optionally stop services when network is down
+        // For now, keep them running - they'll fail gracefully and resume when network returns
     }
     
+}
+
+// MARK: - MDNSDiscoveryProviderDelegate
+
+extension ConnectionProvider: MDNSDiscoveryProviderDelegate {
+    
+    public func mdnsProvider(_ provider: MDNSDiscoveryProvider,
+                             discoveredDeviceAt address: String,
+                             port: UInt16,
+                             deviceId: String) {
+        // Check if we need a new connection to this device
+        guard let delegate = self.delegate else { return }
+        guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else {
+            Logger.network.debug("mDNS: Connection to \(deviceId, privacy: .public) not needed")
+            return
+        }
+        
+        Logger.network.debug("mDNS: Triggering connection to \(deviceId, privacy: .public) at \(address, privacy: .public)")
+        
+        // Send UDP identity packet to trigger normal connection flow
+        // This is the recommended approach per KDE Connect protocol spec
+        sendDirectUdpPacket(to: address)
+    }
 }
 
 // MARK: - UDP Handler

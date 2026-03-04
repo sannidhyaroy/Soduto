@@ -100,6 +100,17 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     public private(set) var peerCertificate: SecCertificate? = nil
     public private(set) var peerAddress: SocketAddress
     
+    /// The protocol version reported by the peer device.
+    /// Defaults to 7 for backwards compatibility with older devices.
+    public private(set) var peerProtocolVersion: UInt = 7
+    
+    /// The pair verification code for protocol v8+ pairing.
+    /// This code should be displayed to users during pairing so they can verify
+    /// both devices show the same code (MITM protection).
+    public var verificationCode: String? {
+        return pairingHandler?.verificationCode
+    }
+    
     public var hostCertificate: SecCertificate? { return self.config.hostCertificate?.certificate }
     
     /// The NIO channel for this connection.
@@ -117,6 +128,9 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     private var packetsExpected: Int = 0
     private var waitingToSecure: Bool = false
     private var shouldFinishInitializationWhenSecured: Bool = false
+    /// True while waiting for a v8 peer's post-TLS identity packet.
+    /// ConnectionProvider reads this to defer handoff to DeviceManager.
+    public private(set) var waitingForV8PostTLSIdentity: Bool = false
     private var pairingHandler: DefaultPairingHandler? = nil
     
     /// Trust handler for TLS verification.
@@ -190,7 +204,6 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         self.state = .Initializing
         self.uploadQueue = Connection.createDispatchQueue(withLabel: "Payload upload queue")
         self.downloadQueue = Connection.createDispatchQueue(withLabel: "Payload download queue")
-        
         super.init()
         
         // Set up the channel pipeline
@@ -220,6 +233,20 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         self.identity = packet
         self.pairingHandler = DefaultPairingHandler(config: deviceConfig)
         self.pairingHandler!.delegate = self
+        self.pairingHandler!.timeoutHandler = { [weak self] in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                self.pairingDelegate?.connection(self, pairingFailed: DefaultPairingHandler.Error.timedOut)
+                self.pairingDelegate?.connection(self, pairingStatusChanged: .Unpaired)
+            }
+        }
+        
+        // Store peer's protocol version (default to 7 for backwards compatibility)
+        self.peerProtocolVersion = (try? packet.getProtocolVersion()) ?? 7
+        
+        // Pass protocol version to pairing handler so it can generate correct verification codes
+        self.pairingHandler!.setPeerProtocolVersion(self.peerProtocolVersion)
+        
         // Note: pairingHandler's pairingDelegate and impersonateAs are NOT set because
         // Connection handles incoming pairing packets directly in handlePairingPacket(),
         // while outgoing pairing actions (requestPairing, acceptPairing, etc.) delegate
@@ -231,12 +258,17 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             Logger.network.error("secureServer called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
             return
         }
+        guard !self.waitingToSecure && !self.shouldFinishInitializationWhenSecured else {
+            Logger.network.debug("secureServer called but TLS already in progress or completed")
+            return
+        }
         guard self.identity != nil else {
             Logger.network.error("secureServer called but identity not set")
             assertionFailure("Identity expected to be known before securing connection")
             return
         }
         
+        Logger.network.debug("Starting TLS handshake as SERVER for \(self, privacy: .public)")
         self.waitingToSecure = true
         self.performTLSUpgrade(role: .server)
     }
@@ -246,12 +278,17 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             Logger.network.error("secureClient called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
             return
         }
+        guard !self.waitingToSecure && !self.shouldFinishInitializationWhenSecured else {
+            Logger.network.debug("secureClient called but TLS already in progress or completed")
+            return
+        }
         guard self.identity != nil else {
             Logger.network.error("secureClient called but identity not set")
             assertionFailure("Identity expected to be known before securing connection")
             return
         }
         
+        Logger.network.debug("Starting TLS handshake as CLIENT for \(self, privacy: .public)")
         self.waitingToSecure = true
         self.performTLSUpgrade(role: .client)
     }
@@ -259,6 +296,10 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     public func finishInitialization() {
         guard self.state == .Initializing else {
             Logger.network.error("finishInitialization called but connection initialization already finished (state: \(String(describing: self.state), privacy: .public))")
+            return
+        }
+        guard !self.shouldFinishInitializationWhenSecured else {
+            Logger.network.debug("finishInitialization already called, ignoring duplicate")
             return
         }
         guard self.identity != nil else {
@@ -269,8 +310,10 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         
         if !self.waitingToSecure {
             self.state = .Open
+            Logger.network.debug("Connection \(self, privacy: .public) is now Open (no TLS wait)")
         } else {
             self.shouldFinishInitializationWhenSecured = true
+            Logger.network.debug("Connection \(self, privacy: .public) waiting for TLS handshake to complete")
         }
         
         self.observeNotifications()
@@ -503,30 +546,32 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         
         // Convert to NIOCore.SocketAddress
         let targetAddress: NIOCore.SocketAddress
-        do {
-            let ipString: String
-            if address.isIPv4 {
-                // address.description for IPv4 is "ip:port", extract just the IP
-                let desc = address.description
-                ipString = String(desc.split(separator: ":").first ?? "")
-            } else if address.isIPv6 {
-                // address.description for IPv6 is "[ip]:port", extract just the IP
-                let desc = address.description
-                if let start = desc.firstIndex(of: "["), let end = desc.firstIndex(of: "]") {
-                    ipString = String(desc[desc.index(after: start)..<end])
-                } else {
-                    Logger.network.error("Failed to parse IPv6 address")
-                    return
-                }
+        let ipString: String
+        if address.isIPv4 {
+            // address.description for IPv4 is "ip:port", extract just the IP
+            let desc = address.description
+            ipString = String(desc.split(separator: ":").first ?? "")
+        } else if address.isIPv6 {
+            // address.description for IPv6 is "[ip]:port", extract just the IP
+            // May include scope ID for link-local (e.g., "fe80::1234%en0")
+            let desc = address.description
+            if let start = desc.firstIndex(of: "["), let end = desc.firstIndex(of: "]") {
+                ipString = String(desc[desc.index(after: start)..<end])
             } else {
-                Logger.network.error("Unsupported address type")
+                Logger.network.error("Failed to parse IPv6 address")
                 return
             }
-            targetAddress = try NIOCore.SocketAddress(ipAddress: ipString, port: Int(address.port))
-        } catch {
-            Logger.network.error("Failed to create address: \(error, privacy: .public)")
+        } else {
+            Logger.network.error("Unsupported address type")
             return
         }
+        
+        // Use NetworkUtils helper which supports IPv6 link-local addresses with scope IDs
+        guard let socketAddress = NetworkUtils.createSocketAddress(address: ipString, port: Int(address.port)) else {
+            Logger.network.error("Failed to create socket address for: \(ipString, privacy: .public)")
+            return
+        }
+        targetAddress = socketAddress
         
         bootstrap.connect(to: targetAddress).whenComplete { [weak self] result in
             switch result {
@@ -584,6 +629,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
                 let sslHandler = try self.createSSLHandler(role: role)
                 // Add SSL handler at the front of the pipeline.
                 try channel.pipeline.syncOperations.addHandler(sslHandler, position: .first)
+                Logger.network.debug("TLS handler added to pipeline as \(String(describing: role), privacy: .public), waiting for handshake...")
             } catch {
                 Logger.network.error("Failed to add/create TLS handler: \(error, privacy: .public)")
                 self.state = .Closed
@@ -710,6 +756,40 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         Logger.network.debug("handle(packet type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(self, privacy: .public)]")
 #endif
         
+        // For protocol v8: intercept the peer's post-TLS identity packet.
+        // After TLS, v8 connections stay in .Initializing until this arrives.
+        // We must handle it BEFORE the .Initializing guard (which would forward
+        // it to ConnectionProvider as a pre-TLS identity). Once we have the full
+        // identity, transition to .Open
+        if self.waitingForV8PostTLSIdentity && packet.isIdentityPacket {
+            // Validate that deviceId and protocolVersion match the pre-TLS identity.
+            /// Per the KDE Connect protocol spec: "If the `deviceId` or the `protocolVersion` don't match those used earlier to determine if the device is paired or not, the connection must be aborted."
+            let preTLSDeviceId = try? self.identity?.getDeviceId()
+            let postTLSDeviceId = try? packet.getDeviceId()
+            if preTLSDeviceId != nil && postTLSDeviceId != preTLSDeviceId {
+                Logger.network.error("v8 post-TLS deviceId mismatch: pre-TLS=\(preTLSDeviceId ?? "nil", privacy: .public) post-TLS=\(postTLSDeviceId ?? "nil", privacy: .public) — aborting connection")
+                self.waitingForV8PostTLSIdentity = false
+                self.close()
+                return
+            }
+            let postTLSProtocolVersion = (try? packet.getProtocolVersion()) ?? self.peerProtocolVersion
+            if postTLSProtocolVersion != self.peerProtocolVersion {
+                Logger.network.error("v8 post-TLS protocolVersion mismatch: pre-TLS=\(self.peerProtocolVersion) post-TLS=\(postTLSProtocolVersion) — aborting connection")
+                self.waitingForV8PostTLSIdentity = false
+                self.close()
+                return
+            }
+            
+            self.identity = packet
+            self.waitingForV8PostTLSIdentity = false
+            self.peerProtocolVersion = postTLSProtocolVersion
+            Logger.network.debug("Updated identity from v8 post-TLS packet for \(self, privacy: .public)")
+            // Transition to Open now that we have the full identity.
+            self.state = .Open
+            Logger.network.debug("Connection \(self, privacy: .public) is now Open (v8 post-TLS identity received)")
+            return
+        }
+        
         // During initialization, pass all packets to delegate (e.g., identity packet)
         // The delegate (ConnectionProvider) will call applyIdentity() and finish initialization
         if self.state == .Initializing {
@@ -726,9 +806,17 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             return
         }
         
+        // Ignore duplicate identity packets after connection is already Open
+        if packet.isIdentityPacket {
+            Logger.network.debug("Ignoring identity packet on already-open connection \(self, privacy: .public)")
+            return
+        }
+        
         // If not paired (but connection is Open), send unpair notification and don't process further
+        // This prevents service packets from being processed on unpaired connections
         if self.pairingStatus != .Paired {
             if self.pairingStatus == .Unpaired {
+                Logger.network.debug("Dropping packet from unpaired device, sending unpair notification")
                 _ = self.send(DataPacket.unpairPacket())
             }
             return
@@ -752,6 +840,18 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             if pairFlag {
                 switch pairingHandler.pairingStatus {
                 case .Unpaired:
+                    // Always call setPairingTimestamp to trigger verification code generation
+                    // v7: timestamp is nil (packet doesn't include it) → generates code without timestamp
+                    // v8: timestamp is required; missing/invalid timestamp is a protocol error
+                    let requestTimestamp: Int64?
+                    if self.peerProtocolVersion >= 8 {
+                        // For protocol v8, a missing/invalid timestamp is a protocol error — reject pairing
+                        requestTimestamp = try packet.getPairingTimestamp()
+                    } else {
+                        requestTimestamp = nil
+                    }
+                    pairingHandler.setPairingTimestamp(requestTimestamp)
+                    
                     // Peer initiates pairing - notify delegate with PairingRequest
                     pairingHandler.setStatus(.RequestedByPeer)
                     let request = PairingRequest(connection: self)
@@ -810,15 +910,21 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     }
     
     fileprivate func handleTLSEstablished() {
+        Logger.network.debug("TLS handshake completed for \(self, privacy: .public)")
         self.waitingToSecure = false
         
         // Extract and store peer certificate for pairing
         if let trustHandler = self.trustHandler,
            let peerCert = trustHandler.peerCertificates.first {
             self.peerCertificate = SSLCertificateUtils.createSecCertificate(from: peerCert)
+            
+            // Generate protocol v8 pair verification code now that we have both certificates
+            self.pairingHandler?.updateVerificationCode()
         }
         
         // Perform post-handshake certificate validation for paired devices
+        // Note: We do NOT send unsolicited pair packets - TLS certificate validation is sufficient
+        // to confirm pairing. Sending pair:true can confuse remote devices and cause them to unpair.
         if let trustHandler = self.trustHandler, self.pairingHandler?.pairingStatus == .Paired {
             if let deviceId = try? self.identity?.getDeviceId(),
                let savedCertificate = self.config.deviceConfig(for: deviceId).certificate {
@@ -828,11 +934,23 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
                     self.close()
                     return
                 }
+                Logger.network.debug("Post-handshake certificate validation succeeded for paired device")
             }
         }
         
         if self.shouldFinishInitializationWhenSecured {
-            self.state = .Open
+            if self.peerProtocolVersion >= 8 {
+                // Protocol v8 requires both sides to exchange identity again over TLS.
+                // Send our full identity now. Stay in .Initializing — the peer's
+                // post-TLS identity (with capabilities, deviceName, etc.) will arrive
+                // shortly and handle(packet:) will transition to .Open.
+                Logger.network.debug("Sending post-TLS identity for v8, waiting for peer's full identity")
+                self.waitingForV8PostTLSIdentity = true
+                _ = self.send(DataPacket.identityPacket(config: self.config))
+            } else {
+                self.state = .Open
+                Logger.network.debug("Connection \(self, privacy: .public) is now Open (after TLS)")
+            }
         }
     }
     

@@ -125,7 +125,8 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     // MARK: NSMenuDelegate
     
     public func menuNeedsUpdate(_ menu: NSMenu) {
-        NotificationCenter.default.post(name: ConnectionProvider.broadcastAnnouncementNotification, object: nil)
+        // Removed automatic broadcast - not part of official KDE Connect protocol
+        // Only broadcast on: app start, network change, manual Cmd+R
         
         if menu == self.statusBarMenu {
             self.refreshMenuDeviceList()
@@ -221,7 +222,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
                 let mainIcon = batteryStatus.isCharging ? #imageLiteral(resourceName: "batteryStatusChargingIconInverted") : (batteryStatus.isCritical ? #imageLiteral(resourceName: "batteryCriticalIcon") : #imageLiteral(resourceName: "batteryStatusIcon"))
                 assert(mainIcon.size == rect.size)
                 mainIcon.draw(in: rect)
-
+                
                 let percentage = "\(batteryStatus.currentCharge)%" as NSString
                 let attr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
                             NSAttributedString.Key.foregroundColor: NSColor.black,]
@@ -244,10 +245,10 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
                 
                 // Draw network type (3G/4G/5G)
                 let networkType = connectivityStatus.networkType
-                let networkLabel = (networkType == "LTE" ? "4G" : 
-                                    networkType == "5G" ? "5G" : 
-                                    (networkType == "UMTS" || networkType == "CDMA2000" || networkType == "HSPA") ? "3G" : 
-                                    (networkType == "GSM" || networkType == "CDMA" || networkType == "iDEN" || networkType == "EDGE") ? "2G" : "")
+                let networkLabel = (networkType == "LTE" ? "4G" :
+                                        networkType == "5G" ? "5G" :
+                                        (networkType == "UMTS" || networkType == "CDMA2000" || networkType == "HSPA") ? "3G" :
+                                        (networkType == "GSM" || networkType == "CDMA" || networkType == "iDEN" || networkType == "EDGE") ? "2G" : "")
                 
                 if !networkLabel.isEmpty {
                     let netAttr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),

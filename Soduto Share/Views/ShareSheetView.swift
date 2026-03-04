@@ -53,6 +53,7 @@ func sfSymbolName(for deviceType: String) -> String {
     case "laptop":  return "laptopcomputer"
     case "phone":   return "iphone"
     case "tablet":  return "ipad"
+    case "tv":      return "tv"
     default:        return "display"
     }
 }

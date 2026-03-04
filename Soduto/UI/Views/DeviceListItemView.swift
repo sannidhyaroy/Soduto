@@ -28,7 +28,7 @@ public class DeviceListItemView: NSTableCellView {
         button.imagePosition = .imageOnly
         button.target = self
         button.action = #selector(showDeviceInfo(_:))
-
+        
         return button
     }()
     
@@ -61,10 +61,10 @@ public class DeviceListItemView: NSTableCellView {
         switch device.pairingStatus {
         case .Unpaired:
             device.requestPairing()
-            break
+            // Show the pairing window with verification code
+            PairingWindowController.showOutgoingRequest(for: device)
         case .Paired:
             device.unpair()
-            break
         default:
             break
         }
@@ -123,7 +123,7 @@ public class DeviceListItemView: NSTableCellView {
             actionButton.bezelStyle = .push
             actionButton.controlSize = .small
             actionButton.isBordered = true
-
+            
             if #available(macOS 10.14, *) {
                 actionButton.contentTintColor = NSColor.controlAccentColor
             }
@@ -165,7 +165,20 @@ extension DeviceType {
         case .Laptop: return #imageLiteral(resourceName: "laptopIcon")
         case .Tablet: return #imageLiteral(resourceName: "tabletIcon")
         case .Phone: return #imageLiteral(resourceName: "phoneIcon")
+        case .TV: return NSImage(systemSymbolName: "tv", accessibilityDescription: "TV")
         default: return nil
+        }
+    }
+    
+    /// SF Symbol name for this device type.
+    public var sfSymbolName: String {
+        switch self {
+        case .Desktop: return "desktopcomputer"
+        case .Laptop: return "laptopcomputer"
+        case .Phone: return "iphone"
+        case .Tablet: return "ipad"
+        case .TV: return "tv"
+        case .Unknown: return "display"
         }
     }
     

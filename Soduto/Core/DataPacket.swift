@@ -26,7 +26,7 @@ public struct DataPacket: CustomStringConvertible {
     
     // MARK: Properties
     
-    static let protocolVersion: UInt = 7
+    static let protocolVersion: UInt = 8
     private static var idCounter: Int64 = 0
     private static var idCounterLock: NSLock = NSLock()
     
@@ -148,6 +148,8 @@ extension DataPacket {
         case outgoingCapabilities = "outgoingCapabilities"
         case protocolVersion = "protocolVersion"
         case tcpPort = "tcpPort"
+        case targetDeviceId = "targetDeviceId"
+        case targetProtocolVersion = "targetProtocolVersion"
     }
     
     public enum IdentityError: Error {
@@ -165,6 +167,8 @@ extension DataPacket {
     // MARK: Properties
     
     public static let identityPacketType = "kdeconnect.identity"
+    
+    var isIdentityPacket: Bool { return self.type == DataPacket.identityPacketType }
     
     
     // MARK: Public static methods

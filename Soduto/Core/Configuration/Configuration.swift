@@ -284,6 +284,8 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
             return .Phone
         case 3:
             return .Tablet
+        case 4:
+            return .TV
         default:
             return .Unknown
         }

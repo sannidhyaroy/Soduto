@@ -40,7 +40,7 @@ public protocol UserNotificationActionHandler: AnyObject {
 /// This class handles:
 /// - Acting as the UNUserNotificationCenterDelegate for the app
 /// - Requesting notification authorization at app startup
-/// - Registering base notification categories (pairing, telephony, share)
+/// - Registering base notification categories (telephony, share)
 /// - Creating and caching dynamic notification categories for Android notifications
 /// - Dispatching notification actions to the appropriate handler classes
 /// - Determining how notifications are presented in the foreground
@@ -175,17 +175,6 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
     /// Registers base notification categories. Called once at app startup.
     /// Dynamic categories for incoming notifications are created on-demand and cached.
     private func registerNotificationCategories() {
-        // Add pairing category
-        let pairAction = UNNotificationAction(identifier: "pair", title: "Pair")
-        let declineAction = UNNotificationAction(identifier: "decline", title: "Decline")
-        let pairingCategory = UNNotificationCategory(
-            identifier: "PairDevice",
-            actions: [pairAction, declineAction],
-            intentIdentifiers: [],
-            options: []
-        )
-        registeredCategories.insert(pairingCategory)
-        
         // Add telephony categories
         let muteAction = UNNotificationAction(identifier: "mutecall", title: "Mute")
         let ringingCategory = UNNotificationCategory(

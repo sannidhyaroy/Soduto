@@ -134,11 +134,46 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
                 self.serviceManager.cleanup(for: device)
             }
         }
+        
+        // Update pairing window based on status
+        DispatchQueue.main.async {
+            switch status {
+            case .Paired:
+                PairingInterfaceController.updatePairingUI(for: device.id, success: true)
+            case .Unpaired:
+                // If there's an active pairing window, it means pairing was rejected/cancelled
+                if PairingWindowController.isActive(for: device.id) {
+                    // Preserve explicit timeout state if it was already set by pairingFailed callback.
+                    if let state = PairingWindowController.state(for: device.id),
+                       state == .outgoingRequest || state == .incomingRequest {
+                        PairingWindowController.updateState(for: device.id, state: .failed)
+                    }
+                }
+            default:
+                break
+            }
+        }
+        
         self.delegate?.deviceManager(self, didChangeDeviceState: device)
     }
     
     public func device(_ device: Device, didReceivePairingRequest request: PairingRequest) {
         self.delegate?.deviceManager(self, didReceivePairingRequest: request, forDevice: device)
+    }
+    
+    public func device(_ device: Device, pairingFailed error: Error) {
+        Logger.device.debug("device(<\(String(describing: device), privacy: .public)> pairingFailed:<\(error, privacy: .public)>)")
+        
+        DispatchQueue.main.async {
+            guard PairingWindowController.isActive(for: device.id) else { return }
+            
+            if let pairingError = error as? DefaultPairingHandler.Error,
+               pairingError == .timedOut {
+                PairingWindowController.updateState(for: device.id, state: .timeout)
+            } else {
+                PairingWindowController.updateState(for: device.id, state: .failed)
+            }
+        }
     }
     
     
@@ -168,6 +203,12 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
         return actions
     }
     
+    /// Close all TCP connections for all devices (force reconnect)
+    public func closeAllConnections() {
+        for device in self.devices.values {
+            device.closeAllConnections()
+        }
+    }
     
     // MARK: Private methods
     
