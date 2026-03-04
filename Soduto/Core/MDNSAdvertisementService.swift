@@ -57,7 +57,10 @@ final class MDNSAdvertisementService {
         
         for (key, value) in txtValues {
             let status = value.withCString { rawValue in
-                TXTRecordSetValue(&txtRecordRef, key, UInt8(strlen(rawValue)), rawValue)
+                // DNS-SD TXT record values are limited to 255 bytes
+                // Clamp to avoid a fatal UInt8 overflow trap on unexpectedly long values (e.g. device names)
+                let len = min(strlen(rawValue), 255)
+                return TXTRecordSetValue(&txtRecordRef, key, UInt8(len), rawValue)
             }
             guard status == kDNSServiceErr_NoError else {
                 self.delegate?.mdnsAdvertisementService(self, didFailWithErrorCode: status)
