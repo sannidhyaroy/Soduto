@@ -27,7 +27,7 @@ public struct NetworkUtils {
         var hints = addrinfo()
         hints.ai_family = AF_UNSPEC      // Allow both IPv4 and IPv6
         hints.ai_socktype = 0            // Unspecified: allow both UDP and TCP
-        hints.ai_flags = AI_NUMERICHOST  // Don't do DNS lookup, just parse the address
+        hints.ai_flags = AI_NUMERICHOST | AI_NUMERICSERV  // Don't do DNS or service-name lookups
         
         var result: UnsafeMutablePointer<addrinfo>?
         let status = getaddrinfo(address, String(port), &hints, &result)
