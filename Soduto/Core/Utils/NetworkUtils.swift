@@ -83,11 +83,19 @@ public struct NetworkUtils {
         var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, AF_INET, NET_RT_FLAGS, RTF_LLINFO]
         guard sysctl(&mib, 6, nil, &neededBufferSize, nil, 0) >= 0 else { throw NetworkError.routeSysctlEstimateFailed }
         
+        // Retry loop: the ARP table can grow between the estimate and retrieval
+        // calls (TOCTOU race), causing the second sysctl to fail with ENOMEM.
         var buffer = [UInt8](repeating: 0, count: neededBufferSize)
-        
-        // Retrieve routing table
         var tableSize: size_t = neededBufferSize
-        guard sysctl(&mib, 6, &buffer, &tableSize, nil, 0) >= 0 else { throw NetworkError.routingTableRetrievalFailed }
+        var retries = 3
+        while sysctl(&mib, 6, &buffer, &tableSize, nil, 0) < 0 {
+            retries -= 1
+            guard retries > 0 else { throw NetworkError.routingTableRetrievalFailed }
+            // Re-estimate and reallocate
+            guard sysctl(&mib, 6, nil, &neededBufferSize, nil, 0) >= 0 else { throw NetworkError.routeSysctlEstimateFailed }
+            buffer = [UInt8](repeating: 0, count: neededBufferSize)
+            tableSize = neededBufferSize
+        }
         
         // Read routing table
         var addresses: [ArpInfo] = []
@@ -101,7 +109,15 @@ public struct NetworkUtils {
                 let sdl = UnsafeRawPointer(sin.advanced(by: 1)).assumingMemoryBound(to: sockaddr_dl.self)
                 
                 let sin_addr = sin.pointee.sin_addr
-                let ipAddressString = String(cString: inet_ntoa(sin_addr))
+                // Use inet_ntop instead of inet_ntoa — the latter uses a process-wide static buffer and is not thread-safe.
+                var addrCopy = sin_addr
+                var ipBuf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                let ipAddressString: String
+                if let cStr = inet_ntop(AF_INET, &addrCopy, &ipBuf, socklen_t(ipBuf.count)) {
+                    ipAddressString = String(cString: cStr)
+                } else {
+                    ipAddressString = "0.0.0.0"
+                }
                 var hwAddressString: String? = nil
                 if sdl.pointee.sdl_alen > 0 {
                     let dataOffset = MemoryLayout<sockaddr_dl>.offset(of: \.sdl_data)!
@@ -118,7 +134,9 @@ public struct NetworkUtils {
                 let info = ArpInfo(sin_addr: sin_addr, ipAddressString: ipAddressString, hwAddressString: hwAddressString)
                 addresses.append(info)
                 
-                pos = pos + Int(rtm.pointee.rtm_msglen)
+                let msgLen = Int(rtm.pointee.rtm_msglen)
+                guard msgLen > 0 else { break }
+                pos = pos + msgLen
             }
         }
         
@@ -219,9 +237,12 @@ public struct NetworkUtils {
                 let flags = Int32((ptr?.pointee.ifa_flags)!)
                 var addr = ptr?.pointee.ifa_addr.pointee
                 
-                // Check for running IPv4, IPv6 interfaces. Skip the loopback interface.
+                // Check for running IPv4 interfaces. Skip the loopback interface.
+                // Note: IPv6 is excluded because all consumers only use IPv4 for
+                // broadcast address calculation, and the sockaddr copy-by-value
+                // truncates IPv6 addresses (sockaddr_in6 is 28 bytes vs 16 for sockaddr).
                 if (flags & (IFF_UP|IFF_RUNNING|IFF_LOOPBACK)) == (IFF_UP|IFF_RUNNING) {
-                    if addr?.sa_family == UInt8(AF_INET) || addr?.sa_family == UInt8(AF_INET6) {
+                    if addr?.sa_family == UInt8(AF_INET) {
                         
                         // Convert interface address to a human readable string:
                         var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
