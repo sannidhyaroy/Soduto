@@ -275,7 +275,8 @@ extension MDNSDiscoveryProvider: MDNSBrowseServiceDelegate {
 
 extension MDNSDiscoveryProvider: MDNSEndpointResolverDelegate {
     func mdnsEndpointResolver(_ resolver: MDNSEndpointResolver, didResolveAddress address: String, forDeviceId deviceId: String, tcpPort: UInt16) {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             self.delegate?.mdnsProvider(self, discoveredDeviceAt: address, port: tcpPort, deviceId: deviceId)
         }
     }
