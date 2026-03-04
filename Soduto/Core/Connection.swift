@@ -132,6 +132,7 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     /// ConnectionProvider reads this to defer handoff to DeviceManager.
     public private(set) var waitingForV8PostTLSIdentity: Bool = false
     private var pairingHandler: DefaultPairingHandler? = nil
+    private var notificationObservers: [Any] = []
     
     /// Trust handler for TLS verification.
     private var trustHandler: TrustHandler?
@@ -214,7 +215,8 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     }
     
     deinit {
-        NotificationCenter.default.removeObserver(self)
+        self.notificationObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        self.notificationObservers.removeAll()
         self.state = .Closed
         self.channel?.close(promise: nil)
     }
@@ -1105,16 +1107,17 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     }
     
     private func observeNotifications() {
-        NotificationCenter.default.addObserver(forName: PayloadPortRegistry.portReleaseNotification, object: nil, queue: nil) { [weak self] _ in
+        let portObserver = NotificationCenter.default.addObserver(forName: PayloadPortRegistry.portReleaseNotification, object: nil, queue: nil) { [weak self] _ in
             if let self = self {
                 DispatchQueue.main.async {
                     self.delegate?.connectionCapacityChanged(self)
                 }
             }
         }
-        NotificationCenter.default.addObserver(forName: ConnectionProvider.networkBecameReachableNotification, object: nil, queue: nil) { [weak self] _ in
+        let networkObserver = NotificationCenter.default.addObserver(forName: ConnectionProvider.networkBecameReachableNotification, object: nil, queue: nil) { [weak self] _ in
             self?.sendKeepAlivePacket()
         }
+        self.notificationObservers = [portObserver, networkObserver]
     }
     
     private func discardUnsentPackets(silently: Bool) -> [(dataPacket: DataPacket, completionHandler: SendingCompletionHandler?)] {
