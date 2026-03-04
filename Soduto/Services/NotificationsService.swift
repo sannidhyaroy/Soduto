@@ -276,6 +276,33 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
     
+    /// Represents the synchronization phase for a single device's notification sync lifecycle
+    ///
+    /// The sync lifecycle proceeds as:
+    ///   `.preparing` → `.syncing` → (optionally) `.verifying` → back to absent (idle)
+    ///
+    /// - `preparing`: setup() is running async prep work (cleanup, reconcile, repopulate).
+    ///   Notification IDs arriving during this phase are buffered.
+    /// - `syncing`: The first `notification.request` has been sent. Received IDs are tracked.
+    ///   When the debounce timer fires, `finishSyncWindow` computes suspected stale IDs.
+    ///   If none are found, the phase ends. If some are found, transitions to `.verifying`.
+    /// - `verifying`: A second `notification.request` has been sent solely to confirm whether
+    ///   suspected-stale IDs are truly gone. New notifications are still processed normally,
+    ///   but **no new suspects are created**. When the debounce timer fires again, any IDs still
+    ///   absent from both responses are confirmed stale and removed.
+    private enum SyncPhase {
+        /// Async prep in progress; buffering early-arriving notification IDs.
+        case preparing(bufferedIds: Set<NotificationId>)
+        
+        /// First sync window open; tracking received IDs from the initial `notification.request`.
+        case syncing(receivedIds: Set<NotificationId>)
+        
+        /// Verification window open; confirming suspected-stale IDs with a second request.
+        /// `suspectedStaleIds`: IDs absent from the first response that need confirmation.
+        /// `receivedIds`: IDs received during this verification window.
+        case verifying(suspectedStaleIds: Set<NotificationId>, receivedIds: Set<NotificationId>)
+    }
+    
     /// MainActor-isolated state manager for active notifications and sync tasks.
     @MainActor
     private class NotificationStateManager {
@@ -287,17 +314,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         /// Tracks the last known content hash for each notification to detect true updates vs reconnection duplicates
         var notificationContentHashes: [NotificationId: String] = [:]
         
-        /// Tracks notification IDs received during a sync window
-        var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
+        /// Current sync phase per device. Absent (nil) means idle — no sync in progress.
+        var syncPhase: [Device.Id: SyncPhase] = [:]
         
-        /// Buffers notification IDs received after setup starts but before sync window starts.
-        var preSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
+        /// Debounce tasks for sync window reconciliation, per device.
+        var debounceTasks: [Device.Id: Task<Void, Never>] = [:]
         
         /// Tracks setup generations to prevent stale setup tasks from mutating current sync state.
         var setupGenerationByDevice: [Device.Id: Int] = [:]
-        
-        /// Tasks for post-sync reconciliation
-        var syncReconciliationTasks: [Device.Id: Task<Void, Never>] = [:]
         
         /// Tasks for device setup/sync
         var setupTasks: [Device.Id: Task<Void, Never>] = [:]
@@ -316,9 +340,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         func reset() {
             notificationIds.removeAll()
             notificationContentHashes.removeAll()
-            syncReconciliationTasks.values.forEach { $0.cancel() }
-            syncReconciliationTasks.removeAll()
-            preSyncReceivedIds.removeAll()
+            debounceTasks.values.forEach { $0.cancel() }
+            debounceTasks.removeAll()
+            syncPhase.removeAll()
             setupGenerationByDevice.removeAll()
             setupTasks.values.forEach { $0.cancel() }
             setupTasks.removeAll()
@@ -410,24 +434,34 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     /// Called when a device connects. Requests current notifications from the device.
     ///
-    /// Synchronization model:
-    /// - Rebuild local knowledge from Notification Center first (`repopulateNotificationIds`)
-    /// - Start a sync window and track all IDs observed during that window
-    /// - Reconcile only against IDs observed in that window
+    /// ## Synchronization model
     ///
-    /// Important behavioral choice:
-    /// - If zero notification packets are observed in a sync window, we treat the sync as
-    ///   non-authoritative and skip destructive stale-removal. This avoids deleting valid local
-    ///   notifications when a peer fails to answer `notification.request` reliably.
-    /// - IDs observed after setup begins but before the sync window opens are buffered and merged
-    ///   into the window. This prevents a race where early packets would otherwise be missed.
+    /// The sync lifecycle for a device proceeds through explicit phases (see `SyncPhase`):
     ///
-    /// TODO: Verify if existing notifications are send continuously, then comment out the codeblock inside this function.
+    /// 1. **Preparing** (`.preparing`): Async setup work runs — icon cleanup, state reconciliation,
+    ///    repopulation from Notification Center. Notification IDs arriving early are buffered.
+    /// 2. **Syncing** (`.syncing`): The first `notification.request` is sent. Received IDs are tracked
+    ///    with a debounce timer. When the timer fires, suspected-stale IDs are computed.
+    /// 3. **Verifying** (`.verifying`): If any suspected-stale IDs were found, a second
+    ///    `notification.request` is sent to confirm. IDs absent from both responses are confirmed
+    ///    stale and removed. No new suspects are created in this phase.
     ///
-    /// Duplicate alerts are prevented by:
+    /// ## Key behavioral choices
+    ///
+    /// - If zero notification packets are observed in a sync window, the sync is treated as
+    ///   non-authoritative and no destructive stale-removal is performed.
+    /// - IDs observed after setup begins but before the sync window opens are buffered in the
+    ///   `.preparing` phase and merged when transitioning to `.syncing`.
+    /// - Stale removal requires two consecutive absences (initial + verification) to protect against
+    ///   Android's `NotificationListenerService.getActiveNotifications()` occasionally returning
+    ///   incomplete results. This ensures we don't falsely remove notifications that Android simply
+    ///   didn't include in a single response.
+    ///
+    /// ## Duplicate alert prevention
+    ///
     /// - `isAlreadyDisplayed` check: Notifications already in `notificationIds` are skipped entirely
-    ///   if their content hash is unchanged (reconnection scenario), preventing unnecessary refreshes when the
-    ///   device momentarily reconnects (e.g., WiFi change, charging starts)
+    ///   if their content hash is unchanged (reconnection scenario), preventing unnecessary refreshes
+    ///   when the device momentarily reconnects (e.g., WiFi change, charging starts)
     ///
     /// On app startup, `notificationIds` is empty, so we first repopulate it from the
     /// Notification Center's delivered notifications before requesting new ones.
@@ -439,9 +473,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         /// we might delete valid icons for newly arriving notifications.
         Task { @MainActor in
             state.setupTasks[device.id]?.cancel()
+            state.debounceTasks[device.id]?.cancel()
             let generation = (state.setupGenerationByDevice[device.id] ?? 0) + 1
             state.setupGenerationByDevice[device.id] = generation
-            state.preSyncReceivedIds[device.id] = []
+            state.syncPhase[device.id] = .preparing(bufferedIds: [])
             
             let setupTask = Task {
                 await Self.cleanupManager.ensureCleanup { Self.cleanupStaleIconFiles() }
@@ -456,8 +491,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     state.setupGenerationByDevice[device.id] == generation
                 }
                 guard shouldProceed else { return }
-
-                // Start sync window and update state on MainActor
+                
+                // Transition from .preparing to .syncing, merging any buffered IDs
                 await MainActor.run {
                     startSyncWindow(for: device)
                     state.setupGenerationByDevice.removeValue(forKey: device.id)
@@ -1056,6 +1091,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         guard let id = self.notificationId(for: dataPacket, from: device) else { return }
         
+        // If we're in verification phase and this ID is in the suspected set, clear it.
+        // The explicit isCancel is authoritative — no need for verification to re-process it.
+        await MainActor.run {
+            clearSuspectedId(id, for: device)
+        }
+        
         // Clean up downloaded icon file for this packet
         if let packetId = try? dataPacket.getId() {
             if let iconURL = await iconState.removeDownloadedIconURL(for: packetId) {
@@ -1106,116 +1147,218 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     // MARK: Sync Window & Stale Notification Removal
     
-    /// Starts a sync window for a device. During this window, all received notification IDs are tracked.
+    /// Transitions a device from `.preparing` to `.syncing` phase.
     ///
-    /// Any IDs buffered during setup (received before the window opened) are seeded into the
-    /// pending set, so reconciliation does not lose early packets.
+    /// Any notification IDs buffered during the `.preparing` phase are seeded into the
+    /// `.syncing` received set, so reconciliation does not lose early packets.
+    /// Starts the initial sync timeout (debounce timer).
     @MainActor
     private func startSyncWindow(for device: Device) {
-        state.syncReconciliationTasks[device.id]?.cancel() // Cancel any existing task for this device
-        let bufferedIds = state.preSyncReceivedIds.removeValue(forKey: device.id) ?? []
-        state.pendingSyncReceivedIds[device.id] = bufferedIds
+        state.debounceTasks[device.id]?.cancel()
         
+        // Extract buffered IDs from the preparing phase
+        var bufferedIds: Set<NotificationId> = []
+        if case .preparing(let ids) = state.syncPhase[device.id] {
+            bufferedIds = ids
+        }
+        
+        // Transition to syncing phase
+        state.syncPhase[device.id] = .syncing(receivedIds: bufferedIds)
+        
+        // Start initial sync timeout
         let task = Task<Void, Never> {
             try? await Task.sleep(nanoseconds: UInt64(initialSyncTimeout * 1_000_000_000))
-            
             guard !Task.isCancelled else { return }
             await finishSyncWindow(for: device)
         }
-        state.syncReconciliationTasks[device.id] = task
+        state.debounceTasks[device.id] = task
+        
         if bufferedIds.isEmpty {
-            Logger.services.debug("Started sync window for device \(device.name, privacy: .public)")
+            Logger.services.debug("Sync phase → .syncing for \(device.name, privacy: .public)")
         } else {
-            Logger.services.debug("Started sync window for device \(device.name, privacy: .public) with \(bufferedIds.count, privacy: .public) pre-sync notification IDs")
+            Logger.services.debug("Sync phase → .syncing for \(device.name, privacy: .public) with \(bufferedIds.count, privacy: .public) buffered IDs from .preparing")
         }
     }
     
     /// Records a notification ID for sync reconciliation.
     ///
-    /// Behavior:
-    /// - If a sync window is active, the ID is added to that window's pending set.
-    /// - If setup is active but the window is not open yet, the ID is buffered in pre-sync state.
-    ///   This closes the setup->sync race and preserves packet visibility for reconciliation.
+    /// Behavior depends on the current `SyncPhase`:
+    /// - `.preparing`: The ID is buffered. It will be merged when transitioning to `.syncing`.
+    /// - `.syncing`: The ID is recorded and the debounce timer is reset.
+    /// - `.verifying`: The ID is recorded (confirming it's alive) and the debounce timer is reset.
+    ///   No new suspects are created in this phase.
+    /// - Absent (idle): The ID is ignored — no sync is in progress.
     @MainActor
     private func recordReceivedNotificationId(_ notificationId: NotificationId, for device: Device) {
-        // If sync window is active, record directly for reconciliation.
-        if state.pendingSyncReceivedIds[device.id] != nil {
-            state.pendingSyncReceivedIds[device.id]?.insert(notificationId)
-            
-            // Debounce: Reschedule the reconciliation task to wait for end of stream
-            state.syncReconciliationTasks[device.id]?.cancel()
-            
-            let task = Task<Void, Never> {
-                try? await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
-                
-                guard !Task.isCancelled else { return }
-                await finishSyncWindow(for: device)
-            }
-            state.syncReconciliationTasks[device.id] = task
-            return
-        }
+        guard let phase = state.syncPhase[device.id] else { return }
         
-        // If setup is in progress but sync window hasn't started yet, buffer this ID.
-        guard state.setupGenerationByDevice[device.id] != nil else { return }
-        if state.preSyncReceivedIds[device.id] == nil {
-            state.preSyncReceivedIds[device.id] = []
+        switch phase {
+        case .preparing(var bufferedIds):
+            bufferedIds.insert(notificationId)
+            state.syncPhase[device.id] = .preparing(bufferedIds: bufferedIds)
+            // No debounce needed during preparation — setup drives the transition.
+            
+        case .syncing(var receivedIds):
+            receivedIds.insert(notificationId)
+            state.syncPhase[device.id] = .syncing(receivedIds: receivedIds)
+            resetDebounceTimer(for: device)
+            
+        case .verifying(let suspectedStaleIds, var receivedIds):
+            receivedIds.insert(notificationId)
+            state.syncPhase[device.id] = .verifying(suspectedStaleIds: suspectedStaleIds, receivedIds: receivedIds)
+            resetDebounceTimer(for: device)
         }
-        state.preSyncReceivedIds[device.id]?.insert(notificationId)
     }
     
-    /// Finishes the sync window for a device. Removes local notifications not received during sync.
+    /// Resets the debounce timer for a device's sync window.
+    /// When the timer fires, `finishSyncWindow` is called to process the current phase.
+    @MainActor
+    private func resetDebounceTimer(for device: Device) {
+        state.debounceTasks[device.id]?.cancel()
+        let task = Task<Void, Never> {
+            try? await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await finishSyncWindow(for: device)
+        }
+        state.debounceTasks[device.id] = task
+    }
+    
+    /// Removes a notification ID from the verification suspected-stale set, if present.
+    ///
+    /// This is called when an explicit `isCancel` packet arrives during the `.verifying` phase.
+    /// Since the notification is being authoritatively cancelled, it should not remain in the
+    /// suspected set (which would cause a redundant removal attempt in `finishSyncWindow`).
+    @MainActor
+    private func clearSuspectedId(_ notificationId: NotificationId, for device: Device) {
+        guard case .verifying(var suspectedStaleIds, let receivedIds) = state.syncPhase[device.id] else { return }
+        if suspectedStaleIds.remove(notificationId) != nil {
+            state.syncPhase[device.id] = .verifying(suspectedStaleIds: suspectedStaleIds, receivedIds: receivedIds)
+            Logger.services.debug("Cleared \(notificationId, privacy: .public) from suspected-stale set (explicit isCancel during verification)")
+        }
+    }
+    
+    /// Finishes the sync window for a device. Behavior depends on the current `SyncPhase`.
+    ///
+    /// ## `.syncing` phase (first pass)
+    /// Computes `suspectedStaleIds = localIds - receivedIds`.
+    /// - If empty: all local notifications confirmed alive → transition to idle.
+    /// - If non-empty: suspected notifications may be stale OR Android simply didn't include
+    ///   them in this batch (its `NotificationListenerService.getActiveNotifications()` response
+    ///   is not guaranteed to be complete). Transition to `.verifying` and send a second
+    ///   `notification.request` to confirm.
+    /// - If zero IDs were received: non-authoritative → skip stale removal entirely.
+    ///
+    /// ## `.verifying` phase (second pass)
+    /// Checks suspected IDs against the second response.
+    /// - IDs that appeared in the verification window: confirmed alive, keep them.
+    /// - IDs still absent after two consecutive requests: confirmed stale, remove them.
+    /// - If zero IDs were received during verification: non-authoritative → keep all suspects.
+    ///
+    /// This two-pass approach intentionally favors false negatives (keeping a stale notification
+    /// slightly longer) over false positives (incorrectly deleting a still-valid notification).
+    /// Truly dismissed notifications will be consistently absent across both requests.
+    ///
     /// NOTE: KDE Connect does not provide an authoritative or complete notification snapshot.
     /// There is no explicit end-of-list marker or completeness guarantee.
     /// Stale removal performed here is therefore best-effort and heuristic-based.
-    ///
-    /// Reconciliation contract:
-    /// - If we observed at least one notification ID in this window, the result is treated as
-    ///   authoritative and local stale notifications are removed.
-    /// - If we observed zero IDs, reconciliation is treated as inconclusive and no destructive
-    ///   removal is performed.
-    ///
-    /// This intentionally favors false negatives (keeping a stale local notification a bit longer)
-    /// over false positives (incorrectly deleting a still-valid remote notification).
-    /// They will be re-added when the notification packet arrives later. This situation may arise in devices that delay sending notification packets, even after establishing connection.
-    /// This behavior is an intentional trade-off to provide a cleaner and more seamless notification mirroring experience on macOS.
-    /// TODO: Verify if existing notifications are send continuously, then comment out the `for loop` codeblock inside this function
     @MainActor
     private func finishSyncWindow(for device: Device) async {
-        guard let receivedIds = state.pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
-        state.syncReconciliationTasks.removeValue(forKey: device.id)
+        guard let phase = state.syncPhase[device.id] else { return }
+        state.debounceTasks[device.id]?.cancel()
+        state.debounceTasks.removeValue(forKey: device.id)
         
+        switch phase {
+        case .preparing:
+            // Should not happen — startSyncWindow transitions away from .preparing.
+            // But if it does, just clean up.
+            Logger.services.debug("finishSyncWindow called during .preparing for \(device.name, privacy: .public); ignoring")
+            return
+            
+        case .syncing(let receivedIds):
+            await finishInitialSync(for: device, receivedIds: receivedIds)
+            
+        case .verifying(let suspectedStaleIds, let receivedIds):
+            await finishVerification(for: device, suspectedStaleIds: suspectedStaleIds, receivedIds: receivedIds)
+        }
+    }
+    
+    /// Handles completion of the initial `.syncing` phase.
+    @MainActor
+    private func finishInitialSync(for device: Device, receivedIds: Set<NotificationId>) async {
         guard let localIds = state.notificationIds[device.id] else {
-            Logger.services.debug("Finished sync window for \(device.name, privacy: .public): no local notifications to reconcile")
+            Logger.services.debug("Sync [initial] for \(device.name, privacy: .public): no local notifications to reconcile")
+            state.syncPhase.removeValue(forKey: device.id)
             return
         }
         
-        // If we didn't receive any notification IDs during the sync window, we won't make destructive assumptions
+        // If we didn't receive any notification IDs, the response was non-authoritative
         guard !receivedIds.isEmpty else {
-            Logger.services.debug("Finished sync window for \(device.name, privacy: .public): no notification packets received; skipping stale removal")
+            Logger.services.debug("Sync [initial] for \(device.name, privacy: .public): no notification packets received; skipping stale removal")
+            state.syncPhase.removeValue(forKey: device.id)
             return
         }
         
-        // Find local notifications that were NOT received from the device (i.e., dismissed on remote)
-        let staleIds = localIds.subtracting(receivedIds)
+        let suspectedStaleIds = localIds.subtracting(receivedIds)
         
-        if staleIds.isEmpty {
-            Logger.services.debug("Finished sync window for \(device.name, privacy: .public): all local notifications still exist on remote")
+        if suspectedStaleIds.isEmpty {
+            Logger.services.debug("Sync [initial] for \(device.name, privacy: .public): all \(localIds.count, privacy: .public) local notifications confirmed alive (received \(receivedIds.count, privacy: .public))")
+            state.syncPhase.removeValue(forKey: device.id)
             return
         }
         
-        Logger.services.debug("Finished sync window for \(device.name, privacy: .public): removing \(staleIds.count, privacy: .public) stale notifications")
+        // Suspected stale IDs found — transition to verification phase
+        Logger.services.debug("Sync [initial] for \(device.name, privacy: .public): \(suspectedStaleIds.count, privacy: .public) suspected stale (received \(receivedIds.count, privacy: .public) of \(localIds.count, privacy: .public) local); sending verification request")
+        
+        state.syncPhase[device.id] = .verifying(suspectedStaleIds: suspectedStaleIds, receivedIds: [])
+        
+        // Start verification timeout and send second request
+        let task = Task<Void, Never> {
+            try? await Task.sleep(nanoseconds: UInt64(initialSyncTimeout * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await finishSyncWindow(for: device)
+        }
+        state.debounceTasks[device.id] = task
+        device.send(DataPacket.notificationRequestPacket())
+    }
+    
+    /// Handles completion of the `.verifying` phase.
+    @MainActor
+    private func finishVerification(for device: Device, suspectedStaleIds: Set<NotificationId>, receivedIds: Set<NotificationId>) async {
+        // Always transition to idle after verification, regardless of outcome
+        state.syncPhase.removeValue(forKey: device.id)
+        
+        // If zero IDs received during verification, the response was non-authoritative
+        guard !receivedIds.isEmpty else {
+            Logger.services.debug("Sync [verification] for \(device.name, privacy: .public): no notification packets received during verification; keeping all \(suspectedStaleIds.count, privacy: .public) suspects")
+            return
+        }
+        
+        // IDs that appeared in the verification window are confirmed alive
+        let confirmedStaleIds = suspectedStaleIds.subtracting(receivedIds)
+        let confirmedAliveIds = suspectedStaleIds.intersection(receivedIds)
+        
+        if !confirmedAliveIds.isEmpty {
+            Logger.services.debug("Sync [verification] for \(device.name, privacy: .public): \(confirmedAliveIds.count, privacy: .public) suspected notifications confirmed alive")
+        }
+        
+        if confirmedStaleIds.isEmpty {
+            Logger.services.debug("Sync [verification] for \(device.name, privacy: .public): all suspected notifications confirmed alive; no removals")
+            return
+        }
+        
+        Logger.services.debug("Sync [verification] for \(device.name, privacy: .public): removing \(confirmedStaleIds.count, privacy: .public) confirmed-stale notifications")
         let deliveredByIdentifier = Dictionary(uniqueKeysWithValues: (await un.deliveredNotifications()).map { ($0.request.identifier, $0.request.content) })
         
-        for staleId in staleIds {
+        for staleId in confirmedStaleIds {
             let remotePacketId = packetNotificationId(from: staleId, for: device)
             if let content = deliveredByIdentifier[staleId] {
                 let bodyPreview = String(content.body.prefix(180))
                 Logger.services.debug(
-                    "Removing stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), title=\(content.title, privacy: .public), subtitle=\(content.subtitle, privacy: .public), bodyPreview=\(bodyPreview, privacy: .public)"
+                    "Removing confirmed-stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), title=\(content.title, privacy: .public), subtitle=\(content.subtitle, privacy: .public), bodyPreview=\(bodyPreview, privacy: .public)"
                 )
             } else {
                 Logger.services.debug(
-                    "Removing stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), deliveredMetadata=missing"
+                    "Removing confirmed-stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), deliveredMetadata=missing"
                 )
             }
             /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach and keep our icon caches
