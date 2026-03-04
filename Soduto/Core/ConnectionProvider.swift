@@ -310,7 +310,11 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             connection.close()
             return
         }
-        if let targetVersion = packet.body[DataPacket.IdentityProperty.targetProtocolVersion.rawValue] as? Int,
+        /// Android sends targetProtocolVersion as a JSON string (e.g. "8") due to using `getString()` when reading `protocolVersion`
+        /// KDE Desktop sends it as a JSON number.
+        // Handle both: try `Int` first (Desktop/Soduto), then String→Int fallback (Android).
+        let rawTargetVersion = packet.body[DataPacket.IdentityProperty.targetProtocolVersion.rawValue]
+        if let targetVersion = (rawTargetVersion as? Int) ?? (rawTargetVersion as? String).flatMap({ Int($0) }),
            targetVersion != DataPacket.protocolVersion {
             Logger.network.warning("Rejecting identity: targetProtocolVersion \(targetVersion) does not match ours (\(DataPacket.protocolVersion))")
             connection.close()
