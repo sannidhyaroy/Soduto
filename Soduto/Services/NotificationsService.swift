@@ -361,6 +361,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 await self.hideNotification(for: dataPacket, from: device)
             }
             else {
+                // Eagerly record this notification ID for sync window tracking, before starting any icon download
+                if let syncNotificationId = self.notificationId(for: dataPacket, from: device) {
+                    await MainActor.run {
+                        self.recordReceivedNotificationId(syncNotificationId, for: device)
+                    }
+                }
                 do {
                     let id = try dataPacket.getId() ?? nil
                     if id != nil && dataPacket.downloadTask != nil {
@@ -966,9 +972,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 
                 /// isReconnectionDuplicate: Same notification with same content arriving again
                 let isReconnectionDuplicate = isAlreadyDisplayed && !isContentChanged
-                
-                /// Record this notification as received during sync window, even if it's a reconnection duplicate
-                self.recordReceivedNotificationId(notificationId, for: device)
                 
                 guard !isReconnectionDuplicate else {
                     Logger.services.debug("Notification skipped (reconnection duplicate): \(appName, privacy: .public) - \(packetNotificationId, privacy: .public)")
