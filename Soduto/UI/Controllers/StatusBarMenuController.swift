@@ -218,22 +218,29 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             
             // Draw battery status if available
             if let batteryStatus = batteryStatus {
-                let rect = NSRect(x: currentX, y: 0, width: 24, height: 13)
-                let mainIcon = batteryStatus.isCharging ? #imageLiteral(resourceName: "batteryStatusChargingIconInverted") : (batteryStatus.isCritical ? #imageLiteral(resourceName: "batteryCriticalIcon") : #imageLiteral(resourceName: "batteryStatusIcon"))
-                assert(mainIcon.size == rect.size)
-                mainIcon.draw(in: rect)
+                // Map charge % to the nearest symbol tier (0, 10, 25, 50, 75, 100)
+                // Breakpoints are at midpoints between adjacent tiers.
+                let tier: Int
+                switch batteryStatus.currentCharge {
+                    case 0...5:   tier = 0
+                    case 6...17:  tier = 10
+                    case 18...37: tier = 25
+                    case 38...62: tier = 50
+                    case 63...87: tier = 75
+                    default:      tier = 100
+                }
+                let config = NSImage.SymbolConfiguration.preferringMulticolor()
+                let symbolName = batteryStatus.isCharging ? "battery.\(tier)percent.bolt" : "battery.\(tier)percent"
+                if let symbol = NSImage(named: symbolName)?.withSymbolConfiguration(config) {
+                    symbol.draw(in: NSRect(x: currentX, y: (13 - symbol.size.height) / 2, width: symbol.size.width, height: symbol.size.height))
+                }
                 
                 let percentage = "\(batteryStatus.currentCharge)%" as NSString
-                let attr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
-                            NSAttributedString.Key.foregroundColor: NSColor.black,]
+                let attr: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: 10),
+                    .foregroundColor: NSColor.labelColor
+                ]
                 percentage.draw(in: NSRect(x: currentX + 26, y: 2, width: 28, height: 10), withAttributes: attr)
-                
-                let fullWidth: CGFloat = 16
-                if (!batteryStatus.isCharging && !batteryStatus.isCritical) {
-                    let chargedWidth: CGFloat = fullWidth * CGFloat(batteryStatus.currentCharge) / 100.0
-                    NSColor.black.set()
-                    NSRect(x: currentX + 2, y: 2, width: chargedWidth, height: 8).fill()
-                }
                 
                 currentX += batteryWidth
             }
@@ -252,14 +259,14 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
                 
                 if !networkLabel.isEmpty {
                     let netAttr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
-                                   NSAttributedString.Key.foregroundColor: NSColor.black,]
+                                   NSAttributedString.Key.foregroundColor: NSColor.labelColor,]
                     (networkLabel as NSString).draw(in: NSRect(x: currentX, y: 2, width: 15, height: 10), withAttributes: netAttr)
                 }
                 
                 // Draw signal bars with larger size
                 if signalStrength > 0 {
                     for i in 0..<signalStrength {
-                        NSColor.black.set()
+                        NSColor.labelColor.set()
                         let barHeight = CGFloat(i + 1) * 2.5 // Increased bar height
                         let barWidth: CGFloat = 2.0 // Increased bar width
                         NSRect(x: currentX + 16 + (CGFloat(i) * 3), y: 2, width: barWidth, height: barHeight).fill()
@@ -267,7 +274,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
                 } else {
                     // Draw X for no signal
                     let noSignalAttr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
-                                        NSAttributedString.Key.foregroundColor: NSColor.black,]
+                                        NSAttributedString.Key.foregroundColor: NSColor.labelColor,]
                     ("X" as NSString).draw(in: NSRect(x: currentX + 16, y: 2, width: 10, height: 10), withAttributes: noSignalAttr)
                 }
             }
@@ -275,7 +282,6 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             return true
         }
         
-        image.isTemplate = true
         return image
     }
 }
