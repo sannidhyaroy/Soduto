@@ -1012,16 +1012,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
             
-            // Extract OTP if notification is from an allowed app
-            // Show action button always but only auto-copy when in idle phase
-            let otpCode: String? = await MainActor.run {
-                OTPExtractor.handleIfOTP(
-                    body: body, title: title, appName: appName,
-                    packetNotificationId: packetNotificationId,
-                    autoCopy: state.syncPhase[device.id] == nil
-                )
-            }
-            
             // Interact with MainActor state
             let shouldShow = await MainActor.run { () -> Bool in
                 let isAlreadyDisplayed = state.notificationIds[device.id]?.contains(notificationId) ?? false
@@ -1047,8 +1037,18 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             
             guard shouldShow else { return }
             
-            /// dontPresent: Don't show notification
+            // Don't show notification
             let dontPresent = isAnswer
+            
+            // Extract OTP if notification is from an allowed app
+            // Show action button always but only auto-copy when in idle phase
+            let otpCode: String? = await MainActor.run {
+                OTPExtractor.handleIfOTP(
+                    body: body, title: title, appName: appName,
+                    packetNotificationId: packetNotificationId,
+                    autoCopy: state.syncPhase[device.id] == nil
+                )
+            }
             
             let notificationIconURL: URL? = await iconState.getDownloadedIconURL(for: packetNotificationId)
             
