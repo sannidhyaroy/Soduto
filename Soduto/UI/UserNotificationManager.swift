@@ -58,6 +58,8 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
         case action1 = "com.soduto.usernotificationmanager.action1"
         case action2 = "com.soduto.usernotificationmanager.action2"
         case action3 = "com.soduto.usernotificationmanager.action3"
+        // OTP code to copy when the user taps the "Copy OTP" action button
+        case otpCode = "com.soduto.usernotificationmanager.otpCode"
     }
     
     /// Fixed positional action identifiers used across all notification categories
@@ -66,6 +68,7 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
         case action1 = "action_1"
         case action2 = "action_2"
         case action3 = "action_3"
+        case copyOtp = "copy_otp"
         case dismiss = "Dismiss"
     }
     
@@ -215,18 +218,19 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
     // MARK: Dynamic Category Management
     
     /// Gets or creates a notification category for the given shape and action titles.
-    /// Categories are cached by their full signature (shape + titles) for reuse.
+    /// Categories are cached by their full signature (shape + titles + OTP code) for reuse.
     /// - Parameters:
     ///   - hasReply: Whether the notification should have a reply action
     ///   - actionTitles: The titles of the custom action buttons (max 3)
+    ///   - otpCode: The detected OTP code to show in the button title (e.g. `Copy "XYZABC"`), or nil for no OTP button
     /// - Returns: The category identifier to use for the notification
-    public func getOrCreateCategory(hasReply: Bool, actionTitles: [String]) -> String {
+    public func getOrCreateCategory(hasReply: Bool, actionTitles: [String], otpCode: String? = nil) -> String {
         let clampedActions = Array(actionTitles.prefix(3))
         
-        // Build cache key from shape + titles
+        // Build cache key from shape + titles + OTP code (unique per code so each shows its own value)
         let shape = CategoryIdentifier.category(hasReply: hasReply, actionCount: clampedActions.count).rawValue
         let titlesKey = clampedActions.joined(separator: "|")
-        let cacheKey = "\(shape):\(titlesKey)"
+        let cacheKey = "\(shape):\(titlesKey):\(otpCode.map { "otp_\($0)" } ?? "")"
         
         // Return cached category identifier if exists
         if let cachedCategoryId = categoryCache[cacheKey] {
@@ -267,6 +271,14 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
             actions.append(UNNotificationAction(
                 identifier: ActionIdentifier.action3.rawValue,
                 title: clampedActions[2]
+            ))
+        }
+        
+        // Add "Copy <code>" action if an OTP was detected in the notification body
+        if let otp = otpCode {
+            actions.append(UNNotificationAction(
+                identifier: ActionIdentifier.copyOtp.rawValue,
+                title: "Copy \"\(otp)\""
             ))
         }
         

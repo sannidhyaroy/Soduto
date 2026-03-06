@@ -605,6 +605,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// - **Dismiss**: Sends a cancel packet to the remote device if the notification is cancelable
     /// - **Reply**: Sends the user's text reply to the remote device
     /// - **Action1/2/3**: Sends the semantic action string stored in userInfo to trigger the remote action
+    /// - **Copy OTP**: Copies the detected OTP from userInfo to the clipboard (no device interaction)
     /// - **Default (body click)**: Ignored - notification remains visible
     public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
         let userInfo = response.notification.request.content.userInfo
@@ -613,6 +614,18 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Users must use the explicit "Dismiss" button to dismiss on both macOS and Android.
         // See the Dismiss Philosophy documentation above.
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            return
+        }
+        
+        // Handle "Copy OTP" — reads the stored code from userInfo, copies it to the clipboard,
+        // and shows a HUD toast. No device interaction needed, so this works even if the remote
+        // device has disconnected since the notification was delivered.
+        if response.actionIdentifier == UserNotificationManager.ActionIdentifier.copyOtp.rawValue {
+            if let otp = userInfo[UserNotificationManager.Property.otpCode.rawValue] as? String {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(otp, forType: .string)
+                MainActor.assumeIsolated { HUDToast.show("OTP Copied") }
+            }
             return
         }
         
@@ -883,25 +896,25 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         appName: String,
         replyId: String?,
         isCancelable: Bool,
-        actions: [String]?
+        actions: [String]?,
+        otpCode: String?
     ) async -> UNMutableNotificationContent {
         let notification = UNMutableNotificationContent()
         
-        /// Filter actions - exclude copy OTP actions, "Reply" actions (handled separately via requestReplyId), and limit to max 3
+        /// Filter actions — exclude:
+        /// - Empty action buttons (like in sensitive notifications from Google Messages)
+        /// - "Reply" (handled separately via requestReplyId)
+        /// - Native copy-OTP actions (e.g. `Copy OTP`, `Copy "XYZABC"`) — they copy on the remote device, which is useless on macOS. We provide our own button when an OTP is detected
         var filteredActions: [String] = []
         if let actions = actions {
             for action in actions {
-                // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
-                if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
-                    await self.copyOTP(from: action) // Copy OTP to clipboard
-                }
-                // Skip "Reply" actions since we handle reply separately via requestReplyId
-                else if action.lowercased() == "reply" {
-                    continue
-                }
-                else {
-                    filteredActions.append(action)
-                }
+                let lower = action.lowercased()
+                if lower == "" { continue }
+                // Suppress inline reply buttons as they are not supported
+                if lower == "reply" { continue }
+                // Suppress native copy-otp style buttons as we provide our own
+                if lower.hasPrefix("copy") { continue }
+                filteredActions.append(action)
             }
         }
         // Limit to max 3 custom actions (Android can show max 3)
@@ -930,6 +943,9 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         if actionCount >= 3 {
             userInfo[UserNotificationManager.Property.action3.rawValue] = filteredActions[2]
         }
+        if let otp = otpCode {
+            userInfo[UserNotificationManager.Property.otpCode.rawValue] = otp
+        }
         
         notification.userInfo = userInfo
         notification.title = "\(appName) | \(device.name)"
@@ -940,7 +956,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         let actionTitles = Array(filteredActions.prefix(3))
         let categoryId = await userNotificationManager.getOrCreateCategory(
             hasReply: hasReply,
-            actionTitles: actionTitles
+            actionTitles: actionTitles,
+            otpCode: otpCode
         )
         notification.categoryIdentifier = categoryId
         
@@ -995,6 +1012,16 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
             
+            // Extract OTP if notification is from an allowed app
+            // Show action button always but only auto-copy when in idle phase
+            let otpCode: String? = await MainActor.run {
+                OTPExtractor.handleIfOTP(
+                    body: body, title: title, appName: appName,
+                    packetNotificationId: packetNotificationId,
+                    autoCopy: state.syncPhase[device.id] == nil
+                )
+            }
+            
             // Interact with MainActor state
             let shouldShow = await MainActor.run { () -> Bool in
                 let isAlreadyDisplayed = state.notificationIds[device.id]?.contains(notificationId) ?? false
@@ -1037,7 +1064,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 appName: appName,
                 replyId: replyId,
                 isCancelable: isCancelable,
-                actions: actions
+                actions: actions,
+                otpCode: otpCode
             )
             
             /// Set Notification App Icon
@@ -1120,29 +1148,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             state.removeNotificationId(id, from: device)
             state.notificationContentHashes.removeValue(forKey: id)
         }
-    }
-    
-    @MainActor
-    private func copyOTP(from string:String) {
-        let prefixToRemove = "Copy \""
-        let suffixToRemove = "\""
-        let pattern = "[^0-9A-Za-z]" // Matches any character that is NOT a number or letter
-        
-        // Extract OTP
-        let startIndex = string.index(string.startIndex, offsetBy: prefixToRemove.count)
-        let endIndex = string.index(string.endIndex, offsetBy: -suffixToRemove.count)
-        let slicedString = string[startIndex..<endIndex]
-        
-        let regex = try! NSRegularExpression(pattern: pattern, options: [])
-        let range = NSRange(location: 0, length: slicedString.utf16.count)
-        
-        // Remove any non-alphanumeric character (like invisible unicode characters)
-        let otp = regex.stringByReplacingMatches(in: String(slicedString), options: [], range: range, withTemplate: "")
-        
-        // Copy to clipboard
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(otp, forType: .string)
     }
     
     // MARK: Sync Window & Stale Notification Removal
