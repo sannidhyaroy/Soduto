@@ -14,7 +14,7 @@ import os
 /// following fields:
 ///
 /// - signalStrengths (dictionary): Contains information about cellular connectivity
-///   - [subscriptionID] (dictionary): Data for each SIM card (currently only first one is used)
+///   - [subscriptionID] (dictionary): Data for each SIM card
 ///     - networkType (string): The cellular network type (GSM, UMTS, LTE, 5G, etc.)
 ///     - signalStrength (int): Signal strength level (0-4)
 ///
@@ -23,14 +23,20 @@ public class ConnectivityReportService: Service {
     
     // MARK: Types
     
+    /// Status for a single SIM slot.
     public struct ConnectivityStatus {
         var networkType: String
         var signalStrength: Int
+        
+        /// Whether this SIM has a known (non-"Unknown") network type.
+        var isActive: Bool { networkType != "Unknown" }
     }
     
     // MARK: Properties
     
-    public private(set) var statuses: [Device.Id:ConnectivityStatus] = [:]
+    /// Per-device SIM statuses, ordered by subscriptionId ascending (SIM 1 first, SIM 2 second).
+    /// At most 2 entries are kept. The stable ordering means SIM positions in the UI never swap.
+    public private(set) var statuses: [Device.Id: [ConnectivityStatus]] = [:]
     private var devices: [Device] = []
     
     // MARK: Service
@@ -83,17 +89,20 @@ public class ConnectivityReportService: Service {
     private func handle(statusPacket packet: DataPacket, fromDevice device: Device) throws {
         guard let signalStrengths = packet.body["signalStrengths"] as? [String: Any] else { return }
         
-        // Only use the first SIM (subscriptionID)
-        let subscriptionIds = signalStrengths.keys.compactMap({ Int($0) })
-        if !subscriptionIds.isEmpty,
-           let firstSubId = subscriptionIds.min(),
-           let data = signalStrengths[String(firstSubId)] as? [String: Any],
-           let networkType = data["networkType"] as? String,
-           let signalStrength = data["signalStrength"] as? Int {
-            
-            let status = ConnectivityStatus(networkType: networkType, signalStrength: signalStrength)
-            self.statuses[device.id] = status
+        // Parse all SIM entries, keyed by their subscriptionId
+        let parsed: [(id: Int, status: ConnectivityStatus)] = signalStrengths.compactMap { key, value in
+            guard let id = Int(key),
+                  let data = value as? [String: Any],
+                  let networkType = data["networkType"] as? String,
+                  let signalStrength = data["signalStrength"] as? Int else { return nil }
+            return (id, ConnectivityStatus(networkType: networkType, signalStrength: signalStrength))
         }
+        
+        // Sort by subscriptionId ascending so SIM 1 is always first, SIM 2 always second.
+        // This keeps positions stable in the UI — they never swap when data SIM changes.
+        let sorted = parsed.sorted { $0.id < $1.id }.prefix(2).map { $0.status }
+        
+        self.statuses[device.id] = sorted
     }
     
     private func requestStatus(for device: Device) {

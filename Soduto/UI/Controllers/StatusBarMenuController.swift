@@ -197,9 +197,9 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             batteryStatus = service.statuses.first(where: { $0.key == device.id })?.value
         }
         
-        // Get network status if available
+        // Get network status if available (uses first SIM until dual-SIM rendering is implemented)
         if let service = serviceManager.services.first(where: { $0 is ConnectivityReportService }) as? ConnectivityReportService {
-            connectivityStatus = service.statuses.first(where: { $0.key == device.id })?.value
+            connectivityStatus = service.statuses.first(where: { $0.key == device.id })?.value.first
         }
         
         // If no status info available, return nil
