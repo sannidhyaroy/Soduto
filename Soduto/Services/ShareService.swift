@@ -124,6 +124,29 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     
     public static let serviceId: Service.Id = "com.soduto.services.share"
     
+    /// Dedicated directory for text snippets shared from remote devices.
+    /// Isolated from the generic temp dir so it can be wiped safely on first device setup.
+    private static let sharedTextDirectory: URL = {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("com.soduto.Soduto", isDirectory: true)
+            .appendingPathComponent("SharedText", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+    
+    /// Whether startup cleanup has already run for this process.
+    private static var didCleanupSharedTextFiles = false
+    
+    /// Removes all files from sharedTextDirectory. Called once per process on the first setup(for:).
+    private static func cleanupSharedTextFiles() {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: sharedTextDirectory, includingPropertiesForKeys: nil) else { return }
+        let count = contents.filter { (try? FileManager.default.removeItem(at: $0)) != nil }.count
+        if count > 0 {
+            Logger.services.debug("Cleaned up \(count, privacy: .public) stale shared text file(s) from previous session")
+        }
+    }
+    
     private static let dragTypes: [NSPasteboard.PasteboardType] = [
         NSPasteboard.PasteboardType(UTType.fileURL.identifier),
         NSPasteboard.PasteboardType(UTType.url.identifier),
@@ -207,14 +230,14 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
                 self.downloadFile(fileName, usingTask: downloadTask, from: device)
             }
             else if let text = try dataPacket.getText() {
-                let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+                let directory = ShareService.sharedTextDirectory
                 let fileName = try dataPacket.getFilename() ?? "\(UUID().uuidString).txt"
                 
                 // Sanitize filename by extracting only the last path component to prevent path traversal attacks
                 let sanitizedFileName = URL(fileURLWithPath: "").appendingPathComponent(fileName, isDirectory: false).lastPathComponent
                 let fullURL = directory.appendingPathComponent(sanitizedFileName, isDirectory: false)
                 
-                // Verify the resolved path is still within the temp directory
+                // Verify the resolved path is still within the shared text directory
                 guard fullURL.path.hasPrefix(directory.path) else {
                     Logger.services.error("Rejected text file with suspicious filename: \(fileName, privacy: .public)")
                     return false
@@ -238,6 +261,10 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     }
     
     public func setup(for device: Device) {
+        if !ShareService.didCleanupSharedTextFiles {
+            ShareService.didCleanupSharedTextFiles = true
+            ShareService.cleanupSharedTextFiles()
+        }
         self.devices[device.id] = device
     }
     
