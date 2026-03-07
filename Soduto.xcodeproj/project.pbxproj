@@ -61,6 +61,7 @@
 		31A4219B2F43B8C2003B97FC /* DownloadTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A421972F43B8C2003B97FC /* DownloadTask.swift */; };
 		31AB4B5A2F5975E000FE3DD4 /* HUDToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AB4B592F5975E000FE3DD4 /* HUDToast.swift */; };
 		31AB4B5C2F59761400FE3DD4 /* OTPExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AB4B5B2F59761400FE3DD4 /* OTPExtractor.swift */; };
+		31AB4B5E2F5BA6DA00FE3DD4 /* StatusBarImageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AB4B5D2F5BA6D900FE3DD4 /* StatusBarImageProvider.swift */; };
 		31DB2F072F3BE86300654096 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F062F3BE86300654096 /* Sparkle */; };
 		31DB2F0F2F3CEE8D00654096 /* NIOSSL in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F0E2F3CEE8D00654096 /* NIOSSL */; };
 		31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */; };
@@ -271,6 +272,7 @@
 		31A421982F43B8C2003B97FC /* UploadTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadTask.swift; sourceTree = "<group>"; };
 		31AB4B592F5975E000FE3DD4 /* HUDToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDToast.swift; sourceTree = "<group>"; };
 		31AB4B5B2F59761400FE3DD4 /* OTPExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OTPExtractor.swift; sourceTree = "<group>"; };
+		31AB4B5D2F5BA6D900FE3DD4 /* StatusBarImageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarImageProvider.swift; sourceTree = "<group>"; };
 		31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		31F3A14F293B5EA300550088 /* Soduto Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Soduto Share.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		31F3A153293B5EA300550088 /* ShareExtensionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionController.swift; sourceTree = "<group>"; };
@@ -664,6 +666,7 @@
 				849237981DE06EBC00D95BBA /* ServiceAction.swift */,
 				84FA45E71DDE088B00EF3992 /* ServiceManager.swift */,
 				84FA45D51DDDCB3D00EF3992 /* SocketAddress.swift */,
+				31AB4B5D2F5BA6D900FE3DD4 /* StatusBarImageProvider.swift */,
 				31A421982F43B8C2003B97FC /* UploadTask.swift */,
 			);
 			path = Core;
@@ -1151,6 +1154,7 @@
 				84D903A21DC696A600E61DA7 /* CertificateUtils.swift in Sources */,
 				84FA45DD1DDDCB3D00EF3992 /* SocketAddress.swift in Sources */,
 				31AB4B5C2F59761400FE3DD4 /* OTPExtractor.swift in Sources */,
+				31AB4B5E2F5BA6DA00FE3DD4 /* StatusBarImageProvider.swift in Sources */,
 				840538201ED62282003798AA /* WelcomeWindowController.swift in Sources */,
 				31F8A6102F4EEC9D00CA5A61 /* MDNSAdvertisementService.swift in Sources */,
 				84FA45E61DDDE87F00EF3992 /* AppDelegate.swift in Sources */,
