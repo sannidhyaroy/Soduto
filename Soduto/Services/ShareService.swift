@@ -443,35 +443,22 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     }
     
     private func downloadFile(_ fileName: String?, usingTask task: DownloadTask, from device: Device) {
-        // FIXME: handle nil fileName correctly. The commented approach is wrong because download easily
-        // expires - needs to start downloading in background while asking for file name
-        
-        //        let askFileLocation = {
-        //            NSApp.activate(ignoringOtherApps: true)
-        //            let panel = NSSavePanel()
-        //            panel.message = "Select save location for download received form device \"\(device.name)\""
-        //            panel.nameFieldStringValue = fileName ?? ""
-        //            panel.begin { result in
-        //                guard result == NSFileHandlingPanelOKButton else { return }
-        //                guard let url = panel.url else { return }
-        //                self.downloadFile(downloadTask: task, fileName: url.lastPathComponent, destUrl: url, deviceName: device.name)
-        //            }
-        //        }
+        guard let fileName = fileName else {
+            // A filename is required to save the file meaningfully. Well-behaved clients
+            // (including Android) always provide one. Proceeding without it would produce
+            // an opaque, unidentifiable file, so we fail the transfer instead.
+            Logger.services.error("Received file transfer with no filename from '\(device.name, privacy: .public)' — aborting download")
+            self.showDownloadFinishNotification(fileName: nil, deviceName: device.name, downloadTask: task, succeeded: false)
+            return
+        }
         
         do {
-            if let fileName = fileName {
-                let url = try URL(forDownloadedFile: fileName)
-                self.downloadFile(downloadTask: task, fileName: fileName, destUrl: url, deviceName: device.name)
-                self.showDownloadStartNotification(fileName: fileName, deviceName: device.name, downloadTask: task)
-            }
-            else {
-                //                askFileLocation()
-                self.showDownloadFinishNotification(fileName: fileName, deviceName: device.name, downloadTask: task, succeeded: false)
-            }
+            let url = try URL(forDownloadedFile: fileName)
+            self.downloadFile(downloadTask: task, fileName: fileName, destUrl: url, deviceName: device.name)
+            self.showDownloadStartNotification(fileName: fileName, deviceName: device.name, downloadTask: task)
         }
         catch {
-            // Failed to retrieve appropriate download destination - ask user to select
-            //            askFileLocation()
+            Logger.services.error("Failed to resolve download destination for '\(fileName, privacy: .public)': \(error, privacy: .public)")
             self.showDownloadFinishNotification(fileName: fileName, deviceName: device.name, downloadTask: task, succeeded: false)
         }
     }
@@ -544,7 +531,8 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         let title = device.name
         let subtitle = "Outbound Transfer in Progress"
         let body = "Sending File to \(deviceName)"
-        let notificationId = "\(self.id).upload.start.\(device.id)"
+        // UUID per upload so concurrent uploads to the same device don't clobber each other.
+        let notificationId = "\(self.id).upload.start.\(UUID().uuidString)"
         
         let notification = UNMutableNotificationContent()
         notification.title = title
