@@ -354,7 +354,11 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     public static let serviceId: Service.Id = "com.soduto.services.notifications"
     
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.notificationPacketType ])
-    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.notificationPacketType ])
+    public let outgoingCapabilities = Set<Service.Capability>([
+        DataPacket.notificationRequestPacketType,
+        DataPacket.notificationReplyPacketType,
+        DataPacket.notificationActionPackageType
+    ])
     
     private let iconState = IconStateManager()
     private let state = NotificationStateManager()
