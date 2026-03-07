@@ -247,6 +247,55 @@ func PowerSourceChanged(context: UnsafeMutableRawPointer?) {
 }
 
 
+// MARK: - StatusBarImageProvider
+
+extension BatteryService: StatusBarImageProvider {
+    
+    public var statusBarImageSortOrder: Int { 1 }
+    
+    public func statusBarImage(for device: Device) -> NSImage? {
+        guard let status = statuses[device.id] else { return nil }
+        
+        let imageHeight: CGFloat = 13
+        let batteryWidth: CGFloat = 54  // icon (~26px) + percentage text (~28px)
+        
+        let image = NSImage(size: CGSize(width: batteryWidth, height: imageHeight), flipped: false) { _ in
+            // Map charge % to the nearest symbol tier (0, 10, 25, 50, 75, 100).
+            // Breakpoints are at midpoints between adjacent tiers.
+            let tier: Int
+            switch status.currentCharge {
+            case 0...5:   tier = 0
+            case 6...17:  tier = 10
+            case 18...37: tier = 25
+            case 38...62: tier = 50
+            case 63...87: tier = 75
+            default:      tier = 100
+            }
+            
+            let config = NSImage.SymbolConfiguration.preferringMulticolor()
+            let symbolName = status.isCharging
+            ? "battery.\(tier)percent.bolt"
+            : "battery.\(tier)percent"
+            if let symbol = NSImage(symbolName: symbolName, variableValue: 1)?.withSymbolConfiguration(config) {
+                symbol.draw(in: NSRect(x: 0, y: (imageHeight - symbol.size.height) / 2,
+                                       width: symbol.size.width, height: symbol.size.height))
+            }
+            
+            let percentage = "\(status.currentCharge)%" as NSString
+            let attr: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 10),
+                .foregroundColor: NSColor.labelColor
+            ]
+            percentage.draw(in: NSRect(x: 26, y: 2, width: 28, height: 10), withAttributes: attr)
+            
+            return true
+        }
+        
+        return image
+    }
+}
+
+
 // MARK: DataPacket (Battery)
 
 /// Battery service data packet utilities

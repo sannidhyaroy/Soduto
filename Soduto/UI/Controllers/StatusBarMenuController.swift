@@ -159,6 +159,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     
     // MARK: Private methods
     
+    @MainActor
     private func refreshMenuDeviceList() {
         // remove old device items
         
@@ -185,100 +186,37 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         }
     }
     
+    @MainActor
     private func statusImage(for device: Device) -> NSImage? {
-        assert(self.serviceManager != nil, "serviceManager property is not setup correctly")
         guard let serviceManager = self.serviceManager else { return nil }
         
-        var batteryStatus: BatteryService.BatteryStatus? = nil
-        var connectivityStatus: ConnectivityReportService.ConnectivityStatus? = nil
-        
-        // Get battery status if available
-        if let service = serviceManager.services.first(where: { $0 is BatteryService }) as? BatteryService {
-            batteryStatus = service.statuses.first(where: { $0.key == device.id })?.value
-        }
-        
-        // Get network status if available (uses first SIM until dual-SIM rendering is implemented)
-        if let service = serviceManager.services.first(where: { $0 is ConnectivityReportService }) as? ConnectivityReportService {
-            connectivityStatus = service.statuses.first(where: { $0.key == device.id })?.value.first
-        }
-        
-        // If no status info available, return nil
-        if batteryStatus == nil && connectivityStatus == nil {
-            return nil
-        }
-        
-        // Calculate image width based on what status info is available
-        let batteryWidth: CGFloat = batteryStatus != nil ? 56 : 0
-        let connectivityWidth: CGFloat = connectivityStatus != nil ? 30 : 0
-        let totalWidth = batteryWidth + connectivityWidth
-        
-        // Create image with all status indicators
-        let image = NSImage(size: CGSize(width: totalWidth, height: 13), flipped: false) { _ in
-            var currentX: CGFloat = 0
-            
-            // Draw battery status if available
-            if let batteryStatus = batteryStatus {
-                // Map charge % to the nearest symbol tier (0, 10, 25, 50, 75, 100)
-                // Breakpoints are at midpoints between adjacent tiers.
-                let tier: Int
-                switch batteryStatus.currentCharge {
-                    case 0...5:   tier = 0
-                    case 6...17:  tier = 10
-                    case 18...37: tier = 25
-                    case 38...62: tier = 50
-                    case 63...87: tier = 75
-                    default:      tier = 100
-                }
-                let config = NSImage.SymbolConfiguration.preferringMulticolor()
-                let symbolName = batteryStatus.isCharging ? "battery.\(tier)percent.bolt" : "battery.\(tier)percent"
-                if let symbol = NSImage(named: symbolName)?.withSymbolConfiguration(config) {
-                    symbol.draw(in: NSRect(x: currentX, y: (13 - symbol.size.height) / 2, width: symbol.size.width, height: symbol.size.height))
-                }
-                
-                let percentage = "\(batteryStatus.currentCharge)%" as NSString
-                let attr: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 10),
-                    .foregroundColor: NSColor.labelColor
-                ]
-                percentage.draw(in: NSRect(x: currentX + 26, y: 2, width: 28, height: 10), withAttributes: attr)
-                
-                currentX += batteryWidth
+        // Collect image fragments from all services that provide status bar images
+        let fragments: [(order: Int, image: NSImage)] = serviceManager.services
+            .compactMap { $0 as? StatusBarImageProvider }
+            .compactMap { provider in
+                guard let image = provider.statusBarImage(for: device) else { return nil }
+                return (provider.statusBarImageSortOrder, image)
             }
-            
-            // Draw network status if available
-            if let connectivityStatus = connectivityStatus {
-                // Draw network type indicator
-                let signalStrength = min(max(connectivityStatus.signalStrength, 0), 4)
-                
-                // Draw network type (3G/4G/5G)
-                let networkType = connectivityStatus.networkType
-                let networkLabel = (networkType == "LTE" ? "4G" :
-                                        networkType == "5G" ? "5G" :
-                                        (networkType == "UMTS" || networkType == "CDMA2000" || networkType == "HSPA") ? "3G" :
-                                        (networkType == "GSM" || networkType == "CDMA" || networkType == "iDEN" || networkType == "EDGE") ? "2G" : "")
-                
-                if !networkLabel.isEmpty {
-                    let netAttr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
-                                   NSAttributedString.Key.foregroundColor: NSColor.labelColor,]
-                    (networkLabel as NSString).draw(in: NSRect(x: currentX, y: 2, width: 15, height: 10), withAttributes: netAttr)
-                }
-                
-                // Draw signal bars with larger size
-                if signalStrength > 0 {
-                    for i in 0..<signalStrength {
-                        NSColor.labelColor.set()
-                        let barHeight = CGFloat(i + 1) * 2.5 // Increased bar height
-                        let barWidth: CGFloat = 2.0 // Increased bar width
-                        NSRect(x: currentX + 16 + (CGFloat(i) * 3), y: 2, width: barWidth, height: barHeight).fill()
-                    }
-                } else {
-                    // Draw X for no signal
-                    let noSignalAttr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
-                                        NSAttributedString.Key.foregroundColor: NSColor.labelColor,]
-                    ("X" as NSString).draw(in: NSRect(x: currentX + 16, y: 2, width: 10, height: 10), withAttributes: noSignalAttr)
-                }
+            .sorted { $0.order < $1.order }
+        
+        guard !fragments.isEmpty else { return nil }
+        
+        // Composite all fragments horizontally with spacing between them
+        let interSpacing: CGFloat = 2
+        let imageHeight: CGFloat = 13
+        let totalWidth = fragments.map(\.image.size.width).reduce(0, +) + interSpacing * CGFloat(max(fragments.count - 1, 0))
+        
+        let image = NSImage(size: CGSize(width: totalWidth, height: imageHeight), flipped: false) { _ in
+            var x: CGFloat = 0
+            for (index, fragment) in fragments.enumerated() {
+                fragment.image.draw(in: NSRect(
+                    x: x,
+                    y: (imageHeight - fragment.image.size.height) / 2,
+                    width: fragment.image.size.width,
+                    height: fragment.image.size.height
+                ))
+                x += fragment.image.size.width + (index < fragments.count - 1 ? interSpacing : 0)
             }
-            
             return true
         }
         
