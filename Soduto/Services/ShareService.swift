@@ -92,6 +92,17 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         let device: Device
     }
     
+    /// Tracks a batch of outgoing file uploads to a single device.
+    /// Finish notifications are suppressed per-file and coalesced into one summary.
+    private struct UploadBatch {
+        let total: Int
+        var succeeded: Int = 0
+        var failed: Int = 0
+        let isExtensionInitiated: Bool
+        var completed: Int { succeeded + failed }
+        var isDone: Bool { completed >= total }
+    }
+    
     
     // MARK: Service properties
     
@@ -110,9 +121,10 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     private var devices: [Device.Id:Device] = [:]
     private var validDevices: [Device] { return self.devices.values.filter { $0.isReachable && $0.pairingStatus == .Paired } }
     
-    /// Tracks pending file uploads initiated by the Share Extension, per device.
-    /// When all tracked uploads for a device complete, the final status is reported back to the extension.
-    private var pendingExtensionUploads: [Device.Id: (total: Int, succeeded: Int, failed: Int)] = [:]
+    /// Tracks pending file upload batches per device (all send paths).
+    /// When all uploads in a batch complete, a single summary notification is shown.
+    /// Extension-initiated batches additionally report status back via Darwin notification.
+    private var pendingUploadBatches: [Device.Id: UploadBatch] = [:]
     
     
     // MARK: Service methods
@@ -191,9 +203,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
             openPanel.allowsMultipleSelection = true
             openPanel.begin { result in
                 guard result == NSApplication.ModalResponse.OK else { return }
-                for url in openPanel.urls {
-                    self.uploadFile(url: url, to: device)
-                }
+                self.uploadFiles(openPanel.urls, to: device)
             }
             break
         }
@@ -232,23 +242,24 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     public func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
         guard packet.hasPayload(), packet.type == DataPacket.sharePacketType else { return }
         
-        self.showUploadFinishNotification(connection: connection, succeeded: uploadedPayload)
-        
-        // Track extension-initiated uploads and report final status when all complete
-        guard let deviceId = try? connection.identity?.getDeviceId(), var tracking = pendingExtensionUploads[deviceId] else { return }
-        
-        if uploadedPayload {
-            tracking.succeeded += 1
-        } else {
-            tracking.failed += 1
+        guard let deviceId = try? connection.identity?.getDeviceId(),
+              var batch = pendingUploadBatches[deviceId] else {
+            // No tracked batch — individual file transfer, show per-file notification.
+            self.showUploadFinishNotification(connection: connection, succeeded: uploadedPayload)
+            return
         }
         
-        if tracking.succeeded + tracking.failed >= tracking.total {
-            pendingExtensionUploads.removeValue(forKey: deviceId)
-            let status = tracking.failed > 0 ? "failed" : "success"
-            Self.reportExtensionTransferStatus(deviceId: deviceId, status: status)
+        if uploadedPayload { batch.succeeded += 1 } else { batch.failed += 1 }
+        
+        if batch.isDone {
+            pendingUploadBatches.removeValue(forKey: deviceId)
+            self.showUploadBatchFinishNotification(connection: connection, batch: batch)
+            if batch.isExtensionInitiated {
+                let status = batch.failed > 0 ? "failed" : "success"
+                Self.reportExtensionTransferStatus(deviceId: deviceId, status: status)
+            }
         } else {
-            pendingExtensionUploads[deviceId] = tracking
+            pendingUploadBatches[deviceId] = batch
         }
     }
     
@@ -356,15 +367,18 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     // MARK: Actions
     
     @objc private dynamic func dragDestinationMenuItemAction(_ sender: Any?) {
-        guard let menuItem = sender as? NSMenuItem else { return }
+        guard let menuItem = sender as? NSMenuItem,
+              let obj = menuItem.representedObject as? DragDestination else { return }
+        guard obj.device.isReachable && obj.device.pairingStatus == .Paired else { return }
         
-        if let obj = menuItem.representedObject as? DragDestination {
-            guard obj.device.isReachable && obj.device.pairingStatus == .Paired else { return }
-            for packet in obj.dataPackets {
-                obj.device.send(packet)
-                self.showUploadStartNotification(to: obj.device)
-            }
+        let filePacketCount = obj.dataPackets.filter { $0.hasPayload() }.count
+        if filePacketCount > 1 {
+            self.beginUploadBatch(for: obj.device, fileCount: filePacketCount)
+        } else if filePacketCount == 1 {
+            self.showUploadStartNotification(to: obj.device)
         }
+        // URL/text packets complete instantly — no start notification needed.
+        obj.dataPackets.forEach { obj.device.send($0) }
     }
     
     
@@ -404,10 +418,12 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     }
     
     /// Begin tracking file uploads initiated by the Share Extension.
-    /// When all tracked uploads for this device complete, the final status is reported back to the extension, via the `com.soduto.share.status` Darwin notification.
+    /// When all tracked uploads for this device complete, a summary notification is shown
+    /// and status is reported back to the extension via the `com.soduto.share.status` Darwin notification.
     public func beginTrackingExtensionUploads(deviceId: String, fileCount: Int) {
         guard fileCount > 0 else { return }
-        pendingExtensionUploads[deviceId] = (total: fileCount, succeeded: 0, failed: 0)
+        pendingUploadBatches[deviceId] = UploadBatch(total: fileCount, isExtensionInitiated: true)
+        // Extension manages its own transfer UI — no system start notification needed here.
     }
     
     /// Reports transfer status back to the Share Extension via App Group UserDefaults + Darwin notification.
@@ -440,6 +456,26 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         guard let dataPacket = self.dataPacket(forFileUrl: url) else { return }
         device.send(dataPacket)
         self.showUploadStartNotification(to: device)
+    }
+    
+    /// Sends one or more files to a device. For batches (>1 file) shows a single aggregate
+    /// start notification and registers a completion batch; single files use per-file notifications.
+    private func uploadFiles(_ urls: [URL], to device: Device) {
+        let packets = urls.compactMap { self.dataPacket(forFileUrl: $0) }
+        guard !packets.isEmpty else { return }
+        if packets.count > 1 {
+            self.beginUploadBatch(for: device, fileCount: packets.count)
+        } else {
+            self.showUploadStartNotification(to: device)
+        }
+        packets.forEach { device.send($0) }
+    }
+    
+    /// Registers a multi-file upload batch for a device and shows an aggregate start notification.
+    private func beginUploadBatch(for device: Device, fileCount: Int) {
+        guard fileCount > 1 else { return }
+        pendingUploadBatches[device.id] = UploadBatch(total: fileCount, isExtensionInitiated: false)
+        self.showUploadBatchStartNotification(to: device, fileCount: fileCount)
     }
     
     private func downloadFile(_ fileName: String?, usingTask task: DownloadTask, from device: Device) {
@@ -562,6 +598,59 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         }
     }
     
+    private func showUploadBatchStartNotification(to device: Device, fileCount: Int) {
+        let notificationId = "\(self.id).upload.start.\(UUID().uuidString)"
+        let notification = UNMutableNotificationContent()
+        notification.title = device.name
+        notification.subtitle = "Outbound Transfer in Progress"
+        notification.body = "Sending \(fileCount) files to \(device.name)"
+        notification.sound = nil
+        notification.setUrgency(.passive)
+        if let iconPath = self.notificationIconPath,
+           let attachment = try? UNNotificationAttachment(identifier: notificationId, url: URL(fileURLWithPath: iconPath), options: nil) {
+            notification.attachments = [attachment]
+        }
+        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+        un.add(request, withCompletionHandler: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            self.un.removeNotification(withId: notificationId)
+        }
+    }
+    
+    private func showUploadBatchFinishNotification(connection: Connection, batch: UploadBatch) {
+        let deviceName = (try? connection.identity?.getDeviceName()) ?? "Unknown Device"
+        let deviceId = (try? connection.identity?.getDeviceId()) ?? "unknown-device"
+        let succeeded: Bool
+        let body: String
+        if batch.total == 1 {
+            succeeded = batch.succeeded == 1
+            body = succeeded ? "File sent to \(deviceName)" : "Failed to send file to \(deviceName)"
+        } else if batch.failed == 0 {
+            succeeded = true
+            body = "\(batch.succeeded) files sent to \(deviceName)"
+        } else if batch.succeeded == 0 {
+            succeeded = false
+            body = "Failed to send \(batch.failed) files to \(deviceName)"
+        } else {
+            succeeded = false
+            body = "\(batch.succeeded) of \(batch.total) files sent to \(deviceName)"
+        }
+        let subtitle = succeeded ? "Outbound Transfer Successful" : "Outbound Transfer Failed"
+        let notificationId = "\(self.id).upload.finish.\(deviceId)"
+        let notification = UNMutableNotificationContent()
+        notification.title = deviceName
+        notification.subtitle = subtitle
+        notification.body = body
+        notification.sound = .default
+        notification.setUrgency(.active)
+        if let iconPath = self.notificationIconPath,
+           let attachment = try? UNNotificationAttachment(identifier: notificationId, url: URL(fileURLWithPath: iconPath), options: nil) {
+            notification.attachments = [attachment]
+        }
+        let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
+        un.add(request, withCompletionHandler: nil)
+    }
+    
     private func showDownloadStartNotification(fileName: String?, deviceName: String, downloadTask task: DownloadTask) {
         let title = deviceName
         let subtitle = "Inbound Transfer in Progress"
@@ -625,10 +714,6 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
                 print("Failed to post upload notification: \(error.localizedDescription)")
             }
         }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            self.un.removeNotification(withId: notificationId)
-        }
     }
     
     private func showDownloadFinishNotification(fileName: String?, deviceName: String, downloadTask task: DownloadTask, succeeded: Bool, finalUrl: URL? = nil) {
@@ -674,10 +759,6 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
                 print(error.localizedDescription)
             }
         }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            self.un.removeNotification(withId: notificationId)
-        }
     }
     
     private func popUpDragDestinationMenu(forFilePackets filePackets: [DataPacket], urlPackets: [DataPacket], textPackets: [DataPacket], sender: NSDraggingInfo) -> Bool {
@@ -716,10 +797,13 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         
         if AppDefaultsStore.Preferences.disableSharePopUp && self.validDevices.count == 1 {
             guard let device = validDevices.first, device.isReachable == true, device.pairingStatus == .Paired else { return false }
-            for packet in packets {
-                device.send(packet)
+            let filePacketCount = packets.filter { $0.hasPayload() }.count
+            if filePacketCount > 1 {
+                self.beginUploadBatch(for: device, fileCount: filePacketCount)
+            } else if filePacketCount == 1 {
                 self.showUploadStartNotification(to: device)
             }
+            packets.forEach { device.send($0) }
             return true
         }
         
