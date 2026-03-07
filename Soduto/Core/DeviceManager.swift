@@ -93,8 +93,17 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
     public func connectionProvider(_ provider: ConnectionProvider, didCreateConnection connection: Connection) {
         Logger.device.debug("connectionProvider(<\(provider, privacy: .public)> didCreateConnection:<\(connection, privacy: .public)>)")
         
-        assert(connection.state == .Open, "Connection from connection provider expected to be in open state")
-        assert(connection.identity != nil, "Connection identity expected to be not nil")
+        // The state transition notification is dispatched asynchronously to the main queue,
+        // so the NIO event loop can close the connection in the window between the notification
+        // being queued and this handler running
+        guard connection.state == .Open else {
+            Logger.device.warning("connectionProvider delivered connection not in Open state (\(String(describing: connection.state), privacy: .public)) — ignoring")
+            return
+        }
+        guard connection.identity != nil else {
+            Logger.device.warning("connectionProvider delivered connection with nil identity — ignoring")
+            return
+        }
         
         do {
             let deviceId = try connection.identity!.getDeviceId() as Device.Id
