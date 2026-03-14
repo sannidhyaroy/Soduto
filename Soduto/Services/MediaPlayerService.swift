@@ -68,7 +68,8 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     }
     
     enum ActionId: ServiceAction.Id {
-        case refresh
+        case refresh = 0
+        case selectPlayer = 1
     }
     
     private struct DownloadInfo {
@@ -216,9 +217,15 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         guard device.incomingCapabilities.contains(DataPacket.mprisPacketType) else { return [] }
         guard device.pairingStatus == .Paired else { return [] }
         
-        return [
+        var actions: [ServiceAction] = [
             ServiceAction(id: ActionId.refresh.rawValue, group: "setup", title: "Request Media Players", description: "Request available media players from the remote device", service: self, device: device)
         ]
+        
+        if let devicePlayers = players[device.id], !devicePlayers.isEmpty {
+            actions.append(ServiceAction(id: ActionId.selectPlayer.rawValue, group: "media", title: "Now Playing", description: "Select which media player is shown in Now Playing", service: self, device: device))
+        }
+        
+        return actions
     }
     
     public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
@@ -228,7 +235,34 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         switch actionId {
         case .refresh:
             requestPlayerList(from: device)
+        case .selectPlayer:
+            break // handled via createPlayerSelectionMenu / playerMenuItemClicked
         }
+    }
+    
+    func createPlayerSelectionMenu(for device: Device) -> NSMenu {
+        let menu = NSMenu()
+        guard let devicePlayers = players[device.id], !devicePlayers.isEmpty else {
+            let empty = NSMenuItem(title: "No players", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return menu
+        }
+        for player in devicePlayers {
+            let item = NSMenuItem(title: player.identity, action: #selector(playerMenuItemClicked(_:)), keyEquivalent: "")
+            item.target = self
+            item.state = (player === lastActivePlayer) ? .on : .off
+            item.representedObject = (playerIdentity: player.identity, deviceId: device.id)
+            menu.addItem(item)
+        }
+        return menu
+    }
+    
+    @objc private func playerMenuItemClicked(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? (playerIdentity: String, deviceId: String),
+              let player = players[info.deviceId]?.first(where: { $0.identity == info.playerIdentity })
+        else { return }
+        setActivePlayer(player)
     }
     
     // MARK: DownloadTaskDelegate
