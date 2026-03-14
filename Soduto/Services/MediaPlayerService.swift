@@ -381,8 +381,8 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             
             // Handle album art updates
             if let albumArtUrl = albumArtUrl {
-                // Only request new album art if the URL has actually changed
-                if playerToUpdate.albumArtUrl != albumArtUrl {
+                // Request album art if the URL changed, or if a previous download for this URL failed (albumArtUrl is set but albumArtImage is still nil)
+                if playerToUpdate.albumArtUrl != albumArtUrl || playerToUpdate.albumArtImage == nil {
                     Logger.services.debug("MPRIS::Album art URL changed for \(player, privacy: .public): \(albumArtUrl, privacy: .public)")
                     playerToUpdate.albumArtUrl = albumArtUrl
                     
