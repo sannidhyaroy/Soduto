@@ -461,9 +461,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 playerToUpdate.updateNowPlayingInfo()
             }
             
-            // Update the command center only if this is already the active player
-            // (capability changes while paused). New active player transition is handled by setActivePlayer()
-            if !isPlaying && playerToUpdate === lastActivePlayer {
+            // Always update the command center when the active player sends any update.
+            // Previously gated on !isPlaying, which meant capability changes mid-playback
+            // on an already-active player were silently dropped (setActivePlayer early-returns
+            // for the same player, so nothing else updated the command center in that case).
+            if playerToUpdate === lastActivePlayer {
                 updateCommandCenterForActivePlayer(playerToUpdate)
             }
             
@@ -995,17 +997,14 @@ class PlayerRemote: NSObject {
         // player A lingering when player B takes over and has no art of its own)
         var nowPlayingInfo = [String: Any]()
         
-        // Set track info
-        if let title = self.title, !title.isEmpty {
-            nowPlayingInfo[MPMediaItemPropertyTitle] = title
-        } else {
-            nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyTitle)
-        }
+        // Set track info. Fall back to the player identity as the title when both
+        // title and artist are empty — macOS will suppress the Now Playing entry
+        // entirely if it finds no recognisable content in the dict.
+        let displayTitle = (title != nil && !title!.isEmpty) ? title! : identity
+        nowPlayingInfo[MPMediaItemPropertyTitle] = displayTitle
         
         if let artist = self.artist, !artist.isEmpty {
             nowPlayingInfo[MPMediaItemPropertyArtist] = artist
-        } else {
-            nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyArtist)
         }
         
         if let album = self.album, !album.isEmpty {
@@ -1041,6 +1040,9 @@ class PlayerRemote: NSObject {
         nowPlayingInfo["playerName"] = identity
         
         nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo
+        // Set playbackState explicitly so macOS shows the widget even when paused.
+        // Without this, a paused player with sparse metadata may be silently suppressed.
+        nowPlayingInfoCenter.playbackState = isPlaying ? .playing : .paused
         Logger.services.debug("MPRIS::PlayerRemote updated now playing info for \(self.identity, privacy: .public)")
     }
     
