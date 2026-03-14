@@ -167,6 +167,13 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     public func cleanup(for device: Device) {
         // Remove players for this device
         if let devicePlayers = players.removeValue(forKey: device.id) {
+            if devicePlayers.contains(where: { $0 === lastActivePlayer }) {
+                setActivePlayer(nil)
+                // Promote a player from another still-connected device if one is playing
+                if let fallback = findActivePlayer() {
+                    setActivePlayer(fallback)
+                }
+            }
             for player in devicePlayers {
                 player.cleanup()
             }
@@ -291,6 +298,9 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         if var devicePlayers = players[device.id] {
             devicePlayers = devicePlayers.filter { player in
                 if !playerList.contains(player.identity) {
+                    if player === lastActivePlayer {
+                        setActivePlayer(nil)
+                    }
                     player.cleanup()
                     return false
                 }
@@ -363,10 +373,10 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 canSeek: canSeek
             )
             
-            // If this player is playing, set it as the last active player
+            // If this player is playing, promote it to active
             if isPlaying {
                 Logger.services.debug("MPRIS::handlePlayerUpdate - setting lastActivePlayer to: \(player, privacy: .public)")
-                self.lastActivePlayer = playerToUpdate
+                setActivePlayer(playerToUpdate)
             }
             
             // Handle album art updates
@@ -404,8 +414,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 playerToUpdate.updateNowPlayingInfo()
             }
             
-            // Update the command center controls based on player capabilities
-            updateCommandCenterForActivePlayer(playerToUpdate)
+            // Update the command center only if this is already the active player
+            // (capability changes while paused). New active player transition is handled by setActivePlayer()
+            if !isPlaying && playerToUpdate === lastActivePlayer {
+                updateCommandCenterForActivePlayer(playerToUpdate)
+            }
             
             // If this player is playing, ensure other players are marked as not playing
             if isPlaying {
@@ -488,6 +501,36 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         }
     }
     
+    // MARK: Active Player Management
+    //
+    // macOS constraint: MPNowPlayingInfoCenter.default() is a per-app singleton
+    // The entire Soduto process gets exactly one slot in the Now Playing widget /
+    // Control Center, regardless of how many remote players or devices are connected
+    //
+    // KDE Desktop handles this differently: it creates a separate D-Bus connection
+    // per remote player, registering each as an independent MPRIS2 service
+    // (org.mpris.MediaPlayer2.kdeconnect.<uuid>), so the system sees N virtual
+    // players. macOS has no equivalent mechanism without spawning separate processes
+    // (too heavy to justify)
+    //
+    // Soduto's approach: one "active" player at a time owns the info center slot
+    // The most recently playing player wins. A future status bar menu will let the
+    // user manually switch the active player between all connected players/devices.
+    // `setActivePlayer()` is the single choke-point for all active player transitions
+    
+    private func setActivePlayer(_ player: PlayerRemote?) {
+        guard player !== lastActivePlayer else { return }
+        lastActivePlayer?.isActive = false  // deactivate old player first, then reassign
+        lastActivePlayer = player
+        if let player = player {
+            player.isActive = true
+            player.updateNowPlayingInfo()
+            updateCommandCenterForActivePlayer(player)
+        } else {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        }
+    }
+    
     private func findActivePlayer() -> PlayerRemote? {
         Logger.services.debug("MPRIS::findActivePlayer() called")
         
@@ -511,7 +554,6 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                     Logger.services.debug("MPRIS::findActivePlayer() - checking player: \(player.identity, privacy: .public), isPlaying: \(player.isPlaying, privacy: .public)")
                     if player.isPlaying {
                         Logger.services.debug("MPRIS::findActivePlayer() - found playing player: \(player.identity, privacy: .public)")
-                        self.lastActivePlayer = player  // Update lastActivePlayer
                         return player
                     }
                 }
@@ -818,6 +860,7 @@ class PlayerRemote: NSObject {
     var canGoNext: Bool = false
     var canGoPrevious: Bool = false
     var canSeek: Bool = false
+    var isActive: Bool = false
     
     // Now playing info
     private let nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
@@ -893,9 +936,11 @@ class PlayerRemote: NSObject {
     }
     
     func updateNowPlayingInfo() {
-        // Only create a new info dictionary if we don't have one or if we're playing/have content
-        // This allows us to keep the now playing info visible when paused
-        var nowPlayingInfo = nowPlayingInfoCenter.nowPlayingInfo ?? [String: Any]()
+        guard isActive else { return }
+        // Always start from a fresh dictionary. Inheriting the existing info center
+        // state would leave stale fields from a previous player (e.g. artwork from
+        // player A lingering when player B takes over and has no art of its own)
+        var nowPlayingInfo = [String: Any]()
         
         // Set track info
         if let title = self.title, !title.isEmpty {
@@ -947,9 +992,11 @@ class PlayerRemote: NSObject {
     }
     
     func cleanup() {
-        // Only clear now playing info when this player is being removed from the device
+        if isActive {
+            nowPlayingInfoCenter.nowPlayingInfo = nil
+        }
+        isActive = false
         isPlaying = false
-        nowPlayingInfoCenter.nowPlayingInfo = nil
     }
 }
 
