@@ -262,6 +262,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         guard let info = sender.representedObject as? (playerIdentity: String, deviceId: String),
               let player = players[info.deviceId]?.first(where: { $0.identity == info.playerIdentity })
         else { return }
+        Logger.services.debug("MPRIS::playerMenuItemClicked - manually selecting player \(player.identity, privacy: .public)")
         setActivePlayer(player)
     }
     
@@ -420,9 +421,15 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 canSeek: canSeek
             )
             
-            // If this player is playing, promote it to active
-            if isPlaying {
-                Logger.services.debug("MPRIS::handlePlayerUpdate - setting lastActivePlayer to: \(player, privacy: .public)")
+            // Promote to active if currently playing, or if no active player exists yet.
+            // This ensures the Now Playing widget displays immediately, even for paused players,
+            // since macOS suppresses the widget when playbackState=.paused (even with full metadata).
+            if isPlaying || lastActivePlayer == nil {
+                if isPlaying {
+                    Logger.services.debug("MPRIS::handlePlayerUpdate - setting lastActivePlayer to: \(player, privacy: .public)")
+                } else {
+                    Logger.services.debug("MPRIS::handlePlayerUpdate - auto-promoting paused player \(player, privacy: .public) (no active player)")
+                }
                 setActivePlayer(playerToUpdate)
             }
             
@@ -568,14 +575,45 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     // `setActivePlayer()` is the single choke-point for all active player transitions
     
     private func setActivePlayer(_ player: PlayerRemote?) {
-        guard player !== lastActivePlayer else { return }
+        guard player !== lastActivePlayer else {
+            Logger.services.debug("MPRIS::setActivePlayer - player \(player?.identity ?? "nil", privacy: .public) is already active, no-op")
+            return
+        }
+        Logger.services.debug("MPRIS::setActivePlayer - activating \(player?.identity ?? "nil", privacy: .public), deactivating \(self.lastActivePlayer?.identity ?? "nil", privacy: .public)")
         lastActivePlayer?.isActive = false  // deactivate old player first, then reassign
         lastActivePlayer = player
         if let player = player {
             player.isActive = true
+            
+            // Workaround for macOS behavior: the Now Playing widget is suppressed when
+            // playbackRate=0.0, even if all other metadata (title, artist, artwork) is
+            // present. KDE Connect MPRIS only sends isPlaying (no explicit playback rate),
+            // so playbackRate is always derived as isPlaying ? 1.0 : 0.0. To force the
+            // widget to appear for a newly-activated paused player, we write the info
+            // center once with playbackRate=1.0. updateNowPlayingInfo() then immediately
+            // overwrites with the correct 0.0, and the widget persists while paused.
+            if !player.isPlaying {
+                Logger.services.debug("MPRIS::setActivePlayer - forcing Now Playing display for paused player \(player.identity, privacy: .public)")
+                var tempInfo = [String: Any]()
+                tempInfo[MPMediaItemPropertyTitle] = player.title ?? player.identity
+                if let artist = player.artist, !artist.isEmpty {
+                    tempInfo[MPMediaItemPropertyArtist] = artist
+                }
+                if player.length > 0 {
+                    tempInfo[MPMediaItemPropertyPlaybackDuration] = TimeInterval(player.length / 1000)
+                    tempInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = TimeInterval(player.position / 1000)
+                }
+                tempInfo[MPNowPlayingInfoPropertyPlaybackRate] = 1.0  // Trick: force display
+                tempInfo["deviceName"] = player.device.name
+                tempInfo["playerName"] = player.identity
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = tempInfo
+            }
+            
+            Logger.services.debug("MPRIS::setActivePlayer - calling updateNowPlayingInfo for \(player.identity, privacy: .public)")
             player.updateNowPlayingInfo()
             updateCommandCenterForActivePlayer(player)
         } else {
+            Logger.services.debug("MPRIS::setActivePlayer - clearing now playing (nil player)")
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         }
     }
@@ -991,7 +1029,11 @@ class PlayerRemote: NSObject {
     }
     
     func updateNowPlayingInfo() {
-        guard isActive else { return }
+        guard isActive else {
+            Logger.services.debug("MPRIS::updateNowPlayingInfo - \(self.identity, privacy: .public) is not active, skipping update")
+            return
+        }
+        Logger.services.debug("MPRIS::updateNowPlayingInfo - updating for \(self.identity, privacy: .public) (isPlaying=\(self.isPlaying))")
         // Always start from a fresh dictionary. Inheriting the existing info center
         // state would leave stale fields from a previous player (e.g. artwork from
         // player A lingering when player B takes over and has no art of its own)
@@ -1022,6 +1064,8 @@ class PlayerRemote: NSObject {
             nowPlayingInfo.removeValue(forKey: MPNowPlayingInfoPropertyElapsedPlaybackTime)
         }
         
+        // KDE Connect MPRIS has no playback rate field
+        // macOS uses this to animate the scrubber (1.0 = playing, 0.0 = paused)
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
         
         // Set artwork
