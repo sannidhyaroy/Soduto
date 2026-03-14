@@ -19,27 +19,40 @@ import CryptoKit
 /// from a connected device and exposes it via macOS Now Playing (MPNowPlayingInfoCenter),
 /// allowing macOS media keys and the Control Center widget to control remote playback.
 ///
-/// It receives packets with type "kdeconnect.mpris" containing:
-/// - playerList (array): list of available media players on the remote device
-/// - player (string): the player that sent the update
-/// - pos (int): current position in the track (ms)
-/// - isPlaying (boolean): whether the player is currently playing
-/// - canPause, canPlay, canGoNext, canGoPrevious, canSeek (boolean): player capabilities
-/// - albumArtUrl (string): URL to album art image
-/// - length (int): track length (ms)
-/// - artist, title, album (string): track metadata
-/// - volume (int): player volume percentage (0-100)
+/// The outgoing/exposer side (advertising macOS media state to the remote device so the
+/// phone can control Mac playback) is not yet implemented. The planned approach is to use
+/// MediaRemote.framework via dlopen/dlsym to observe system-wide Now Playing changes.
 ///
-/// It sends packets with type "kdeconnect.mpris.request" containing:
-/// - requestPlayerList (boolean): request a list of players
-/// - player (string): the player to control
-/// - requestNowPlaying (boolean): request current track info
-/// - requestVolume (boolean): request current volume
-/// - action (string): action to perform (Play, Pause, PlayPause, Next, Previous, Stop)
-/// - setVolume (int): set player volume (0-100)
-/// - Seek (int): seek relative to current position (us)
-/// - SetPosition (int): set absolute position (ms)
-/// - albumArtUrl (string): request album art transfer for a URL
+/// Packets received — type "kdeconnect.mpris":
+/// - playerList (array): list of active media players on the remote device
+/// - supportAlbumArtPayload (boolean): sent with playerList; indicates the remote
+///   supports transferring album art as a packet payload (Soduto reads this flag
+///   and gates all album art requests on it)
+/// - player (string): name of the player this status update applies to
+/// - isPlaying (boolean): whether the player is currently playing
+/// - canPlay, canPause, canGoNext, canGoPrevious, canSeek (boolean): player capabilities
+/// - pos (int): current playback position (ms)
+/// - length (int): total track length (ms)
+/// - artist, title, album (string): track metadata
+/// - nowPlaying (string): deprecated "Artist - Title" combined field — received but ignored
+/// - albumArtUrl (string): URL of the current track's album art
+/// - transferringAlbumArt (boolean): marks a packet that carries an album art payload
+/// - volume (int): player volume (0–100)
+/// - loopStatus (string): loop mode — "None", "Track", or "Playlist" (received, not yet exposed in UI)
+/// - shuffle (boolean): shuffle state (received, not yet exposed in UI)
+///
+/// Packets sent — type "kdeconnect.mpris.request":
+/// - requestPlayerList (boolean): ask the remote to send its player list
+/// - player (string): the player to target for the following command
+/// - requestNowPlaying (boolean): ask the remote to send current track info
+/// - requestVolume (boolean): ask the remote to send current volume
+/// - action (string): playback command — "Play", "Pause", "PlayPause", "Stop", "Next", "Previous"
+/// - setVolume (int): set player volume (0–100)
+/// - Seek (int): seek relative to current position (µs — note capital S, different unit)
+/// - SetPosition (int): set absolute playback position (ms — note capital S)
+/// - albumArtUrl (string): request the remote to transfer album art for this URL as a payload
+/// - setLoopStatus (string): set loop mode (protocol-defined, not yet implemented)
+/// - setShuffle (boolean): set shuffle mode (protocol-defined, not yet implemented)
 ///
 public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject {
     
@@ -843,6 +856,12 @@ class PlayerRemote: NSObject {
         }
     }
     var position: Int = 0
+    // timestamp records when `position` was last received from the remote.
+    // macOS interpolates the displayed playback position automatically from
+    // MPNowPlayingInfoPropertyElapsedPlaybackTime + MPNowPlayingInfoPropertyPlaybackRate,
+    // so we don't need to extrapolate manually (unlike Android's lastPositionTime
+    // or KDE's lastPositionTime which are used for D-Bus position reporting).
+    // Stored here for potential future use, e.g. more precise seek offset calculation.
     var timestamp: Date = Date()
     
     // Track metadata
