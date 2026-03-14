@@ -1,8 +1,8 @@
 //
-//  MPRISService.swift
+//  MediaPlayerService.swift
 //  Soduto
 //
-//  Created by AI Assistant on 2025-05-20.
+//  Created by Swapnil Devesh on 2025-05-20.
 //  Copyright © 2025 Soduto. All rights reserved.
 //
 
@@ -13,18 +13,20 @@ import MediaPlayer
 import UserNotifications
 import CryptoKit
 
-/// MPRIS (Media Player Remote Interfacing Specification) Service
+/// Media Player Service (KDE Connect MPRIS Remote Plugin)
 ///
-/// This service allows for remote control of media players on connected devices.
+/// Implements the KDE Connect MPRIS remote (controller) side: receives media player state
+/// from a connected device and exposes it via macOS Now Playing (MPNowPlayingInfoCenter),
+/// allowing macOS media keys and the Control Center widget to control remote playback.
 ///
 /// It receives packets with type "kdeconnect.mpris" containing:
 /// - playerList (array): list of available media players on the remote device
 /// - player (string): the player that sent the update
-/// - pos (int): current position in the track (in seconds)
+/// - pos (int): current position in the track (ms)
 /// - isPlaying (boolean): whether the player is currently playing
-/// - canPause, canPlay, canGoNext, canGoPrevious (boolean): player capabilities
+/// - canPause, canPlay, canGoNext, canGoPrevious, canSeek (boolean): player capabilities
 /// - albumArtUrl (string): URL to album art image
-/// - length (int): track length in seconds
+/// - length (int): track length (ms)
 /// - artist, title, album (string): track metadata
 /// - volume (int): player volume percentage (0-100)
 ///
@@ -35,11 +37,11 @@ import CryptoKit
 /// - requestVolume (boolean): request current volume
 /// - action (string): action to perform (Play, Pause, PlayPause, Next, Previous, Stop)
 /// - setVolume (int): set player volume (0-100)
-/// - Seek (int): seek position in ms
-/// - SetPosition (int): set position in ms
-/// - albumArtUrl (string): request album art for a URL
+/// - Seek (int): seek relative to current position (us)
+/// - SetPosition (int): set absolute position (ms)
+/// - albumArtUrl (string): request album art transfer for a URL
 ///
-public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
+public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject {
     
     let un = UNUserNotificationCenter.current()
     
@@ -630,7 +632,7 @@ public class MPRISService: Service, DownloadTaskDelegate, ObservableObject {
     private func getHashForAlbumArt(player: String, albumArtUrl: String) -> String? {
         // Generate a deterministic hash of the album art URL for caching.
         // Using SHA256 for stable, cross-session cache keys.
-
+        
         guard let data = albumArtUrl.data(using: .utf8) else { return nil }
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()

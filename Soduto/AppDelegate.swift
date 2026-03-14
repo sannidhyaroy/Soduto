@@ -66,7 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: RemoteKeyboardService())
         self.serviceManager.add(service: RunCommandService())
         self.serviceManager.add(service: MacToRemoteInputService())
-        self.serviceManager.add(service: MPRISService())
+        self.serviceManager.add(service: MediaPlayerService())
         
         self.updateValidDevices()
         self.startHeartbeat()
