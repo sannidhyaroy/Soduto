@@ -99,7 +99,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     private var albumArtDownloadInfos: [DownloadInfo] = []
     private var downloadedAlbumArtFileURLByPlayerIdentity: [String: URL] = [:]
     private var cachedDownloadedAlbumArtFileURLByHash: [String: URL] = [:]
-    
+
+    /// Tracks per-device whether the remote supports album art payload transfers
+    /// Read from `supportAlbumArtPayload` in incoming `kdeconnect.mpris` packets
+    private var deviceSupportsAlbumArtPayload: [String: Bool] = [:]
+
     /// Available players grouped by device
     @Published private var players: [String: [PlayerRemote]] = [:]
     /// Keeps track of the last player that was playing
@@ -127,6 +131,13 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         Logger.services.debug("MPRIS::handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
         
         do {
+            // Read `supportAlbumArtPayload` from any `kdeconnect.mpris` packet
+            // Per protocol it's sent with playerList, but we read it from any packet for robustness
+            if let supportsAlbumArt = try dataPacket.getSupportAlbumArtPayload() {
+                deviceSupportsAlbumArtPayload[device.id] = supportsAlbumArt
+                Logger.services.debug("MPRIS::Device \(device.name, privacy: .public) supportAlbumArtPayload: \(supportsAlbumArt, privacy: .public)")
+            }
+
             if let playerList = try dataPacket.getPlayerList() {
                 handlePlayerList(playerList, from: device)
             } else if let player = try dataPacket.getPlayer() {
@@ -161,6 +172,9 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             }
         }
         
+        // Remove album art capability flag for this device
+        deviceSupportsAlbumArtPayload.removeValue(forKey: device.id)
+
         // Cancel any ongoing album art downloads for this device
         let downloadsToCancel = albumArtDownloadInfos.filter { $0.device.id == device.id }
         for downloadInfo in downloadsToCancel {
@@ -370,10 +384,14 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                             playerToUpdate.updateAlbumArt(copiedFileURL)
                         } catch {
                             Logger.services.error("MPRIS::Failed to use cached album art: \(error, privacy: .public)")
-                            requestAlbumArt(player: player, albumArtUrl: albumArtUrl, from: device)
+                            if deviceSupportsAlbumArtPayload[device.id] == true {
+                                requestAlbumArt(player: player, albumArtUrl: albumArtUrl, from: device)
+                            }
                         }
-                    } else {
+                    } else if deviceSupportsAlbumArtPayload[device.id] == true {
                         requestAlbumArt(player: player, albumArtUrl: albumArtUrl, from: device)
+                    } else {
+                        Logger.services.debug("MPRIS::Skipping album art request — device has not declared supportAlbumArtPayload")
                     }
                 }
             } else if playerToUpdate.albumArtUrl != nil {
@@ -1155,5 +1173,12 @@ fileprivate extension DataPacket {
         }
         return value
     }
-    
+
+    func getSupportAlbumArtPayload() throws -> Bool? {
+        try validateMprisType()
+        guard body.keys.contains(MprisProperty.supportAlbumArtPayload.rawValue) else { return nil }
+        guard let value = body[MprisProperty.supportAlbumArtPayload.rawValue] as? Bool else { return nil }
+        return value
+    }
+
 }
