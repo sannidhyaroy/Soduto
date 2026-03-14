@@ -16,7 +16,7 @@ import os
 /// - Laptop: Device is laptop computer.
 /// - Phone: Device is a mobile phone.
 /// - Tablet: Device is a tablet.
-public enum DeviceType: String {
+public enum DeviceType: String, Sendable {
     case Unknown = "unknown"
     case Desktop = "desktop"
     case Laptop = "laptop"
@@ -230,6 +230,12 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         }
     }
     
+    /// Cancels the upload for a specific packet ID across all active and lingering connections.
+    /// No-op if the packet ID is not found or the task has already finished.
+    public func cancelUpload(forPacketId packetId: Int64) {
+        (connections + lingeringConnections).forEach { $0.cancelUpload(forPacketId: packetId) }
+    }
+    
     /// Cleanup all pending to send packets, executing their completion handlers if any.
     public func discardPendingPackets() {
         for pendingPacket in self.pendingPackets {
@@ -263,6 +269,15 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
             }
         default:
             assertionFailure("Unexpected connection state switch: \(connection) -> \(state)")
+        }
+    }
+    
+    /// Forward upload progress events to services that explicitly opt-in by conforming to `ConnectionDelegate`.
+    public func connection(_ connection: Connection, uploadPayloadProgress bytesSent: Int64, totalBytes: Int64?, forPacket packet: DataPacket) {
+        for handler in packetHandlers {
+            if let delegate = handler as? ConnectionDelegate {
+                delegate.connection(connection, uploadPayloadProgress: bytesSent, totalBytes: totalBytes, forPacket: packet)
+            }
         }
     }
     

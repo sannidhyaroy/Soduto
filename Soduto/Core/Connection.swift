@@ -30,6 +30,11 @@ public protocol ConnectionDelegate: AnyObject {
     func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool)
     func connection(_ connection: Connection, didReadPacket packet: DataPacket)
     func connectionCapacityChanged(_ connection: Connection)
+    func connection(_ connection: Connection, uploadPayloadProgress bytesSent: Int64, totalBytes: Int64?, forPacket packet: DataPacket)
+}
+
+public extension ConnectionDelegate {
+    func connection(_ connection: Connection, uploadPayloadProgress bytesSent: Int64, totalBytes: Int64?, forPacket packet: DataPacket) {}
 }
 
 // MARK: - Connection
@@ -398,6 +403,15 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         return activeTasks
     }
     
+    /// Cancels the upload task for the given packet ID, if it is still in flight.
+    /// Calling this triggers `uploadTask(_:finishedWithSuccess:false)` on the delegate.
+    public func cancelUpload(forPacketId packetId: Int64) {
+        packetsSendingLock.lock()
+        let task = packetsSending.first(where: { $0.dataPacket.id == packetId })?.uploadTask
+        packetsSendingLock.unlock()
+        task?.cancel()
+    }
+    
     /// Helper function to validate peer certificate.
     public func shouldTrustPeerCertificate(_ peerCertificate: SecCertificate) -> Bool {
         assert(self.identity != nil, "Identity expected to be known before securing connection")
@@ -435,6 +449,15 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             Logger.network.debug("Connection: all uploads complete, closing now")
             self.channel?.close(mode: .output, promise: nil)
         }
+    }
+    
+    public func uploadTask(_ task: UploadTask, bytesSent: Int64, totalBytes: Int64?) {
+        self.packetsSendingLock.lock()
+        let packetInfo = self.packetsSending.first { $0.uploadTask === task }
+        self.packetsSendingLock.unlock()
+        
+        guard let packetInfo = packetInfo else { return }
+        self.delegate?.connection(self, uploadPayloadProgress: bytesSent, totalBytes: totalBytes, forPacket: packetInfo.dataPacket)
     }
     
     

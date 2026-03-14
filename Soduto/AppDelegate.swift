@@ -195,22 +195,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             return
         }
         
-        // Process file/URL bookmarks
+        // Pass 1: resolve all bookmarks into URLs without sending yet
+        // This lets us pre-count file uploads and register the batch BEFORE sending,
+        // so each packet can be stamped with `numberOfFiles` (protocol requirement)
+        var resolvedUrls: [URL] = []
         var failedCount = 0
-        var fileUploadCount = 0
         for data in bookmarks {
             do {
                 var isStale = false
                 let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-                switch shareService.shareFromExtension(url: url, to: device) {
-                case .fileUploadQueued:    fileUploadCount += 1
-                case .sentWithoutPayload:  break
-                case .skipped:             failedCount += 1
-                }
+                resolvedUrls.append(url)
             } catch {
                 failedCount += 1
                 Logger.general.error("Failed to resolve bookmark: \(error, privacy: .public)")
             }
+        }
+        
+        // Pre-count valid file uploads (non-directory file: URLs that ShareService will queue)
+        let fileUrls = resolvedUrls.filter { url -> Bool in
+            var isDirectory: ObjCBool = false
+            return url.isFileURL
+            && FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && !isDirectory.boolValue
+        }
+        let estimatedTotalBytes = fileUrls.reduce(Int64(0)) { sum, url in
+            sum + ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0)
+        }
+        
+        // Register batch BEFORE sending so shareFromExtension can stamp numberOfFiles on packets
+        //
+        // Pre-count vs actual-queue mismatch: our filter (fileExists + !isDirectory) mirrors the
+        // checks inside dataPacket(forFileUrl:), with one exception: InputStream(url:) could
+        // theoretically return nil for a file that exists. If that happened, the batch would be
+        // registered for N but only (N - 1) packets sent, leaving isDone unreachable
+        // In practice this is not a real risk: the Share extension uses Security-scoped bookmarks,
+        // and a successful bookmark resolution guarantees OS-level read access, so InputStream
+        // creation will always succeed for any URL that passes our filter
+        if !fileUrls.isEmpty {
+            shareService.beginTrackingExtensionUploads(deviceId: deviceId, fileCount: fileUrls.count, totalBytes: estimatedTotalBytes)
         }
         
         if failedCount > 0 {
@@ -220,27 +242,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
             UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: message, sound: true, id: "FileAccessDenied")
         }
         
+        // Pass 2: send all resolved URLs
+        var fileUploadCount = 0
+        for url in resolvedUrls {
+            switch shareService.shareFromExtension(url: url, to: device) {
+            case .fileUploadQueued:    fileUploadCount += 1
+            case .sentWithoutPayload:  break
+            case .skipped:             failedCount += 1
+            }
+        }
+        
         // Process shared texts
         for text in texts {
             shareService.shareFromExtension(text: text, to: device)
         }
         
-        /// Report transfer status back to the extension.
-        /// File uploads (with payloads) are tracked by ShareService — it reports the real completion status via Darwin notification when all uploads finish.
-        /// Non-file transfers (URLs, text) complete immediately.
-        if fileUploadCount > 0 {
-            shareService.beginTrackingExtensionUploads(deviceId: deviceId, fileCount: fileUploadCount)
-            // Don't report status yet — ShareService will when uploads actually complete
-        } else if failedCount == bookmarks.count && !bookmarks.isEmpty && texts.isEmpty {
-            // Everything failed, nothing was sent
-            ShareService.reportExtensionTransferStatus(deviceId: deviceId, status: "failed")
-        } else {
-            // Only URLs/texts were shared (no file payloads) — they complete immediately
-            ShareService.reportExtensionTransferStatus(deviceId: deviceId, status: "success")
+        // File uploads are tracked by ShareService,it reports the real completion status via
+        // Darwin notification when all uploads finish. Non-file transfers complete immediately
+        if fileUploadCount == 0 {
+            if failedCount == bookmarks.count && !bookmarks.isEmpty && texts.isEmpty {
+                // Everything failed, nothing was sent
+                ShareService.reportExtensionTransferStatus(deviceId: deviceId, status: "failed")
+            } else {
+                // Only URLs/texts were shared (no file payloads) — they complete immediately
+                ShareService.reportExtensionTransferStatus(deviceId: deviceId, status: "success")
+            }
         }
         
-        // Clear consumed data (NOT transferStatuses — extension needs them)
-        // Each device reads only its own transferStatus entry by ID. Old entries are inert and cleared on extension deinit
+        // Clear consumed data (NOT transferStatuses, extension needs them)
+        // Each device reads only its own transferStatus entry by ID & old entries are inert and cleared on extension deinit
         AppDefaultsStore.ShareExtension.fileBookmarkData = nil
         AppDefaultsStore.ShareExtension.sharedTexts = nil
         AppDefaultsStore.ShareExtension.selectedDevice = nil

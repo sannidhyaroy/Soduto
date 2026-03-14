@@ -17,6 +17,11 @@ import os
 /// Delegate protocol for UploadTask events.
 public protocol UploadTaskDelegate: AnyObject {
     func uploadTask(_ task: UploadTask, finishedWithSuccess success: Bool)
+    func uploadTask(_ task: UploadTask, bytesSent: Int64, totalBytes: Int64?)
+}
+
+public extension UploadTaskDelegate {
+    func uploadTask(_ task: UploadTask, bytesSent: Int64, totalBytes: Int64?) {}
 }
 
 /// Upload task for serving file payloads over TLS.
@@ -133,6 +138,13 @@ public class UploadTask {
     }
     
     // MARK: Public Methods
+    
+    /// Cancels the upload, firing the delegate with `finishedWithSuccess: false`.
+    /// Safe to call at any stage — before Android connects (awaiting) or mid-transfer.
+    public func cancel() {
+        guard !isClosed else { return }
+        self.uploadFinished(success: false)
+    }
     
     public func close() {
         guard !isClosed else { return }
@@ -356,6 +368,13 @@ public class UploadTask {
         buffer.writeBytes(self.readBuffer[0..<read])
         
         self.bytesSent += Int64(read)
+        
+        let sent = self.bytesSent
+        let total = self.payloadSize
+        self.delegateQueue.async { [weak self] in
+            guard let self else { return }
+            self.delegate?.uploadTask(self, bytesSent: sent, totalBytes: total)
+        }
         
         context.writeAndFlush(NIOAny(buffer)).whenComplete { [weak self] result in
             switch result {
