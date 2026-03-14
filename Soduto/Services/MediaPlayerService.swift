@@ -99,11 +99,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     private var albumArtDownloadInfos: [DownloadInfo] = []
     private var downloadedAlbumArtFileURLByPlayerIdentity: [String: URL] = [:]
     private var cachedDownloadedAlbumArtFileURLByHash: [String: URL] = [:]
-
+    
     /// Tracks per-device whether the remote supports album art payload transfers
     /// Read from `supportAlbumArtPayload` in incoming `kdeconnect.mpris` packets
     private var deviceSupportsAlbumArtPayload: [String: Bool] = [:]
-
+    
     /// Available players grouped by device
     @Published private var players: [String: [PlayerRemote]] = [:]
     /// Keeps track of the last player that was playing
@@ -137,7 +137,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 deviceSupportsAlbumArtPayload[device.id] = supportsAlbumArt
                 Logger.services.debug("MPRIS::Device \(device.name, privacy: .public) supportAlbumArtPayload: \(supportsAlbumArt, privacy: .public)")
             }
-
+            
             if let playerList = try dataPacket.getPlayerList() {
                 handlePlayerList(playerList, from: device)
             } else if let player = try dataPacket.getPlayer() {
@@ -174,7 +174,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         
         // Remove album art capability flag for this device
         deviceSupportsAlbumArtPayload.removeValue(forKey: device.id)
-
+        
         // Cancel any ongoing album art downloads for this device
         let downloadsToCancel = albumArtDownloadInfos.filter { $0.device.id == device.id }
         for downloadInfo in downloadsToCancel {
@@ -346,6 +346,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             let canPlay = try packet.getCanPlay() ?? playerToUpdate.canPlay
             let canGoNext = try packet.getCanGoNext() ?? playerToUpdate.canGoNext
             let canGoPrevious = try packet.getCanGoPrevious() ?? playerToUpdate.canGoPrevious
+            let canSeek = try packet.getCanSeek() ?? playerToUpdate.canSeek
             
             playerToUpdate.update(
                 isPlaying: isPlaying,
@@ -358,7 +359,8 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 canPause: canPause,
                 canPlay: canPlay,
                 canGoNext: canGoNext,
-                canGoPrevious: canGoPrevious
+                canGoPrevious: canGoPrevious,
+                canSeek: canSeek
             )
             
             // If this player is playing, set it as the last active player
@@ -535,7 +537,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         commandCenter.togglePlayPauseCommand.isEnabled = player.canPause || player.canPlay
         commandCenter.nextTrackCommand.isEnabled = player.canGoNext
         commandCenter.previousTrackCommand.isEnabled = player.canGoPrevious
-        commandCenter.changePlaybackPositionCommand.isEnabled = player.length > 0
+        commandCenter.changePlaybackPositionCommand.isEnabled = player.canSeek && player.length > 0
     }
     
     // MARK: Private methods - Player Commands
@@ -815,6 +817,7 @@ class PlayerRemote: NSObject {
     var canPlay: Bool = false
     var canGoNext: Bool = false
     var canGoPrevious: Bool = false
+    var canSeek: Bool = false
     
     // Now playing info
     private let nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
@@ -835,7 +838,8 @@ class PlayerRemote: NSObject {
                 canPause: Bool,
                 canPlay: Bool,
                 canGoNext: Bool,
-                canGoPrevious: Bool) {
+                canGoPrevious: Bool,
+                canSeek: Bool) {
         
         var needsInfoUpdate = false
         
@@ -867,6 +871,7 @@ class PlayerRemote: NSObject {
         self.canPlay = canPlay
         self.canGoNext = canGoNext
         self.canGoPrevious = canGoPrevious
+        self.canSeek = canSeek
         
         if needsInfoUpdate {
             updateNowPlayingInfo()
@@ -965,6 +970,7 @@ fileprivate extension DataPacket {
         case invalidCanPlay
         case invalidCanGoNext
         case invalidCanGoPrevious
+        case invalidCanSeek
         case invalidPosition
         case invalidLength
         case invalidArtist
@@ -983,6 +989,7 @@ fileprivate extension DataPacket {
         case canPlay = "canPlay"
         case canGoNext = "canGoNext"
         case canGoPrevious = "canGoPrevious"
+        case canSeek = "canSeek"
         case pos = "pos"
         case length = "length"
         case artist = "artist"
@@ -1123,6 +1130,13 @@ fileprivate extension DataPacket {
         return value
     }
     
+    func getCanSeek() throws -> Bool? {
+        try validateMprisType()
+        guard body.keys.contains(MprisProperty.canSeek.rawValue) else { return nil }
+        guard let value = body[MprisProperty.canSeek.rawValue] as? Bool else { throw MprisError.invalidCanSeek }
+        return value
+    }
+    
     func getPosition() throws -> Int? {
         try validateMprisType()
         guard body.keys.contains(MprisProperty.pos.rawValue) else { return nil }
@@ -1173,12 +1187,12 @@ fileprivate extension DataPacket {
         }
         return value
     }
-
+    
     func getSupportAlbumArtPayload() throws -> Bool? {
         try validateMprisType()
         guard body.keys.contains(MprisProperty.supportAlbumArtPayload.rawValue) else { return nil }
         guard let value = body[MprisProperty.supportAlbumArtPayload.rawValue] as? Bool else { return nil }
         return value
     }
-
+    
 }
