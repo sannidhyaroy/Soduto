@@ -12,6 +12,7 @@ import os
 import MediaPlayer
 import UserNotifications
 import CryptoKit
+import CoreAudio
 import MediaRemoteAdapter
 
 /// Media Player Service (KDE Connect MPRIS Plugin — both controller and exposer sides)
@@ -228,7 +229,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             let list: [String] = macPlayerName.map { [$0] } ?? []
             device.send(DataPacket.mprisPlayerListPacket(playerList: list))
             if let info = lastSentTrackInfo, let name = macPlayerName {
-                device.send(DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl))
+                device.send(DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl, volume: systemVolumePercent()))
                 // Also push cached art to the newly connected device
                 if let artData = currentArtData, let artUrl = currentArtUrl {
                     device.send(DataPacket.mprisAlbumArtPacket(player: name, artUrl: artUrl, artData: artData))
@@ -912,8 +913,8 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         
         guard let info = effectiveTrackInfo, let name = macPlayerName else { return }
         
-        // Send status packet (includes albumArtUrl so phone knows what to display/request)
-        let packet = DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl)
+        // Send status packet (includes albumArtUrl and current system volume)
+        let packet = DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl, volume: systemVolumePercent())
         for device in outgoingDevices.values {
             device.send(packet)
         }
@@ -976,6 +977,57 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         }
         if let shuffle = packet.body[DataPacket.MprisProperty.setShuffle.rawValue] as? Bool {
             controller.setShuffleMode(shuffle ? .songs : .off)
+        }
+        // setVolume maps to macOS system output volume — MediaRemote.framework has no per-app volume API
+        if let vol = packet.body[DataPacket.MprisProperty.setVolume.rawValue] as? Int {
+            setSystemVolume(percent: max(0, min(100, vol)))
+            Logger.services.debug("MPRIS::handleMacPlayerRequest — setVolume \(vol, privacy: .public)")
+        }
+    }
+    
+    // MARK: Private methods - System Volume (CoreAudio)
+    
+    private func defaultOutputDeviceID() -> AudioDeviceID? {
+        var deviceID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID)
+        return status == noErr ? deviceID : nil
+    }
+    
+    private func systemVolumePercent() -> Int {
+        guard let deviceID = defaultOutputDeviceID() else { return 50 }
+        var volume = Float32(0)
+        var size = UInt32(MemoryLayout<Float32>.size)
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyVolumeScalar,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain)
+        let status = AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &volume)
+        return status == noErr ? Int(volume * 100) : 50
+    }
+    
+    private func setSystemVolume(percent: Int) {
+        guard let deviceID = defaultOutputDeviceID() else { return }
+        var volume = Float32(percent) / 100.0
+        let volSize = UInt32(MemoryLayout<Float32>.size)
+        var volAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyVolumeScalar,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain)
+        AudioObjectSetPropertyData(deviceID, &volAddr, 0, nil, volSize, &volume)
+        // Unmute if currently muted so the volume change is audible
+        var mute = UInt32(0)
+        let muteSize = UInt32(MemoryLayout<UInt32>.size)
+        var muteAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain)
+        if AudioObjectSetPropertyData(deviceID, &muteAddr, 0, nil, muteSize, &mute) != noErr {
+            Logger.services.debug("MPRIS::setSystemVolume — unmute not supported on this device")
         }
     }
     
@@ -1513,7 +1565,8 @@ fileprivate extension DataPacket {
     /// Sends current Mac player state (title, artist, position, capabilities, etc.) to the phone.
     /// `artUrl` is included when album art is available; the phone uses it as a cache key and
     /// may follow up with a `kdeconnect.mpris.request` containing `albumArtUrl` to fetch the art.
-    static func mprisStatusPacket(player: String, trackInfo: TrackInfo, artUrl: String? = nil) -> DataPacket {
+    /// `volume` (0–100) is the current system output volume; omit to skip the field.
+    static func mprisStatusPacket(player: String, trackInfo: TrackInfo, artUrl: String? = nil, volume: Int? = nil) -> DataPacket {
         let p = trackInfo.payload
         var body: [String: AnyObject] = [
             MprisProperty.player.rawValue:           player as AnyObject,
@@ -1545,6 +1598,9 @@ fileprivate extension DataPacket {
         }
         if let url = artUrl {
             body[MprisProperty.albumArtUrl.rawValue] = url as AnyObject
+        }
+        if let vol = volume {
+            body[MprisProperty.volume.rawValue] = vol as AnyObject
         }
         return DataPacket(type: mprisPacketType, body: body)
     }
