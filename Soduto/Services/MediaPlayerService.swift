@@ -405,6 +405,8 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             let canGoNext = try packet.getCanGoNext() ?? playerToUpdate.canGoNext
             let canGoPrevious = try packet.getCanGoPrevious() ?? playerToUpdate.canGoPrevious
             let canSeek = try packet.getCanSeek() ?? playerToUpdate.canSeek
+            let loopStatus = packet.getLoopStatus() ?? playerToUpdate.loopStatus
+            let shuffle = packet.getShuffle() ?? playerToUpdate.shuffle
             
             playerToUpdate.update(
                 isPlaying: isPlaying,
@@ -418,7 +420,9 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 canPlay: canPlay,
                 canGoNext: canGoNext,
                 canGoPrevious: canGoPrevious,
-                canSeek: canSeek
+                canSeek: canSeek,
+                loopStatus: loopStatus,
+                shuffle: shuffle
             )
             
             // Promote to active if currently playing, or if no active player exists yet.
@@ -547,13 +551,36 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 return .commandFailed
             }
             if let event = event as? MPChangePlaybackPositionCommandEvent {
-                let position = Int(event.positionTime)
-                Logger.services.debug("MPRIS::changePlaybackPositionCommand - activePlayer: \(activePlayer.identity, privacy: .public), position: \(position, privacy: .public)")
-                self?.sendSetPositionCommand(to: activePlayer, position: position)
+                // positionTime is in seconds (TimeInterval); convert to ms preserving sub-second precision
+                let positionMs = Int(event.positionTime * 1000)
+                Logger.services.debug("MPRIS::changePlaybackPositionCommand - activePlayer: \(activePlayer.identity, privacy: .public), position: \(positionMs, privacy: .public)ms")
+                self?.sendSetPositionCommand(to: activePlayer, positionMs: positionMs)
                 return .success
             }
             Logger.services.debug("MPRIS::changePlaybackPositionCommand - invalid event type")
             return .commandFailed
+        }
+        
+        commandCenter.changeRepeatModeCommand.addTarget { [weak self] event in
+            guard let activePlayer = self?.findActivePlayer() else { return .commandFailed }
+            if let event = event as? MPChangeRepeatModeCommandEvent {
+                let loopStatus: String
+                switch event.repeatType {
+                case .one: loopStatus = "Track"
+                case .all: loopStatus = "Playlist"
+                default:   loopStatus = "None"
+                }
+                self?.sendSetLoopStatusCommand(to: activePlayer, loopStatus: loopStatus)
+            }
+            return .success
+        }
+        
+        commandCenter.changeShuffleModeCommand.addTarget { [weak self] event in
+            guard let activePlayer = self?.findActivePlayer() else { return .commandFailed }
+            if let event = event as? MPChangeShuffleModeCommandEvent {
+                self?.sendSetShuffleCommand(to: activePlayer, shuffle: event.shuffleType != .off)
+            }
+            return .success
         }
     }
     
@@ -703,10 +730,17 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         player.device.send(DataPacket.mprisSeekPacket(player: player.identity, offset: offset))
     }
     
-    private func sendSetPositionCommand(to player: PlayerRemote, position: Int) {
-        let positionInMs = position * 1000
-        Logger.services.debug("MPRIS::sendSetPositionCommand() - player: \(player.identity, privacy: .public), position: \(position, privacy: .public)s -> \(positionInMs, privacy: .public)ms")
-        player.device.send(DataPacket.mprisSetPositionPacket(player: player.identity, position: positionInMs))
+    private func sendSetPositionCommand(to player: PlayerRemote, positionMs: Int) {
+        Logger.services.debug("MPRIS::sendSetPositionCommand() - player: \(player.identity, privacy: .public), position: \(positionMs, privacy: .public)ms")
+        player.device.send(DataPacket.mprisSetPositionPacket(player: player.identity, position: positionMs))
+    }
+    
+    private func sendSetLoopStatusCommand(to player: PlayerRemote, loopStatus: String) {
+        player.device.send(DataPacket.mprisSetLoopStatusPacket(player: player.identity, loopStatus: loopStatus))
+    }
+    
+    private func sendSetShuffleCommand(to player: PlayerRemote, shuffle: Bool) {
+        player.device.send(DataPacket.mprisSetShufflePacket(player: player.identity, shuffle: shuffle))
     }
     
     // MARK: Private methods - Information Requests
@@ -946,13 +980,15 @@ class PlayerRemote: NSObject {
     var albumArtImage: NSImage?
     var length: Int = 0
     
-    // Player capabilities
+    // Player capabilities and state
     var volume: Int = 50
     var canPause: Bool = false
     var canPlay: Bool = false
     var canGoNext: Bool = false
     var canGoPrevious: Bool = false
     var canSeek: Bool = false
+    var loopStatus: String = "None"  // "None", "Track", "Playlist"
+    var shuffle: Bool = false
     var isActive: Bool = false
     
     // Now playing info
@@ -975,7 +1011,9 @@ class PlayerRemote: NSObject {
                 canPlay: Bool,
                 canGoNext: Bool,
                 canGoPrevious: Bool,
-                canSeek: Bool) {
+                canSeek: Bool,
+                loopStatus: String,
+                shuffle: Bool) {
         
         var needsInfoUpdate = false
         
@@ -1008,6 +1046,12 @@ class PlayerRemote: NSObject {
         self.canGoNext = canGoNext
         self.canGoPrevious = canGoPrevious
         self.canSeek = canSeek
+        
+        if self.loopStatus != loopStatus || self.shuffle != shuffle {
+            self.loopStatus = loopStatus
+            self.shuffle = shuffle
+            needsInfoUpdate = true
+        }
         
         if needsInfoUpdate {
             updateNowPlayingInfo()
@@ -1067,6 +1111,8 @@ class PlayerRemote: NSObject {
         // KDE Connect MPRIS has no playback rate field
         // macOS uses this to animate the scrubber (1.0 = playing, 0.0 = paused)
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        
+        // TODO: MPNowPlayingInfoPropertyRepeatType / ShuffleType are iOS/tvOS-only, hence not available on macOS. The command center handlers are still registered so a future macOS version or external client could trigger them
         
         // Set artwork
         if let image = albumArtImage {
@@ -1150,6 +1196,10 @@ fileprivate extension DataPacket {
         case requestNowPlaying = "requestNowPlaying"
         case requestVolume = "requestVolume"
         case setVolume = "setVolume"
+        case loopStatus = "loopStatus"
+        case shuffle = "shuffle"
+        case setLoopStatus = "setLoopStatus"
+        case setShuffle = "setShuffle"
         case Seek = "Seek"
         case SetPosition = "SetPosition"
     }
@@ -1211,6 +1261,20 @@ fileprivate extension DataPacket {
         return DataPacket(type: mprisRequestPacketType, body: [
             MprisProperty.player.rawValue: player as AnyObject,
             MprisProperty.SetPosition.rawValue: position as AnyObject
+        ])
+    }
+    
+    static func mprisSetLoopStatusPacket(player: String, loopStatus: String) -> DataPacket {
+        return DataPacket(type: mprisRequestPacketType, body: [
+            MprisProperty.player.rawValue: player as AnyObject,
+            MprisProperty.setLoopStatus.rawValue: loopStatus as AnyObject
+        ])
+    }
+    
+    static func mprisSetShufflePacket(player: String, shuffle: Bool) -> DataPacket {
+        return DataPacket(type: mprisRequestPacketType, body: [
+            MprisProperty.player.rawValue: player as AnyObject,
+            MprisProperty.setShuffle.rawValue: shuffle as AnyObject
         ])
     }
     
@@ -1280,6 +1344,16 @@ fileprivate extension DataPacket {
         try validateMprisType()
         guard body.keys.contains(MprisProperty.canSeek.rawValue) else { return nil }
         guard let value = body[MprisProperty.canSeek.rawValue] as? Bool else { throw MprisError.invalidCanSeek }
+        return value
+    }
+    
+    func getLoopStatus() -> String? {
+        guard let value = body[MprisProperty.loopStatus.rawValue] as? String else { return nil }
+        return value
+    }
+    
+    func getShuffle() -> Bool? {
+        guard let value = body[MprisProperty.shuffle.rawValue] as? Bool else { return nil }
         return value
     }
     
