@@ -57,7 +57,7 @@ import MediaRemoteAdapter
 ///
 /// Packets sent — type "kdeconnect.mpris" (outgoing exposer):
 /// - playerList (array): list of current Mac players (single-element: active app name)
-/// - supportAlbumArtPayload (boolean): always false for now (album art sending not yet implemented)
+/// - supportAlbumArtPayload (boolean): true — album art is served on request via payload
 /// - player + title, artist, album, isPlaying, pos, length, canPlay/Pause/GoNext/GoPrevious/canSeek,
 ///   loopStatus, shuffle: current Mac player state
 ///
@@ -151,11 +151,16 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     private var nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
     private var commandCenter = MPRemoteCommandCenter.shared()
     
-    // Outgoing MPRIS from Mac to remote device
+    // Outgoing MPRIS from Mac to remote device.
+    // MediaRemote.framework only exposes the single active Now Playing app; commands always
+    // target that one app. There is no per-app filtering available in the private framework.
     private var mediaController: MediaController?
-    private var macPlayerName: String?            // current app name from MediaRemoteAdapter (e.g. "Spotify")
+    private var macPlayerName: String?            // current active Now Playing app name (e.g. "Spotify")
     private var lastSentTrackInfo: TrackInfo?     // last known state; used for Seek offset calculation
     private var outgoingDevices: [String: Device] = [:]  // deviceId → Device (devices to receive Mac status)
+    private var currentArtBase64: String?         // last known base64 art string (change detection)
+    private var currentArtUrl: String?            // hash-derived URL used as phone-side cache key
+    private var currentArtData: Data?             // decoded art bytes, served on phone request
     
     // MARK: Initialization
     
@@ -223,7 +228,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             let list: [String] = macPlayerName.map { [$0] } ?? []
             device.send(DataPacket.mprisPlayerListPacket(playerList: list))
             if let info = lastSentTrackInfo, let name = macPlayerName {
-                device.send(DataPacket.mprisStatusPacket(player: name, trackInfo: info))
+                device.send(DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl))
+                // Also push cached art to the newly connected device
+                if let artData = currentArtData, let artUrl = currentArtUrl {
+                    device.send(DataPacket.mprisAlbumArtPacket(player: name, artUrl: artUrl, artData: artData))
+                }
             }
         }
     }
@@ -839,33 +848,103 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     }
     
     private func sendMacPlayerStatus(_ trackInfo: TrackInfo?) {
-        let newName = trackInfo?.payload.applicationName
+        // Filter out Soduto's own Now Playing registration to prevent a feedback loop:
+        // MPNowPlayingInfoCenter writes (for the incoming remote player) are picked up by
+        // MediaRemoteAdapter and would be reported back to the phone as "Soduto" playing.
+        let effectiveTrackInfo: TrackInfo?
+        if trackInfo?.payload.bundleIdentifier == Bundle.main.bundleIdentifier {
+            Logger.services.debug("MPRIS::sendMacPlayerStatus — ignoring Soduto's own Now Playing slot")
+            effectiveTrackInfo = nil
+        } else {
+            effectiveTrackInfo = trackInfo
+        }
+        
+        let newName = effectiveTrackInfo?.payload.applicationName
         let nameChanged = newName != macPlayerName
         macPlayerName = newName
-        lastSentTrackInfo = trackInfo
+        lastSentTrackInfo = effectiveTrackInfo
         
-        // Send an updated playerList whenever the active app changes or playback stops
-        if nameChanged || trackInfo == nil {
+        // Send updated playerList when the active app changes or playback stops
+        if nameChanged || effectiveTrackInfo == nil {
             let list: [String] = newName.map { [$0] } ?? []
             Logger.services.debug("MPRIS::sendMacPlayerStatus — player changed to \(list.first ?? "nil", privacy: .public), sending playerList")
             for device in outgoingDevices.values {
                 device.send(DataPacket.mprisPlayerListPacket(playerList: list))
             }
         }
-        guard let info = trackInfo, let name = newName else { return }
-        let packet = DataPacket.mprisStatusPacket(player: name, trackInfo: info)
+        guard let _ = effectiveTrackInfo else { return }
+        
+        // Detect album art changes; update cached art state and URL
+        let newArtBase64 = effectiveTrackInfo?.payload.artworkDataBase64
+        var artActuallyChanged = false
+        if newArtBase64 != currentArtBase64 {
+            currentArtBase64 = newArtBase64
+            artActuallyChanged = true
+            if let base64 = newArtBase64,
+               let rawData = Data(base64Encoded: base64, options: .ignoreUnknownCharacters) {
+                // macOS may return artwork as TIFF or proprietary format. Convert to PNG
+                // so Android (and other KDE Connect clients) can decode it reliably.
+                let pngData: Data?
+                if let image = NSImage(data: rawData),
+                   let tiff = image.tiffRepresentation,
+                   let bitmap = NSBitmapImageRep(data: tiff) {
+                    pngData = bitmap.representation(using: .png, properties: [:])
+                } else {
+                    pngData = rawData  // fallback: already PNG/JPEG
+                }
+                if let artData = pngData {
+                    // Derive a stable URL from art content for phone-side caching.
+                    // Use file:// scheme — Android only fetches art for "file" or "kdeconnect" schemes.
+                    let hash = SHA256.hash(data: artData)
+                    let shortHash = hash.map { String(format: "%02x", $0) }.joined().prefix(16)
+                    currentArtUrl = "file:///kdeconnect/albumart/\(shortHash).png"
+                    currentArtData = artData
+                    Logger.services.debug("MPRIS::sendMacPlayerStatus — album art changed (\(artData.count, privacy: .public) bytes PNG)")
+                } else {
+                    currentArtUrl = nil
+                    currentArtData = nil
+                }
+            } else {
+                currentArtUrl = nil
+                currentArtData = nil
+            }
+        }
+        
+        guard let info = effectiveTrackInfo, let name = macPlayerName else { return }
+        
+        // Send status packet (includes albumArtUrl so phone knows what to display/request)
+        let packet = DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl)
         for device in outgoingDevices.values {
             device.send(packet)
+        }
+        
+        // Proactively push album art when it changes — don't wait for the phone to request it.
+        // Pull-based fallback (handleMacPlayerRequest) handles newly connected devices.
+        if artActuallyChanged, let artData = currentArtData, let artUrl = currentArtUrl {
+            Logger.services.debug("MPRIS::sendMacPlayerStatus — proactively pushing album art to \(self.outgoingDevices.count, privacy: .public) device(s)")
+            for device in outgoingDevices.values {
+                device.send(DataPacket.mprisAlbumArtPacket(player: name, artUrl: artUrl, artData: artData))
+            }
         }
     }
     
     private func handleMacPlayerRequest(_ packet: DataPacket, from device: Device) {
-        guard let controller = mediaController else { return }
-        // Only handle packets targeting our current Mac player
+        // Only handle packets targeting the current Mac player
         guard let targetPlayer = try? packet.getPlayer(),
               targetPlayer == macPlayerName else { return }
         
         Logger.services.debug("MPRIS::handleMacPlayerRequest — target: \(targetPlayer, privacy: .public)")
+        
+        // Album art requests are served even if the controller has stopped (art is cached independently)
+        if let requestedUrl = packet.body[DataPacket.MprisProperty.albumArtUrl.rawValue] as? String,
+           requestedUrl == currentArtUrl,
+           let artData = currentArtData {
+            Logger.services.debug("MPRIS::handleMacPlayerRequest — serving album art (\(artData.count, privacy: .public) bytes) to \(device.name, privacy: .public)")
+            device.send(DataPacket.mprisAlbumArtPacket(player: targetPlayer, artUrl: requestedUrl, artData: artData))
+        }
+        
+        // Playback commands require an active media controller
+        guard let controller = mediaController else { return }
         
         if let action = packet.body[DataPacket.MprisProperty.action.rawValue] as? String {
             switch action {
@@ -1424,16 +1503,17 @@ fileprivate extension DataPacket {
     // MARK: Outgoing MPRIS packet factories
     
     /// Sends the list of Mac players to the phone.
-    /// `supportAlbumArtPayload: false` — album art payload sending is not yet implemented.
     static func mprisPlayerListPacket(playerList: [String]) -> DataPacket {
         return DataPacket(type: mprisPacketType, body: [
             MprisProperty.playerList.rawValue: playerList as AnyObject,
-            MprisProperty.supportAlbumArtPayload.rawValue: false as AnyObject
+            MprisProperty.supportAlbumArtPayload.rawValue: true as AnyObject
         ])
     }
     
     /// Sends current Mac player state (title, artist, position, capabilities, etc.) to the phone.
-    static func mprisStatusPacket(player: String, trackInfo: TrackInfo) -> DataPacket {
+    /// `artUrl` is included when album art is available; the phone uses it as a cache key and
+    /// may follow up with a `kdeconnect.mpris.request` containing `albumArtUrl` to fetch the art.
+    static func mprisStatusPacket(player: String, trackInfo: TrackInfo, artUrl: String? = nil) -> DataPacket {
         let p = trackInfo.payload
         var body: [String: AnyObject] = [
             MprisProperty.player.rawValue:           player as AnyObject,
@@ -1463,7 +1543,24 @@ fileprivate extension DataPacket {
         if let sm = p.shuffleMode {
             body[MprisProperty.shuffle.rawValue] = (sm != .off) as AnyObject
         }
+        if let url = artUrl {
+            body[MprisProperty.albumArtUrl.rawValue] = url as AnyObject
+        }
         return DataPacket(type: mprisPacketType, body: body)
+    }
+    
+    /// Responds to a phone album art request with the image data as a packet payload.
+    /// Connection automatically sets up an UploadTask TLS server and injects the port
+    /// into the serialized JSON header for the phone to connect and download.
+    static func mprisAlbumArtPacket(player: String, artUrl: String, artData: Data) -> DataPacket {
+        var packet = DataPacket(type: mprisPacketType, body: [
+            MprisProperty.player.rawValue:             player as AnyObject,
+            MprisProperty.albumArtUrl.rawValue:        artUrl as AnyObject,
+            MprisProperty.transferringAlbumArt.rawValue: true as AnyObject
+        ])
+        packet.payload = InputStream(data: artData)
+        packet.payloadSize = Int64(artData.count)
+        return packet
     }
     
     // MARK: Public methods
