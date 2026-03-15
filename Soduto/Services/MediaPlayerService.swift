@@ -12,16 +12,22 @@ import os
 import MediaPlayer
 import UserNotifications
 import CryptoKit
+import MediaRemoteAdapter
 
-/// Media Player Service (KDE Connect MPRIS Remote Plugin)
+/// Media Player Service (KDE Connect MPRIS Plugin — both controller and exposer sides)
 ///
-/// Implements the KDE Connect MPRIS remote (controller) side: receives media player state
-/// from a connected device and exposes it via macOS Now Playing (MPNowPlayingInfoCenter),
-/// allowing macOS media keys and the Control Center widget to control remote playback.
+/// **Incoming (controller) side:** receives media player state from a connected device
+/// and exposes it via macOS Now Playing (MPNowPlayingInfoCenter), allowing macOS media
+/// keys and the Control Center widget to control remote playback.
 ///
-/// The outgoing/exposer side (advertising macOS media state to the remote device so the
-/// phone can control Mac playback) is not yet implemented. The planned approach is to use
-/// MediaRemote.framework via dlopen/dlsym to observe system-wide Now Playing changes.
+/// **Outgoing (exposer) side:** advertises whatever is currently playing on the Mac to
+/// connected KDE Connect devices, letting the phone see and control Mac playback.
+/// Uses `MediaRemoteAdapter` (ejbills/mediaremote-adapter SPM package) which spawns
+/// `/usr/bin/perl` (bundle ID `com.apple.perl5`, trusted by mediaremoted) to load a
+/// bundled framework and read Now Playing info. This works around the macOS 15.3+
+/// entitlement restriction on `MRMediaRemoteGetNowPlayingInfo` for third-party apps.
+/// The feature degrades gracefully: if the Perl adapter fails, an empty playerList is
+/// sent to all devices and the outgoing side silently disables itself.
 ///
 /// Packets received — type "kdeconnect.mpris":
 /// - playerList (array): list of active media players on the remote device
@@ -38,10 +44,24 @@ import CryptoKit
 /// - albumArtUrl (string): URL of the current track's album art
 /// - transferringAlbumArt (boolean): marks a packet that carries an album art payload
 /// - volume (int): player volume (0–100)
-/// - loopStatus (string): loop mode — "None", "Track", or "Playlist" (received, not yet exposed in UI)
-/// - shuffle (boolean): shuffle state (received, not yet exposed in UI)
+/// - loopStatus (string): loop mode — "None", "Track", or "Playlist" (wired but macOS now playing doesn't support)
+/// - shuffle (boolean): shuffle state (wired but macOS now playing doesn't support)
 ///
-/// Packets sent — type "kdeconnect.mpris.request":
+/// Packets received — type "kdeconnect.mpris.request" (for the Mac/outgoing player):
+/// - player (string): must match the current Mac player name for Soduto to handle it
+/// - action (string): "Play", "Pause", "PlayPause", "Stop", "Next", "Previous"
+/// - Seek (int): relative seek offset in µs (note capital S)
+/// - SetPosition (int): absolute playback position in ms (note capital S)
+/// - setLoopStatus (string): "None", "Track", "Playlist"
+/// - setShuffle (boolean): shuffle on/off
+///
+/// Packets sent — type "kdeconnect.mpris" (outgoing exposer):
+/// - playerList (array): list of current Mac players (single-element: active app name)
+/// - supportAlbumArtPayload (boolean): always false for now (album art sending not yet implemented)
+/// - player + title, artist, album, isPlaying, pos, length, canPlay/Pause/GoNext/GoPrevious/canSeek,
+///   loopStatus, shuffle: current Mac player state
+///
+/// Packets sent — type "kdeconnect.mpris.request" (to remote players):
 /// - requestPlayerList (boolean): ask the remote to send its player list
 /// - player (string): the player to target for the following command
 /// - requestNowPlaying (boolean): ask the remote to send current track info
@@ -51,8 +71,8 @@ import CryptoKit
 /// - Seek (int): seek relative to current position (µs — note capital S, different unit)
 /// - SetPosition (int): set absolute playback position (ms — note capital S)
 /// - albumArtUrl (string): request the remote to transfer album art for this URL as a payload
-/// - setLoopStatus (string): set loop mode (protocol-defined, not yet implemented)
-/// - setShuffle (boolean): set shuffle mode (protocol-defined, not yet implemented)
+/// - setLoopStatus (string): set loop mode — "None", "Track", "Playlist"
+/// - setShuffle (boolean): set shuffle mode
 ///
 public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject {
     
@@ -107,8 +127,14 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     
     public static let serviceId: Service.Id = "com.soduto.services.mpris"
     
-    public let incomingCapabilities = Set<Service.Capability>([ DataPacket.mprisPacketType ])
-    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.mprisRequestPacketType ])
+    public let incomingCapabilities = Set<Service.Capability>([
+        DataPacket.mprisPacketType,
+        DataPacket.mprisRequestPacketType
+    ])
+    public let outgoingCapabilities = Set<Service.Capability>([
+        DataPacket.mprisPacketType,
+        DataPacket.mprisRequestPacketType
+    ])
     
     private var albumArtDownloadInfos: [DownloadInfo] = []
     private var downloadedAlbumArtFileURLByPlayerIdentity: [String: URL] = [:]
@@ -125,6 +151,12 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     private var nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
     private var commandCenter = MPRemoteCommandCenter.shared()
     
+    // Outgoing MPRIS from Mac to remote device
+    private var mediaController: MediaController?
+    private var macPlayerName: String?            // current app name from MediaRemoteAdapter (e.g. "Spotify")
+    private var lastSentTrackInfo: TrackInfo?     // last known state; used for Seek offset calculation
+    private var outgoingDevices: [String: Device] = [:]  // deviceId → Device (devices to receive Mac status)
+    
     // MARK: Initialization
     
     public init() {
@@ -140,6 +172,12 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     // MARK: Service methods
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
+        if dataPacket.isMprisRequestPacket {
+            // Phone sending commands for the Mac player (outgoing/exposer side)
+            Logger.services.debug("MPRIS::handleDataPacket mprisRequest fromDevice:<\(device, privacy: .public)>")
+            handleMacPlayerRequest(dataPacket, from: device)
+            return true
+        }
         guard dataPacket.isMprisPacket else { return false }
         
         Logger.services.debug("MPRIS::handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
@@ -176,9 +214,28 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     
     public func setup(for device: Device) {
         requestPlayerList(from: device)
+        
+        // Outgoing MPRIS: register this device for Mac media status updates
+        if device.incomingCapabilities.contains(DataPacket.mprisPacketType) {
+            outgoingDevices[device.id] = device
+            if mediaController == nil { startMediaController() }
+            // Send current state immediately so the phone doesn't wait for the next track event
+            let list: [String] = macPlayerName.map { [$0] } ?? []
+            device.send(DataPacket.mprisPlayerListPacket(playerList: list))
+            if let info = lastSentTrackInfo, let name = macPlayerName {
+                device.send(DataPacket.mprisStatusPacket(player: name, trackInfo: info))
+            }
+        }
     }
     
     public func cleanup(for device: Device) {
+        // Outgoing MPRIS: deregister device; stop controller if no devices remain
+        outgoingDevices.removeValue(forKey: device.id)
+        if outgoingDevices.isEmpty {
+            mediaController?.stopListening()
+            mediaController = nil
+        }
+        
         // Remove players for this device
         if let devicePlayers = players.removeValue(forKey: device.id) {
             if devicePlayers.contains(where: { $0 === lastActivePlayer }) {
@@ -757,6 +814,92 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         device.send(DataPacket.mprisRequestAlbumArtPacket(player: player, albumArtUrl: albumArtUrl))
     }
     
+    // MARK: Private methods - Outgoing MPRIS (Mac to remote device)
+    
+    private func startMediaController() {
+        let controller = MediaController()
+        controller.onTrackInfoReceived = { [weak self] trackInfo in
+            // MediaController already dispatches callbacks to main queue
+            self?.sendMacPlayerStatus(trackInfo)
+        }
+        controller.onListenerTerminated = { [weak self] in
+            Logger.services.notice("MPRIS::MediaController listener terminated — Perl adapter unavailable (Apple may have patched the bypass)")
+            guard let self = self else { return }
+            self.macPlayerName = nil
+            self.lastSentTrackInfo = nil
+            self.mediaController = nil
+            // Graceful degradation: tell all devices there are no Mac players
+            for device in self.outgoingDevices.values {
+                device.send(DataPacket.mprisPlayerListPacket(playerList: []))
+            }
+        }
+        controller.startListening()
+        mediaController = controller
+        Logger.services.debug("MPRIS::startMediaController — MediaController started")
+    }
+    
+    private func sendMacPlayerStatus(_ trackInfo: TrackInfo?) {
+        let newName = trackInfo?.payload.applicationName
+        let nameChanged = newName != macPlayerName
+        macPlayerName = newName
+        lastSentTrackInfo = trackInfo
+        
+        // Send an updated playerList whenever the active app changes or playback stops
+        if nameChanged || trackInfo == nil {
+            let list: [String] = newName.map { [$0] } ?? []
+            Logger.services.debug("MPRIS::sendMacPlayerStatus — player changed to \(list.first ?? "nil", privacy: .public), sending playerList")
+            for device in outgoingDevices.values {
+                device.send(DataPacket.mprisPlayerListPacket(playerList: list))
+            }
+        }
+        guard let info = trackInfo, let name = newName else { return }
+        let packet = DataPacket.mprisStatusPacket(player: name, trackInfo: info)
+        for device in outgoingDevices.values {
+            device.send(packet)
+        }
+    }
+    
+    private func handleMacPlayerRequest(_ packet: DataPacket, from device: Device) {
+        guard let controller = mediaController else { return }
+        // Only handle packets targeting our current Mac player
+        guard let targetPlayer = try? packet.getPlayer(),
+              targetPlayer == macPlayerName else { return }
+        
+        Logger.services.debug("MPRIS::handleMacPlayerRequest — target: \(targetPlayer, privacy: .public)")
+        
+        if let action = packet.body[DataPacket.MprisProperty.action.rawValue] as? String {
+            switch action {
+            case "Play":      controller.play()
+            case "Pause":     controller.pause()
+            case "PlayPause": controller.togglePlayPause()
+            case "Next":      controller.nextTrack()
+            case "Previous":  controller.previousTrack()
+            case "Stop":      controller.stop()
+            default:
+                Logger.services.debug("MPRIS::handleMacPlayerRequest — unknown action: \(action, privacy: .public)")
+            }
+        }
+        if let posMs = packet.body[DataPacket.MprisProperty.SetPosition.rawValue] as? Int {
+            controller.setTime(seconds: Double(posMs) / 1000.0)
+        }
+        if let seekUs = packet.body[DataPacket.MprisProperty.Seek.rawValue] as? Int {
+            // Seek is relative in µs; extrapolate current position from last known state
+            let base = lastSentTrackInfo?.payload.currentElapsedTime ?? 0
+            controller.setTime(seconds: max(0, base + Double(seekUs) / 1_000_000.0))
+        }
+        if let ls = packet.body[DataPacket.MprisProperty.setLoopStatus.rawValue] as? String {
+            switch ls {
+            case "None":     controller.setRepeatMode(.off)
+            case "Track":    controller.setRepeatMode(.one)
+            case "Playlist": controller.setRepeatMode(.all)
+            default: break
+            }
+        }
+        if let shuffle = packet.body[DataPacket.MprisProperty.setShuffle.rawValue] as? Bool {
+            controller.setShuffleMode(shuffle ? .songs : .off)
+        }
+    }
+    
     // MARK: Private methods - Album Art Download
     
     private func startAlbumArtDownload(player: String, albumArtUrl: String, downloadTask: DownloadTask, from device: Device) {
@@ -1276,6 +1419,51 @@ fileprivate extension DataPacket {
             MprisProperty.player.rawValue: player as AnyObject,
             MprisProperty.setShuffle.rawValue: shuffle as AnyObject
         ])
+    }
+    
+    // MARK: Outgoing MPRIS packet factories
+    
+    /// Sends the list of Mac players to the phone.
+    /// `supportAlbumArtPayload: false` — album art payload sending is not yet implemented.
+    static func mprisPlayerListPacket(playerList: [String]) -> DataPacket {
+        return DataPacket(type: mprisPacketType, body: [
+            MprisProperty.playerList.rawValue: playerList as AnyObject,
+            MprisProperty.supportAlbumArtPayload.rawValue: false as AnyObject
+        ])
+    }
+    
+    /// Sends current Mac player state (title, artist, position, capabilities, etc.) to the phone.
+    static func mprisStatusPacket(player: String, trackInfo: TrackInfo) -> DataPacket {
+        let p = trackInfo.payload
+        var body: [String: AnyObject] = [
+            MprisProperty.player.rawValue:           player as AnyObject,
+            MprisProperty.isPlaying.rawValue:        (p.isPlaying ?? false) as AnyObject,
+            MprisProperty.canPlay.rawValue:          true as AnyObject,
+            MprisProperty.canPause.rawValue:         true as AnyObject,
+            MprisProperty.canGoNext.rawValue:        true as AnyObject,
+            MprisProperty.canGoPrevious.rawValue:    true as AnyObject,
+            MprisProperty.canSeek.rawValue:          true as AnyObject,
+        ]
+        if let v = p.title,  !v.isEmpty { body[MprisProperty.title.rawValue]  = v as AnyObject }
+        if let v = p.artist, !v.isEmpty { body[MprisProperty.artist.rawValue] = v as AnyObject }
+        if let v = p.album,  !v.isEmpty { body[MprisProperty.album.rawValue]  = v as AnyObject }
+        if let d = p.durationMicros {
+            // durationMicros → ms (KDE Connect protocol uses ms for length)
+            body[MprisProperty.length.rawValue] = Int(d / 1000) as AnyObject
+        }
+        if let elapsed = p.currentElapsedTime {
+            // currentElapsedTime extrapolates position to now; convert seconds → ms
+            body[MprisProperty.pos.rawValue] = Int(elapsed * 1000) as AnyObject
+        }
+        if let rm = p.repeatMode {
+            let ls: String
+            switch rm { case .off: ls = "None"; case .one: ls = "Track"; case .all: ls = "Playlist" }
+            body[MprisProperty.loopStatus.rawValue] = ls as AnyObject
+        }
+        if let sm = p.shuffleMode {
+            body[MprisProperty.shuffle.rawValue] = (sm != .off) as AnyObject
+        }
+        return DataPacket(type: mprisPacketType, body: body)
     }
     
     // MARK: Public methods
