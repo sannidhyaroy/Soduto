@@ -51,6 +51,8 @@
 		31711BAC2F17638000E3B9FE /* ImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BAB2F17638000E3B9FE /* ImageLoader.swift */; };
 		31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
+		319320BC2F66402700A46DD9 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 319320BB2F66402700A46DD9 /* MediaRemoteAdapter */; };
+		319320BD2F6640E700A46DD9 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 319320BB2F66402700A46DD9 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		319CBA282939662400DAE301 /* Phone.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA272939662400DAE301 /* Phone.png */; };
 		319CBA2A2939F07D00DAE301 /* AirDrop.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA292939F07D00DAE301 /* AirDrop.png */; };
 		31A0A3C02F2C118F00CDA243 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */; };
@@ -186,6 +188,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		319320BE2F6640E700A46DD9 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				319320BD2F6640E700A46DD9 /* MediaRemoteAdapter in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		31F3A15D293B5EA300550088 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -407,6 +420,7 @@
 				31366D452F41337E0013911D /* NIOTLS in Frameworks */,
 				31366D432F4131470013911D /* NIOFoundationCompat in Frameworks */,
 				31DB2F0F2F3CEE8D00654096 /* NIOSSL in Frameworks */,
+				319320BC2F66402700A46DD9 /* MediaRemoteAdapter in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -851,6 +865,7 @@
 				84D071481EB9076F004D383A /* Embed XPC Services */,
 				84D071671EB91D2C004D383A /* Embed Helper Executables */,
 				31F3A15D293B5EA300550088 /* Embed Foundation Extensions */,
+				319320BE2F6640E700A46DD9 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -982,6 +997,7 @@
 				31DB2F052F3BE86300654096 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				31DB2F0D2F3CEE8D00654096 /* XCRemoteSwiftPackageReference "swift-nio-ssl" */,
 				31366D3D2F4130750013911D /* XCRemoteSwiftPackageReference "swift-nio" */,
+				319320BA2F66402700A46DD9 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */,
 			);
 			productRefGroup = 843301611D2D8CB8008934BB /* Products */;
 			projectDirPath = "";
@@ -1760,6 +1776,14 @@
 				minimumVersion = 2.94.1;
 			};
 		};
+		319320BA2F66402700A46DD9 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ejbills/mediaremote-adapter";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
 		31DB2F052F3BE86300654096 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -1808,6 +1832,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 31366D3D2F4130750013911D /* XCRemoteSwiftPackageReference "swift-nio" */;
 			productName = NIOTLS;
+		};
+		319320BB2F66402700A46DD9 /* MediaRemoteAdapter */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 319320BA2F66402700A46DD9 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */;
+			productName = MediaRemoteAdapter;
 		};
 		31DB2F062F3BE86300654096 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
