@@ -6,11 +6,9 @@
 //  Copyright © 2025 Soduto. All rights reserved.
 //
 
-import Foundation
 import Cocoa
 import os
 import MediaPlayer
-import UserNotifications
 import CryptoKit
 import CoreAudio
 import MediaRemoteAdapter
@@ -47,6 +45,8 @@ import MediaRemoteAdapter
 /// - volume (int): player volume (0–100)
 /// - loopStatus (string): loop mode — "None", "Track", or "Playlist" (wired but macOS now playing doesn't support)
 /// - shuffle (boolean): shuffle state (wired but macOS now playing doesn't support)
+/// - url (string): content URL of the current track (xesam:url); stored in PlayerRemote for future
+///   dashboard use (Android uses this for "Continue Watching" video notifications)
 ///
 /// Packets received — type "kdeconnect.mpris.request" (for the Mac/outgoing player):
 /// - player (string): must match the current Mac player name for Soduto to handle it
@@ -75,14 +75,19 @@ import MediaRemoteAdapter
 /// - setLoopStatus (string): set loop mode — "None", "Track", "Playlist"
 /// - setShuffle (boolean): set shuffle mode
 ///
+/// Direction legend used in section names below:
+/// - Remote device -> Soduto -> macOS: incoming/controller path
+/// - Soduto -> remote device: send requests/commands for incoming-side remote players
+/// - Mac media -> remote device: outgoing/exposer path
+/// - Remote device -> Mac media: outgoing control requests handled on Mac
 public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject {
-    
-    let un = UNUserNotificationCenter.current()
     
     // MARK: Types
     
+    // Reserved for future UI/dashboard type-safety around player identifiers.
     public typealias PlayerIdentity = String
     
+    // Reserved for future menu/action userInfo payload usage.
     enum UserInfoProperty: String {
         case deviceId = "com.soduto.services.mpris.deviceId"
         case playerIdentity = "com.soduto.services.mpris.playerIdentity"
@@ -137,21 +142,24 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         DataPacket.mprisRequestPacketType
     ])
     
-    private var albumArtDownloadInfos: [DownloadInfo] = []
-    private var downloadedAlbumArtFileURLByPlayerIdentity: [String: URL] = [:]
-    private var cachedDownloadedAlbumArtFileURLByHash: [String: URL] = [:]
+    // Shared/Core state
+    private var nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
+    private var commandCenter = MPRemoteCommandCenter.shared()
     
+    // Incoming/controller state
     /// Tracks per-device whether the remote supports album art payload transfers
     /// Read from `supportAlbumArtPayload` in incoming `kdeconnect.mpris` packets
     private var deviceSupportsAlbumArtPayload: [String: Bool] = [:]
-    
     /// Available players grouped by device
     @Published private var players: [String: [PlayerRemote]] = [:]
     /// Keeps track of the last player that was playing
     private var lastActivePlayer: PlayerRemote? = nil
-    private var nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
-    private var commandCenter = MPRemoteCommandCenter.shared()
+    /// Incoming album-art transfer/download tracking (remote device -> Soduto)
+    private var albumArtDownloadInfos: [DownloadInfo] = []
+    private var downloadedAlbumArtFileURLByPlayerIdentity: [String: URL] = [:]
+    private var cachedDownloadedAlbumArtFileURLByHash: [String: URL] = [:]
     
+    // Outgoing/exposer state
     // Outgoing MPRIS from Mac to remote device.
     // MediaRemote.framework only exposes the single active Now Playing app; commands always
     // target that one app. There is no per-app filtering available in the private framework.
@@ -159,6 +167,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     private var macPlayerName: String?            // current active Now Playing app name (e.g. "Spotify")
     private var lastSentTrackInfo: TrackInfo?     // last known state; used for Seek offset calculation
     private var outgoingDevices: [String: Device] = [:]  // deviceId → Device (devices to receive Mac status)
+    /// Outgoing album-art payload cache (Mac Now Playing -> remote device)
     private var currentArtBase64: String?         // last known base64 art string (change detection)
     private var currentArtUrl: String?            // hash-derived URL used as phone-side cache key
     private var currentArtData: Data?             // decoded art bytes, served on phone request
@@ -175,8 +184,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         }
     }
     
-    // MARK: Service methods
-    
+}
+
+// MARK: - Service Protocol
+
+extension MediaPlayerService {
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
         if dataPacket.isMprisRequestPacket {
             // Phone sending commands for the Mac player (outgoing/exposer side)
@@ -189,28 +201,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         Logger.services.debug("MPRIS::handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
         
         do {
-            // Read `supportAlbumArtPayload` from any `kdeconnect.mpris` packet
-            // Per protocol it's sent with playerList, but we read it from any packet for robustness
-            if let supportsAlbumArt = try dataPacket.getSupportAlbumArtPayload() {
-                deviceSupportsAlbumArtPayload[device.id] = supportsAlbumArt
-                Logger.services.debug("MPRIS::Device \(device.name, privacy: .public) supportAlbumArtPayload: \(supportsAlbumArt, privacy: .public)")
-            }
-            
-            if let playerList = try dataPacket.getPlayerList() {
-                handlePlayerList(playerList, from: device)
-            } else if let player = try dataPacket.getPlayer() {
-                // Check if this is an album art transfer packet
-                if let isTransferringAlbumArt = try dataPacket.getTransferringAlbumArt(), isTransferringAlbumArt,
-                   let albumArtUrl = try dataPacket.getAlbumArtUrl(),
-                   dataPacket.hasPayload() {
-                    if let downloadTask = dataPacket.downloadTask {
-                        handleAlbumArtTransfer(player: player, albumArtUrl: albumArtUrl, downloadTask: downloadTask, from: device)
-                    }
-                } else {
-                    // Regular player update
-                    handlePlayerUpdate(player: player, packet: dataPacket, from: device)
-                }
-            }
+            try routeIncomingMprisPacket(dataPacket, from: device)
         } catch {
             Logger.services.error("MPRIS::Error handling MPRIS packet: \(error, privacy: .public)")
         }
@@ -220,7 +211,40 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     
     public func setup(for device: Device) {
         requestPlayerList(from: device)
+        registerOutgoingDeviceIfSupported(device)
+    }
+    
+    public func cleanup(for device: Device) {
+        cleanupOutgoingDeviceState(for: device)
+        cleanupIncomingDeviceState(for: device)
+    }
+    
+    private func routeIncomingMprisPacket(_ dataPacket: DataPacket, from device: Device) throws {
+        // Read `supportAlbumArtPayload` from any `kdeconnect.mpris` packet
+        // Per protocol it's sent with playerList, but we read it from any packet for robustness
+        if let supportsAlbumArt = try dataPacket.getSupportAlbumArtPayload() {
+            deviceSupportsAlbumArtPayload[device.id] = supportsAlbumArt
+            Logger.services.debug("MPRIS::Device \(device.name, privacy: .public) supportAlbumArtPayload: \(supportsAlbumArt, privacy: .public)")
+        }
         
+        if let playerList = try dataPacket.getPlayerList() {
+            handlePlayerList(playerList, from: device)
+        } else if let player = try dataPacket.getPlayer() {
+            // Check if this is an album art transfer packet
+            if let isTransferringAlbumArt = try dataPacket.getTransferringAlbumArt(), isTransferringAlbumArt,
+               let albumArtUrl = try dataPacket.getAlbumArtUrl(),
+               dataPacket.hasPayload() {
+                if let downloadTask = dataPacket.downloadTask {
+                    handleAlbumArtTransfer(player: player, albumArtUrl: albumArtUrl, downloadTask: downloadTask, from: device)
+                }
+            } else {
+                // Regular player update
+                handlePlayerUpdate(player: player, packet: dataPacket, from: device)
+            }
+        }
+    }
+    
+    private func registerOutgoingDeviceIfSupported(_ device: Device) {
         // Outgoing MPRIS: register this device for Mac media status updates
         if device.incomingCapabilities.contains(DataPacket.mprisPacketType) {
             outgoingDevices[device.id] = device
@@ -238,14 +262,16 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         }
     }
     
-    public func cleanup(for device: Device) {
+    private func cleanupOutgoingDeviceState(for device: Device) {
         // Outgoing MPRIS: deregister device; stop controller if no devices remain
         outgoingDevices.removeValue(forKey: device.id)
         if outgoingDevices.isEmpty {
             mediaController?.stopListening()
             mediaController = nil
         }
-        
+    }
+    
+    private func cleanupIncomingDeviceState(for device: Device) {
         // Remove players for this device
         if let devicePlayers = players.removeValue(forKey: device.id) {
             if devicePlayers.contains(where: { $0 === lastActivePlayer }) {
@@ -332,9 +358,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         Logger.services.debug("MPRIS::playerMenuItemClicked - manually selecting player \(player.identity, privacy: .public)")
         setActivePlayer(player)
     }
-    
-    // MARK: DownloadTaskDelegate
-    
+}
+
+// MARK: - DownloadTaskDelegate
+
+extension MediaPlayerService {
     public func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool) {
         Logger.services.debug("MPRIS::downloadTask(<\(task.id, privacy: .public)> finishedWithSuccess:<\(success, privacy: .public)>)")
         
@@ -402,10 +430,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             }
         }
     }
-    
-    
-    // MARK: Private methods - Packet Handlers
-    
+}
+
+// MARK: - Incoming (Remote Device -> Soduto) Packet Processing
+
+extension MediaPlayerService {
     private func handlePlayerList(_ playerList: [String], from device: Device) {
         Logger.services.debug("MPRIS::Handle player list \(playerList, privacy: .public) from device \(device.name, privacy: .public)")
         
@@ -465,6 +494,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             let title = try packet.getTitle() ?? playerToUpdate.title
             let album = try packet.getAlbum() ?? playerToUpdate.album
             let length = try packet.getLength() ?? playerToUpdate.length
+            let url = packet.getUrl() ?? playerToUpdate.url
             let albumArtUrl = try packet.getAlbumArtUrl()
             let volume = try packet.getVolume() ?? playerToUpdate.volume
             let canPause = try packet.getCanPause() ?? playerToUpdate.canPause
@@ -475,6 +505,9 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             let loopStatus = packet.getLoopStatus() ?? playerToUpdate.loopStatus
             let shuffle = packet.getShuffle() ?? playerToUpdate.shuffle
             
+            // url is stored directly; not included in update() since it doesn't affect Now Playing display
+            playerToUpdate.url = url
+
             playerToUpdate.update(
                 isPlaying: isPlaying,
                 position: position,
@@ -491,7 +524,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 loopStatus: loopStatus,
                 shuffle: shuffle
             )
-            
+
             // Promote to active if currently playing, or if no active player exists yet.
             // This ensures the Now Playing widget displays immediately, even for paused players,
             // since macOS suppresses the widget when playbackState=.paused (even with full metadata).
@@ -512,7 +545,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                     playerToUpdate.albumArtUrl = albumArtUrl
                     
                     // Check if we already have this album art in cache before requesting
-                    if let hash = getHashForAlbumArt(player: player, albumArtUrl: albumArtUrl),
+                    if let hash = getHashForAlbumArt(albumArtUrl: albumArtUrl),
                        let cachedFileURL = getCachedAlbumArt(hash: hash) {
                         Logger.services.debug("MPRIS::Using cached album art for \(player, privacy: .public)")
                         do {
@@ -566,8 +599,12 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         }
     }
     
-    // MARK: Private methods - Remote Command Center
-    
+}
+
+// MARK: - Incoming (Remote Device -> Soduto -> macOS) Now Playing + Command Center
+// NOTE: This section mirrors remote state into macOS Now Playing and forwards command-center actions back to the remote player.
+
+extension MediaPlayerService {
     private func setupCommandCenter() {
         // Remove all targets from command center
         commandCenter.pauseCommand.removeTarget(nil)
@@ -664,9 +701,9 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     // (too heavy to justify)
     //
     // Soduto's approach: one "active" player at a time owns the info center slot
-    // The most recently playing player wins. A future status bar menu will let the
-    // user manually switch the active player between all connected players/devices.
-    // `setActivePlayer()` is the single choke-point for all active player transitions
+    // The most recently playing player wins. The Now Playing submenu under the status
+    // bar menu lets the user manually switch the active player between all connected
+    // players/devices
     
     private func setActivePlayer(_ player: PlayerRemote?) {
         guard player !== lastActivePlayer else {
@@ -700,7 +737,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
                 tempInfo[MPNowPlayingInfoPropertyPlaybackRate] = 1.0  // Trick: force display
                 tempInfo["deviceName"] = player.device.name
                 tempInfo["playerName"] = player.identity
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = tempInfo
+                nowPlayingInfoCenter.nowPlayingInfo = tempInfo
             }
             
             Logger.services.debug("MPRIS::setActivePlayer - calling updateNowPlayingInfo for \(player.identity, privacy: .public)")
@@ -708,7 +745,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
             updateCommandCenterForActivePlayer(player)
         } else {
             Logger.services.debug("MPRIS::setActivePlayer - clearing now playing (nil player)")
-            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            nowPlayingInfoCenter.nowPlayingInfo = nil
         }
     }
     
@@ -763,8 +800,12 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         commandCenter.changePlaybackPositionCommand.isEnabled = player.canSeek && player.length > 0
     }
     
-    // MARK: Private methods - Player Commands
-    
+}
+
+// MARK: - Incoming Control (Soduto -> Remote Device) Command Senders
+// NOTE: These send actions/state requests to incoming-side remote players.
+
+extension MediaPlayerService {
     private func sendPlayPauseCommand(to player: PlayerRemote) {
         player.device.send(DataPacket.mprisRequestPacket(player: player.identity, action: "PlayPause"))
     }
@@ -785,14 +826,17 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         player.device.send(DataPacket.mprisRequestPacket(player: player.identity, action: "Previous"))
     }
     
+    // Reserved for future dashboard/UI controls. Not currently wired from macOS command center.
     private func sendStopCommand(to player: PlayerRemote) {
         player.device.send(DataPacket.mprisRequestPacket(player: player.identity, action: "Stop"))
     }
     
+    // Reserved for future dashboard/UI controls. macOS command center does not provide a remote volume command here.
     private func sendSetVolumeCommand(to player: PlayerRemote, volume: Int) {
         player.device.send(DataPacket.mprisSetVolumePacket(player: player.identity, volume: volume))
     }
     
+    // Reserved for future dashboard/UI controls. Current command-center integration uses absolute SetPosition.
     private func sendSeekCommand(to player: PlayerRemote, offset: Int) {
         player.device.send(DataPacket.mprisSeekPacket(player: player.identity, offset: offset))
     }
@@ -810,7 +854,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         player.device.send(DataPacket.mprisSetShufflePacket(player: player.identity, shuffle: shuffle))
     }
     
-    // MARK: Private methods - Information Requests
+    // MARK: Information Requests (Soduto -> Remote Device)
     
     private func requestPlayerList(from device: Device) {
         device.send(DataPacket.mprisRequestPlayerListPacket())
@@ -824,8 +868,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         device.send(DataPacket.mprisRequestAlbumArtPacket(player: player, albumArtUrl: albumArtUrl))
     }
     
-    // MARK: Private methods - Outgoing MPRIS (Mac to remote device)
-    
+}
+
+// MARK: - Outgoing (Mac Media -> Remote Device) Player Exposer
+
+extension MediaPlayerService {
     private func startMediaController() {
         let controller = MediaController()
         controller.onTrackInfoReceived = { [weak self] trackInfo in
@@ -929,6 +976,8 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         }
     }
     
+    // MARK: Handle Incoming Control Requests for Outgoing Setup (Remote Device -> Mac Media)
+    // NOTE: Receives control commands from the remote device and applies them to macOS media.
     private func handleMacPlayerRequest(_ packet: DataPacket, from device: Device) {
         // Only handle packets targeting the current Mac player
         guard let targetPlayer = try? packet.getPlayer(),
@@ -985,7 +1034,8 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         }
     }
     
-    // MARK: Private methods - System Volume (CoreAudio)
+    // MARK: System Volume [CoreAudio] (Remote Device -> Mac Media)
+    // NOTE: Applies remote volume-change commands to system output volume. setVolume is handled here (not a separate service) because MediaRemote.framework has no per-app volume API. Maps MPRIS setVolume to macOS system output volume.
     
     private func defaultOutputDeviceID() -> AudioDeviceID? {
         var deviceID = AudioDeviceID(0)
@@ -1031,12 +1081,15 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         }
     }
     
-    // MARK: Private methods - Album Art Download
-    
+}
+
+// MARK: - Incoming (Remote Device -> Soduto) Album Art Download + Cache
+
+extension MediaPlayerService {
     private func startAlbumArtDownload(player: String, albumArtUrl: String, downloadTask: DownloadTask, from device: Device) {
         Logger.services.debug("MPRIS::Starting album art download for player \(player, privacy: .public) from \(albumArtUrl, privacy: .public)")
         
-        let downloadFileHash = getHashForAlbumArt(player: player, albumArtUrl: albumArtUrl)
+        let downloadFileHash = getHashForAlbumArt(albumArtUrl: albumArtUrl)
         
         // Check if we already have this album art cached
         if let hash = downloadFileHash, let cachedFileURL = getCachedAlbumArt(hash: hash) {
@@ -1086,7 +1139,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
         }
     }
     
-    private func getHashForAlbumArt(player: String, albumArtUrl: String) -> String? {
+    private func getHashForAlbumArt(albumArtUrl: String) -> String? {
         // Generate a deterministic hash of the album art URL for caching.
         // Using SHA256 for stable, cross-session cache keys.
         
@@ -1250,6 +1303,10 @@ class PlayerRemote: NSObject {
     var artist: String?
     var title: String?
     var album: String?
+    /// Content URL from the remote player (xesam:url / MPRIS `url` field).
+    /// Typically a file:// or streaming URI. On Android this enables "Continue Watching"
+    /// notifications for video URLs. Stored here for future use.
+    var url: String?
     var albumArtUrl: String?
     var albumArtImage: NSImage?
     var length: Int = 0
@@ -1476,6 +1533,7 @@ fileprivate extension DataPacket {
         case setShuffle = "setShuffle"
         case Seek = "Seek"
         case SetPosition = "SetPosition"
+        case url = "url"
     }
     
     // MARK: Properties
@@ -1487,7 +1545,7 @@ fileprivate extension DataPacket {
     var isMprisRequestPacket: Bool { return self.type == DataPacket.mprisRequestPacketType }
     
     
-    // MARK: Public static methods
+    // MARK: Incoming Controller — Packets sent to control the phone's player
     
     static func mprisRequestPlayerListPacket() -> DataPacket {
         return DataPacket(type: mprisRequestPacketType, body: [
@@ -1552,7 +1610,7 @@ fileprivate extension DataPacket {
         ])
     }
     
-    // MARK: Outgoing MPRIS packet factories
+    // MARK: Outgoing Exposer — Packets sent to advertise Mac's state
     
     /// Sends the list of Mac players to the phone.
     static func mprisPlayerListPacket(playerList: [String]) -> DataPacket {
@@ -1602,6 +1660,11 @@ fileprivate extension DataPacket {
         if let vol = volume {
             body[MprisProperty.volume.rawValue] = vol as AnyObject
         }
+        // TODO: `url` (xesam:url) field is intentionally absent here.
+        // MediaRemote.framework / MediaRemoteAdapter does not expose a content URL
+        // for the active Now Playing app — only artwork, metadata, and playback state.
+        // If a future MediaRemoteAdapter version exposes it, pass it as an optional
+        // parameter and include it here so Android can show "Continue Watching" for video.
         return DataPacket(type: mprisPacketType, body: body)
     }
     
@@ -1619,7 +1682,7 @@ fileprivate extension DataPacket {
         return packet
     }
     
-    // MARK: Public methods
+    // MARK: Incoming — Packet Getters
     
     func validateMprisType() throws {
         guard self.isMprisPacket || self.isMprisRequestPacket else { throw MprisError.wrongType }
@@ -1645,7 +1708,14 @@ fileprivate extension DataPacket {
         guard let value = body[MprisProperty.albumArtUrl.rawValue] as? String else { throw MprisError.invalidArtUrl }
         return value
     }
-    
+
+    /// Content URL of the currently playing track (xesam:url / MPRIS `url` field).
+    /// Optional; returns nil if absent. Not validated strictly — callers should sanity-check
+    /// schemes before use (Android skips non-http(s)/file URLs for "Continue Watching").
+    func getUrl() -> String? {
+        return body[MprisProperty.url.rawValue] as? String
+    }
+
     func getIsPlaying() throws -> Bool? {
         try validateMprisType()
         guard body.keys.contains(MprisProperty.isPlaying.rawValue) else { return nil }
