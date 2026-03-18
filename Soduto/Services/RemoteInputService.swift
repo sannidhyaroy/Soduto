@@ -1,5 +1,5 @@
 //
-//  RemoteKeyboardService.swift
+//  RemoteInputService.swift
 //  Soduto
 //
 //  Created by Giedrius on 2017-05-21.
@@ -11,11 +11,11 @@ import Cocoa
 import os
 import ApplicationServices
 
-public class RemoteKeyboardService: Service {
+public class RemoteInputService: Service {
     
     // MARK: Service
     
-    public static let serviceId: Service.Id = "com.soduto.services.remotekeyboard"
+    public static let serviceId: Service.Id = "com.soduto.services.remoteinput"
     
     public let incomingCapabilities = Set<Service.Capability>([
         DataPacket.remoteKeyboardRequestPacketType,
@@ -598,9 +598,9 @@ public class RemoteKeyboardService: Service {
 }
 
 
-// MARK: DataPacket (Remote keyboard)
+// MARK: DataPacket (MousePad Plugin)
 
-/// Remote keyboard service data packet utilities
+/// Remote Input Keyboard service data packet utilities based on MousePad plugin of KDE Connect
 fileprivate extension DataPacket {
     
     // MARK: Types

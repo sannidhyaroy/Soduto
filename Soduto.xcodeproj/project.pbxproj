@@ -81,7 +81,7 @@
 		840FC2F91DEF6AF400AC4824 /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */; };
 		84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */; };
 		8421A8E71D761409008AC833 /* PreferencesWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8421A8E61D761409008AC833 /* PreferencesWindowController.swift */; };
-		842505E91ED1BD3C00AEE25F /* RemoteKeyboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842505E81ED1BD3C00AEE25F /* RemoteKeyboardService.swift */; };
+		842505E91ED1BD3C00AEE25F /* RemoteInputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842505E81ED1BD3C00AEE25F /* RemoteInputService.swift */; };
 		842506371ED3692300AEE25F /* WelcomeWindow.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 842506351ED3692300AEE25F /* WelcomeWindow.storyboard */; };
 		842506731ED4CEF800AEE25F /* DeviceListController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842506721ED4CEF800AEE25F /* DeviceListController.swift */; };
 		842B50571E4295D200969AA7 /* UnifiedTitlebarWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842B50561E4295D200969AA7 /* UnifiedTitlebarWindow.swift */; };
@@ -157,7 +157,7 @@
 		84FA45ED1DDF525200EF3992 /* PingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FA45EC1DDF525200EF3992 /* PingService.swift */; };
 		84FFDA2A1E1D8D370069AC9A /* SimplePing.m in Sources */ = {isa = PBXBuildFile; fileRef = 84FFDA291E1D8D370069AC9A /* SimplePing.m */; };
 		8FC977F11D4778E9001ADF7E /* StatusBarMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC977F01D4778E9001ADF7E /* StatusBarMenuController.swift */; };
-		F80E30722DBE0D880047D068 /* MacToRemoteInputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */; };
+		F80E30722DBE0D880047D068 /* RemoteControlService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F80E30712DBE0D880047D068 /* RemoteControlService.swift */; };
 		F826E6C72DB302F000E736CE /* RunCommandService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6C62DB302F000E736CE /* RunCommandService.swift */; };
 		F826E6C92DB419AF00E736CE /* RunCommandsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F826E6C82DB419AF00E736CE /* RunCommandsWindowController.swift */; };
 		F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */; };
@@ -305,7 +305,7 @@
 		841E814C1D809C360096A846 /* Soduto.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto.entitlements; sourceTree = "<group>"; };
 		84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceListItemView.swift; sourceTree = "<group>"; };
 		8421A8E61D761409008AC833 /* PreferencesWindowController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PreferencesWindowController.swift; sourceTree = "<group>"; };
-		842505E81ED1BD3C00AEE25F /* RemoteKeyboardService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = RemoteKeyboardService.swift; sourceTree = "<group>"; };
+		842505E81ED1BD3C00AEE25F /* RemoteInputService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = RemoteInputService.swift; sourceTree = "<group>"; };
 		842506361ED3692300AEE25F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/WelcomeWindow.storyboard; sourceTree = "<group>"; };
 		842506721ED4CEF800AEE25F /* DeviceListController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceListController.swift; sourceTree = "<group>"; };
 		842B50561E4295D200969AA7 /* UnifiedTitlebarWindow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UnifiedTitlebarWindow.swift; sourceTree = "<group>"; };
@@ -395,7 +395,7 @@
 		84FFDA1F1E1D8D0D0069AC9A /* SimplePing.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SimplePing.h; sourceTree = "<group>"; };
 		84FFDA291E1D8D370069AC9A /* SimplePing.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SimplePing.m; sourceTree = "<group>"; };
 		8FC977F01D4778E9001ADF7E /* StatusBarMenuController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StatusBarMenuController.swift; sourceTree = "<group>"; };
-		F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacToRemoteInputService.swift; sourceTree = "<group>"; };
+		F80E30712DBE0D880047D068 /* RemoteControlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlService.swift; sourceTree = "<group>"; };
 		F826E6C62DB302F000E736CE /* RunCommandService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCommandService.swift; sourceTree = "<group>"; };
 		F826E6C82DB419AF00E736CE /* RunCommandsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCommandsWindowController.swift; sourceTree = "<group>"; };
 		F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityReportService.swift; sourceTree = "<group>"; };
@@ -821,11 +821,11 @@
 				840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */,
 				F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */,
 				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
-				F80E30712DBE0D880047D068 /* MacToRemoteInputService.swift */,
+				F80E30712DBE0D880047D068 /* RemoteControlService.swift */,
 				31711BA72F17435000E3B9FE /* MediaPlayerService.swift */,
 				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
 				84FA45EC1DDF525200EF3992 /* PingService.swift */,
-				842505E81ED1BD3C00AEE25F /* RemoteKeyboardService.swift */,
+				842505E81ED1BD3C00AEE25F /* RemoteInputService.swift */,
 				F826E6C62DB302F000E736CE /* RunCommandService.swift */,
 				84651A751E5AEBE100D17601 /* SftpService.swift */,
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
@@ -1103,7 +1103,7 @@
 				31F8A6042F4A53DC00CA5A61 /* PairingView.swift in Sources */,
 				84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */,
 				311BC2912F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */,
-				F80E30722DBE0D880047D068 /* MacToRemoteInputService.swift in Sources */,
+				F80E30722DBE0D880047D068 /* RemoteControlService.swift in Sources */,
 				84FA45E81DDE088B00EF3992 /* ServiceManager.swift in Sources */,
 				F8B2BB242DAFC87B00FFA284 /* ConnectivityReportService.swift in Sources */,
 				0236B63C1F9936C80020DA9F /* AboutWindowController.swift in Sources */,
@@ -1161,7 +1161,7 @@
 				8456F4A81D7DE393006EFE19 /* Pairable.swift in Sources */,
 				845BE2E61EC2476200F3BD62 /* HoverButton.swift in Sources */,
 				843B67041DF1E64A00289EC9 /* ShareService.swift in Sources */,
-				842505E91ED1BD3C00AEE25F /* RemoteKeyboardService.swift in Sources */,
+				842505E91ED1BD3C00AEE25F /* RemoteInputService.swift in Sources */,
 				31366D362F412C4A0013911D /* PacketCodec.swift in Sources */,
 				026BFB581F194D7D00D888E2 /* DeviceInfoWindowController.swift in Sources */,
 				84FA45D81DDDCB3D00EF3992 /* ConnectionProvider.swift in Sources */,

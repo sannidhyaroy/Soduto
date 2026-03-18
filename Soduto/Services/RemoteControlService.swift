@@ -1,8 +1,8 @@
 //
-//  MacToRemoteInputService.swift
+//  RemoteControlService.swift
 //  Soduto
 //
-//  Created on 2025-04-27.
+//  Created by Swapnil Devesh on 2025-04-27.
 //  Copyright © 2025 Soduto. All rights reserved.
 //
 
@@ -10,18 +10,18 @@ import Foundation
 import Cocoa
 import os
 
-public class MacToRemoteInputService: Service {
+public class RemoteControlService: Service {
     
     // MARK: - Service Properties
     
-    public static let serviceId: Service.Id = "com.soduto.services.mactoremoteinput"
+    public static let serviceId: Service.Id = "com.soduto.services.remotecontrol"
     
-    // Define our own public constant to match the private one in RemoteKeyboardService
-    public static let packetTypeMacToRemoteKeyboard = "kdeconnect.mousepad.request"
+    // Define our own public constant to match the private one in RemoteInputService
+    public static let remoteKeyboardRequestPacketType = "kdeconnect.mousepad.request"
     
     public let incomingCapabilities = Set<Service.Capability>([])
     public let outgoingCapabilities = Set<Service.Capability>([
-        MacToRemoteInputService.packetTypeMacToRemoteKeyboard
+        RemoteControlService.remoteKeyboardRequestPacketType
     ])
     
     // MARK: - Private Properties
@@ -819,7 +819,7 @@ public class MacToRemoteInputService: Service {
             "dy": dy as NSNumber
         ]
         
-        let packet = DataPacket(type: MacToRemoteInputService.packetTypeMacToRemoteKeyboard, body: body)
+        let packet = DataPacket(type: RemoteControlService.remoteKeyboardRequestPacketType, body: body)
         device.send(packet)
     }
     
@@ -830,7 +830,7 @@ public class MacToRemoteInputService: Service {
             "dy": dy as NSNumber
         ]
         
-        let packet = DataPacket(type: MacToRemoteInputService.packetTypeMacToRemoteKeyboard, body: body)
+        let packet = DataPacket(type: RemoteControlService.remoteKeyboardRequestPacketType, body: body)
         device.send(packet)
     }
     
@@ -839,7 +839,7 @@ public class MacToRemoteInputService: Service {
             "singlehold": true as NSNumber
         ]
         
-        let packet = DataPacket(type: MacToRemoteInputService.packetTypeMacToRemoteKeyboard, body: body)
+        let packet = DataPacket(type: RemoteControlService.remoteKeyboardRequestPacketType, body: body)
         device.send(packet)
     }
     
@@ -848,7 +848,7 @@ public class MacToRemoteInputService: Service {
             "singlerelease": true as NSNumber
         ]
         
-        let packet = DataPacket(type: MacToRemoteInputService.packetTypeMacToRemoteKeyboard, body: body)
+        let packet = DataPacket(type: RemoteControlService.remoteKeyboardRequestPacketType, body: body)
         device.send(packet)
     }
     
@@ -857,7 +857,7 @@ public class MacToRemoteInputService: Service {
             "singleclick": true as NSNumber
         ]
         
-        let packet = DataPacket(type: MacToRemoteInputService.packetTypeMacToRemoteKeyboard, body: body)
+        let packet = DataPacket(type: RemoteControlService.remoteKeyboardRequestPacketType, body: body)
         device.send(packet)
     }
     
@@ -887,7 +887,7 @@ public class MacToRemoteInputService: Service {
             "rightclick": true as NSNumber
         ]
         
-        let packet = DataPacket(type: MacToRemoteInputService.packetTypeMacToRemoteKeyboard, body: body)
+        let packet = DataPacket(type: RemoteControlService.remoteKeyboardRequestPacketType, body: body)
         device.send(packet)
     }
     
@@ -896,7 +896,7 @@ public class MacToRemoteInputService: Service {
             "middleclick": true as NSNumber
         ]
         
-        let packet = DataPacket(type: MacToRemoteInputService.packetTypeMacToRemoteKeyboard, body: body)
+        let packet = DataPacket(type: RemoteControlService.remoteKeyboardRequestPacketType, body: body)
         device.send(packet)
     }
     
@@ -910,7 +910,7 @@ public class MacToRemoteInputService: Service {
         if ctrl { body["ctrl"] = true as NSNumber }
         if alt { body["alt"] = true as NSNumber }
         
-        let packet = DataPacket(type: MacToRemoteInputService.packetTypeMacToRemoteKeyboard, body: body)
+        let packet = DataPacket(type: RemoteControlService.remoteKeyboardRequestPacketType, body: body)
         device.send(packet)
     }
     
@@ -924,7 +924,7 @@ public class MacToRemoteInputService: Service {
         if ctrl { body["ctrl"] = true as NSNumber }
         if alt { body["alt"] = true as NSNumber }
         
-        let packet = DataPacket(type: MacToRemoteInputService.packetTypeMacToRemoteKeyboard, body: body)
+        let packet = DataPacket(type: RemoteControlService.remoteKeyboardRequestPacketType, body: body)
         device.send(packet)
     }
     
@@ -1084,7 +1084,7 @@ public class MacToRemoteInputService: Service {
         guard let refcon = refcon else { return Unmanaged.passUnretained(event) }
         
         // Get reference to self from the user info
-        let service = Unmanaged<MacToRemoteInputService>.fromOpaque(refcon).takeUnretainedValue()
+        let service = Unmanaged<RemoteControlService>.fromOpaque(refcon).takeUnretainedValue()
         
         // Only process events if we're capturing input
         guard service.isCapturing, let device = service.targetDevice else {
