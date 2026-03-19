@@ -18,8 +18,7 @@ public class RemoteInputService: Service {
     public static let serviceId: Service.Id = "com.soduto.services.remoteinput"
     
     public let incomingCapabilities = Set<Service.Capability>([
-        DataPacket.remoteKeyboardRequestPacketType,
-        DataPacket.presenterPacketType
+        DataPacket.remoteKeyboardRequestPacketType
     ])
     public let outgoingCapabilities = Set<Service.Capability>([
         DataPacket.remoteKeyboardEchoPacketType
@@ -28,7 +27,7 @@ public class RemoteInputService: Service {
     private var hasCheckedAccessibility = false
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        guard dataPacket.isRemoteKeyboardRequestPacket || dataPacket.isPresenterPacket else { return false }
+        guard dataPacket.isRemoteKeyboardRequestPacket else { return false }
         
         // Check accessibility permissions before processing keyboard input
         if !hasCheckedAccessibility {
@@ -37,19 +36,14 @@ public class RemoteInputService: Service {
         }
         
         do {
-            if (dataPacket.isPresenterPacket) {
-                // Process presenter input
-                processPresenterInput(dataPacket)
-            } else {
-                // Process the actual keyboard input
-                processKeyboardInput(dataPacket)
-                
-                // Process mouse input
-                processMouseInput(dataPacket)
-                
-                guard try dataPacket.getSendAckFlag() else { return true }
-                device.send(try DataPacket.remoteKeyboardEchoPacket(for: dataPacket))
-            }
+            // Process the actual keyboard input
+            processKeyboardInput(dataPacket)
+            
+            // Process mouse input
+            processMouseInput(dataPacket)
+            
+            guard try dataPacket.getSendAckFlag() else { return true }
+            device.send(try DataPacket.remoteKeyboardEchoPacket(for: dataPacket))
         }
         catch {
             Logger.services.error("Failed handling remote keyboard data packet: \(error, privacy: .public).")
@@ -568,33 +562,6 @@ public class RemoteInputService: Service {
         }
     }
     
-    // MARK: - Presenter Input Properties and Methods
-    
-    // Extract presenter movement values (dx, dy)
-    func getPresenterDx(from dataPacket: DataPacket) -> Double {
-        guard dataPacket.isPresenterPacket else { return 0 }
-        guard dataPacket.body.keys.contains(MouseInputProperty.dx) else { return 0 }
-        guard let value = dataPacket.body[MouseInputProperty.dx] as? NSNumber else { return 0 }
-        return value.doubleValue
-    }
-    
-    func getPresenterDy(from dataPacket: DataPacket) -> Double {
-        guard dataPacket.isPresenterPacket else { return 0 }
-        guard dataPacket.body.keys.contains(MouseInputProperty.dy) else { return 0 }
-        guard let value = dataPacket.body[MouseInputProperty.dy] as? NSNumber else { return 0 }
-        return value.doubleValue
-    }
-    
-    // Process presenter input
-    private func processPresenterInput(_ dataPacket: DataPacket) {
-        // Get dx and dy values from the presenter packet
-        let dx = getPresenterDx(from: dataPacket)
-        let dy = getPresenterDy(from: dataPacket)
-        
-        // Use the same movePointer function as regular mouse movement
-        // since presenter packets use the same format
-        movePointer(dx: dx * 1000, dy: dy * 1000)
-    }
 }
 
 
@@ -632,11 +599,9 @@ fileprivate extension DataPacket {
     
     static let remoteKeyboardRequestPacketType = "kdeconnect.mousepad.request"
     static let remoteKeyboardEchoPacketType = "kdeconnect.mousepad.echo"
-    static let presenterPacketType = "kdeconnect.presenter"
     
     var isRemoteKeyboardRequestPacket: Bool { return self.type == DataPacket.remoteKeyboardRequestPacketType }
     var isRemoteKeyboardEchoPacket: Bool { return self.type == DataPacket.remoteKeyboardEchoPacketType }
-    var isPresenterPacket: Bool { return self.type == DataPacket.presenterPacketType }
     
     
     // MARK: Public static methods
