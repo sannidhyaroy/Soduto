@@ -23,11 +23,15 @@ import Cocoa
 ///
 /// This plugin is symmetric to its counterpart in the other device: both have the
 /// same behaviour.
-public class ClipboardService: Service {
+public class ClipboardService: BidirectionalService {
     
     // MARK: Properties
     
     private static let monitoringInterval: TimeInterval = 0.5
+    
+    var userDefaults: UserDefaults = .standard
+    let incomingPreferenceKey = AppDefaultsStore.Preferences.Services.Clipboard.incomingKey
+    let outgoingPreferenceKey = AppDefaultsStore.Preferences.Services.Clipboard.outgoingKey
     
     private var monitoringTimer: Timer? = nil
     private var lastChangeCount: Int = NSPasteboard.general.changeCount
@@ -37,7 +41,7 @@ public class ClipboardService: Service {
     
     /// Timestamp of the last local clipboard change. Initialized to epoch so that
     /// an incoming clipboard.connect from a peer (with a real timestamp) always wins
-    /// on first connect when we have no tracked change history.
+    /// on first connect when we have no tracked change history
     private var lastLocalChangeTimestamp: Date = Date(timeIntervalSince1970: 0)
     
     
@@ -45,29 +49,31 @@ public class ClipboardService: Service {
     
     public static let serviceId: Service.Id = "com.soduto.services.clipboard"
     
-    public let incomingCapabilities = Set<Service.Capability>([
-        DataPacket.clipboardPacketType,
-        DataPacket.clipboardConnectPacketType
-    ])
-    public let outgoingCapabilities = Set<Service.Capability>([
-        DataPacket.clipboardPacketType,
-        DataPacket.clipboardConnectPacketType
-    ])
+    public var incomingCapabilities: Set<Service.Capability> {
+        incomingEnabled ? [DataPacket.clipboardPacketType, DataPacket.clipboardConnectPacketType] : []
+    }
+    public var outgoingCapabilities: Set<Service.Capability> {
+        outgoingEnabled ? [DataPacket.clipboardPacketType, DataPacket.clipboardConnectPacketType] : []
+    }
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        if dataPacket.isClipboardPacket {
+        switch dataPacket.type {
+        case DataPacket.clipboardPacketType:
+            guard incomingEnabled else { return true }
             guard let contents = try? dataPacket.getContent() else { return true }
-            self.applyExternalClipboard(contents, from: device)
+            applyExternalClipboard(contents, from: device)
             return true
-        } else if dataPacket.isClipboardConnectPacket {
+        case DataPacket.clipboardConnectPacketType:
+            guard incomingEnabled else { return true }
             guard let contents = try? dataPacket.getContent() else { return true }
             let remoteTimestamp = (try? dataPacket.getTimestamp()) ?? Date()
-            if remoteTimestamp > self.lastLocalChangeTimestamp {
-                self.applyExternalClipboard(contents, from: device)
+            if remoteTimestamp > lastLocalChangeTimestamp {
+                applyExternalClipboard(contents, from: device)
             }
             return true
+        default:
+            return false
         }
-        return false
     }
     
     public func setup(for device: Device) {
@@ -76,10 +82,10 @@ public class ClipboardService: Service {
         self.devices.append(device)
         
         // On connect, send our current clipboard with its timestamp so the peer
-        // can decide which side has the newer content.
+        // can decide which side has the newer content
         if let items = NSPasteboard.general.readObjects(forClasses: [NSString.self], options: nil),
            let content = items.first as? String {
-            device.send(DataPacket.clipboardConnectPacket(withContent: content, timestamp: self.lastLocalChangeTimestamp))
+            send(DataPacket.clipboardConnectPacket(withContent: content, timestamp: self.lastLocalChangeTimestamp), to: device)
         }
         
         if self.monitoringTimer == nil {
@@ -132,9 +138,8 @@ public class ClipboardService: Service {
         
         for device in self.devices {
             guard !(self.lastChangeCount == self.lastExternalChangeCount && self.lastExternalChangeDevice === device) else { continue }
-            device.send(DataPacket.clipboardPacket(withContent: content))
+            send(DataPacket.clipboardPacket(withContent: content), to: device)
         }
-        
     }
     
     private func applyExternalClipboard(_ content: String, from device: Device) {

@@ -10,6 +10,15 @@ import Foundation
 
 public class ServiceManager: CapabilitiesDataSource {
     
+    // MARK: Properties
+    
+    private let userDefaults: UserDefaults
+    
+    public init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
+    
+    
     // MARK: Public properties
     
     /// Combined incoming capabilities of all services
@@ -53,8 +62,11 @@ public class ServiceManager: CapabilitiesDataSource {
         }
     }
     
-    /// Add a new service instance. This should be done on application start before any device connections are established
+    /// Add a new service instance. This should be done on application start before any device connections are established.
+    /// Immediately calls `configure(with:)` on the service so it has access to the shared `UserDefaults` before
+    /// any device connects and capability negotiation begins
     public func add(service: Service) {
+        service.configure(with: userDefaults)
         services.append(service)
     }
     

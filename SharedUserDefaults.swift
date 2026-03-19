@@ -9,6 +9,7 @@
 import Foundation
 
 enum AppDefaultsStore {
+    fileprivate static let base = "com.soduto"
     
     // MARK: - Suite Instances
     
@@ -20,38 +21,40 @@ enum AppDefaultsStore {
     // MARK: - Share Extension Communication
     
     enum ShareExtension {
-        /// Timestamp (timeIntervalSince1970) of the last heartbeat from the main app.
-        /// Written periodically by the main app; read by the extension to detect crashes.
+        fileprivate static let base = "\(AppDefaultsStore.base).share"
+        
+        /// Timestamp (timeIntervalSince1970) of the last heartbeat from the main app
+        /// Written periodically by the main app; read by the extension to detect crashes
         static var appLastHeartbeat: TimeInterval {
-            get { appGroupDefaults?.double(forKey: "com.soduto.share.appLastHeartbeat") ?? 0 }
-            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.appLastHeartbeat") }
+            get { appGroupDefaults?.double(forKey: "\(base).appLastHeartbeat") ?? 0 }
+            set { appGroupDefaults?.set(newValue, forKey: "\(base).appLastHeartbeat") }
         }
         
         static var reachableDevices: [[String: String]] {
-            get { appGroupDefaults?.object(forKey: "com.soduto.share.reachableDevices") as? [[String: String]] ?? [] }
-            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.reachableDevices") }
+            get { appGroupDefaults?.object(forKey: "\(base).reachableDevices") as? [[String: String]] ?? [] }
+            set { appGroupDefaults?.set(newValue, forKey: "\(base).reachableDevices") }
         }
         
         static var selectedDevice: String? {
-            get { appGroupDefaults?.string(forKey: "com.soduto.share.selectedDevice") }
-            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.selectedDevice") }
+            get { appGroupDefaults?.string(forKey: "\(base).selectedDevice") }
+            set { appGroupDefaults?.set(newValue, forKey: "\(base).selectedDevice") }
         }
         
         static var fileBookmarkData: [Data]? {
-            get { appGroupDefaults?.array(forKey: "com.soduto.share.fileBookmarkData") as? [Data] }
-            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.fileBookmarkData") }
+            get { appGroupDefaults?.array(forKey: "\(base).fileBookmarkData") as? [Data] }
+            set { appGroupDefaults?.set(newValue, forKey: "\(base).fileBookmarkData") }
         }
         
         static var sharedTexts: [String]? {
-            get { appGroupDefaults?.stringArray(forKey: "com.soduto.share.sharedTexts") }
-            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.sharedTexts") }
+            get { appGroupDefaults?.stringArray(forKey: "\(base).sharedTexts") }
+            set { appGroupDefaults?.set(newValue, forKey: "\(base).sharedTexts") }
         }
         
-        /// Transfer status per device for the current share session.
-        /// Maps device ID -> status: "success", "failed". Written by main app, read by extension.
+        /// Transfer status per device for the current share session
+        /// Maps device ID -> status: "success", "failed". Written by main app, read by extension
         static var transferStatuses: [String: String]? {
-            get { appGroupDefaults?.dictionary(forKey: "com.soduto.share.transferStatuses") as? [String: String] }
-            set { appGroupDefaults?.set(newValue, forKey: "com.soduto.share.transferStatuses") }
+            get { appGroupDefaults?.dictionary(forKey: "\(base).transferStatuses") as? [String: String] }
+            set { appGroupDefaults?.set(newValue, forKey: "\(base).transferStatuses") }
         }
     }
     
@@ -59,14 +62,67 @@ enum AppDefaultsStore {
     // MARK: - User Preferences
     
     enum Preferences {
+        fileprivate static let base = "\(AppDefaultsStore.base).preferences"
+        
         static var disableSharePopUp: Bool {
-            get { UserDefaults.standard.bool(forKey: "com.soduto.preferences.disablesharepopup") }
-            set { UserDefaults.standard.set(newValue, forKey: "com.soduto.preferences.disablesharepopup") }
+            get { UserDefaults.standard.bool(forKey: "\(base).disablesharepopup") }
+            set { UserDefaults.standard.set(newValue, forKey: "\(base).disablesharepopup") }
         }
         
         static var deviceType: Int {
-            get { UserDefaults.standard.integer(forKey: "com.soduto.preferences.devicetype") }
-            set { UserDefaults.standard.set(newValue, forKey: "com.soduto.preferences.devicetype") }
+            get { UserDefaults.standard.integer(forKey: "\(base).devicetype") }
+            set { UserDefaults.standard.set(newValue, forKey: "\(base).devicetype") }
+        }
+        
+        // MARK: Service Enable/Disable
+        
+        enum Services {
+            fileprivate static let base = "\(Preferences.base).services"
+            
+            enum Clipboard: ServiceToggle {
+                static let base = "\(Services.base).clipboard"
+            }
+            
+            enum Battery: ServiceToggle {
+                static let base = "\(Services.base).battery"
+            }
         }
     }
+}
+
+
+// MARK: - Service Preference Helpers
+
+/// A service that can receive data from a remote device (incoming direction)
+protocol ServiceIncomingToggle {
+    /// Namespace prefix for this service, e.g. "com.soduto.preferences.services.clipboard"
+    static var base: String { get }
+}
+extension ServiceIncomingToggle {
+    static var incomingKey: String { "\(base).incoming" }
+    static var incomingEnabled: Bool {
+        get { UserDefaults.standard.serviceBool(incomingKey) }
+        set { UserDefaults.standard.set(newValue, forKey: incomingKey) }
+    }
+}
+
+/// A service that can send data to a remote device (outgoing direction)
+protocol ServiceOutgoingToggle {
+    /// Namespace prefix for this service, e.g. "com.soduto.preferences.services.clipboard"
+    static var base: String { get }
+}
+extension ServiceOutgoingToggle {
+    static var outgoingKey: String { "\(base).outgoing" }
+    static var outgoingEnabled: Bool {
+        get { UserDefaults.standard.serviceBool(outgoingKey) }
+        set { UserDefaults.standard.set(newValue, forKey: outgoingKey) }
+    }
+}
+
+/// Convenience alias for services with both directions
+typealias ServiceToggle = ServiceIncomingToggle & ServiceOutgoingToggle
+
+extension UserDefaults {
+    /// Reads a Bool preference that defaults to `true` when not yet set
+    func serviceBool(_ key: String) -> Bool { object(forKey: key) as? Bool ?? true }
 }

@@ -19,15 +19,15 @@ import UserNotifications
 /// - currentCharge (int): The charge % of the peer device
 /// - thresholdEvent (int) [optional when = 0, see below]:
 /// means that a battery threshold event were fired on the remote device:
-///     - 0: no event. generally not transmitted.
+///     - 0: no event. generally not transmitted
 ///     - 1: battery entered in low state
 ///
 /// It also sends packages with type kdeconnect.battery and a field "request": true,
 /// to ask the peer device to send a package like the mentioned above, and should
-/// also answer this same kind of packages with its own information.
+/// also answer this same kind of packages with its own information
 ///
-/// If the battery is low and discharging, it will notify the user.
-public class BatteryService: Service {
+/// If the battery is low and discharging, it will notify the user
+public class BatteryService: BidirectionalService {
     
     // MARK: Types
     
@@ -48,6 +48,10 @@ public class BatteryService: Service {
     
     public private(set) var statuses: [Device.Id:BatteryStatus] = [:]
     
+    var userDefaults: UserDefaults = .standard
+    let incomingPreferenceKey = AppDefaultsStore.Preferences.Services.Battery.incomingKey
+    let outgoingPreferenceKey = AppDefaultsStore.Preferences.Services.Battery.outgoingKey
+    
     private var devices: [Device] = []
     private var runLoopSource: CFRunLoopSource?
     private var lastBatteryStatus: BatteryStatus?
@@ -66,33 +70,53 @@ public class BatteryService: Service {
     
     public static let serviceId: Service.Id = "com.soduto.services.battery"
     
-    public let incomingCapabilities = Set<Service.Capability>([ DataPacket.batteryPacketType, DataPacket.batteryRequestPacketType ])
-    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.batteryPacketType, DataPacket.batteryRequestPacketType ])
+    public var incomingCapabilities: Set<Service.Capability> {
+        // incomingEnabled: we accept battery status packets from the device
+        // outgoingEnabled: we handle battery request packets from the device (so we can respond)
+        var caps = Set<Service.Capability>()
+        if incomingEnabled { caps.insert(DataPacket.batteryPacketType) }
+        if outgoingEnabled    { caps.insert(DataPacket.batteryRequestPacketType) }
+        return caps
+    }
+    public var outgoingCapabilities: Set<Service.Capability> {
+        // incomingEnabled: we send battery request packets to ask the device for its status
+        // outgoingEnabled: we send battery status packets to the device
+        var caps = Set<Service.Capability>()
+        if incomingEnabled { caps.insert(DataPacket.batteryRequestPacketType) }
+        if outgoingEnabled    { caps.insert(DataPacket.batteryPacketType) }
+        return caps
+    }
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        guard dataPacket.isBatteryPacket || dataPacket.isBatteryRequestPacket else { return false }
-        
         do {
-            if dataPacket.isBatteryRequestPacket {
-                try handle(requestPacket: dataPacket, fromDevice: device)
-            } else {
+            switch dataPacket.type {
+            case DataPacket.batteryPacketType:
+                // Receiving remote device battery status
+                guard incomingEnabled else { return true }
                 try handle(statusPacket: dataPacket, fromDevice: device)
+            case DataPacket.batteryRequestPacketType:
+                // Remote device requesting us to send our battery status
+                guard outgoingEnabled else { return true }
+                try handle(requestPacket: dataPacket, fromDevice: device)
+            default:
+                return false
             }
         } catch {
             Logger.services.error("Error handling battery packet: \(error, privacy: .public)")
         }
-        
         return true
     }
     
     public func setup(for device: Device) {
         guard !self.devices.contains(where: { $0.id == device.id }) else { return }
         
+        // Ask the device for its battery status if we want to receive it
         if device.incomingCapabilities.contains(DataPacket.batteryRequestPacketType) {
-            device.send(DataPacket.batteryRequestPacket())
+            request(DataPacket.batteryRequestPacket(), from: device)
         }
         
-        if device.incomingCapabilities.contains(DataPacket.batteryPacketType) {
+        // Start monitoring Mac battery if we're willing to share it with this device
+        if outgoingEnabled && device.incomingCapabilities.contains(DataPacket.batteryPacketType) {
             self.devices.append(device)
             if self.runLoopSource == nil {
                 self.startMonitoringBatteryState()
@@ -207,7 +231,7 @@ public class BatteryService: Service {
         let chargeDropedBelowThreshold = chargeDropped && batteryStatus.currentCharge <= self.thresholdValue
         let thresholdEvent: DataPacket.ThresholdEvent = batteryStatus.isCritical || (chargeDropedBelowThreshold && !batteryStatus.isCharging) ? .batteryLow : .none
         let packet = DataPacket.batteryPacket(currentCharge: batteryStatus.currentCharge, isCharging: batteryStatus.isCharging, thresholdEvent: thresholdEvent)
-        device.send(packet)
+        send(packet, to: device)
     }
     
     private func startMonitoringBatteryState() {
