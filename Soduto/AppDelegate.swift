@@ -61,6 +61,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: TelephonyService())
         self.serviceManager.add(service: PingService())
         self.serviceManager.add(service: BatteryService())
+        self.serviceManager.add(service: SystemVolumeService())
         self.serviceManager.add(service: ConnectivityReportService())
         self.serviceManager.add(service: FindMyPhoneService())
         self.serviceManager.add(service: PresenterService())

@@ -10,7 +10,6 @@ import Cocoa
 import os
 import MediaPlayer
 import CryptoKit
-import CoreAudio
 import MediaRemoteAdapter
 
 /// Media Player Service (KDE Connect MPRIS Plugin — both controller and exposer sides)
@@ -253,7 +252,7 @@ extension MediaPlayerService {
             let list: [String] = macPlayerName.map { [$0] } ?? []
             device.send(DataPacket.mprisPlayerListPacket(playerList: list))
             if let info = lastSentTrackInfo, let name = macPlayerName {
-                device.send(DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl, volume: systemVolumePercent()))
+                device.send(DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl, volume: CoreAudioOutputVolume.readPercent()))
                 // Also push cached art to the newly connected device
                 if let artData = currentArtData, let artUrl = currentArtUrl {
                     device.send(DataPacket.mprisAlbumArtPacket(player: name, artUrl: artUrl, artData: artData))
@@ -507,7 +506,7 @@ extension MediaPlayerService {
             
             // url is stored directly; not included in update() since it doesn't affect Now Playing display
             playerToUpdate.url = url
-
+            
             playerToUpdate.update(
                 isPlaying: isPlaying,
                 position: position,
@@ -524,7 +523,7 @@ extension MediaPlayerService {
                 loopStatus: loopStatus,
                 shuffle: shuffle
             )
-
+            
             // Promote to active if currently playing, or if no active player exists yet.
             // This ensures the Now Playing widget displays immediately, even for paused players,
             // since macOS suppresses the widget when playbackState=.paused (even with full metadata).
@@ -961,7 +960,7 @@ extension MediaPlayerService {
         guard let info = effectiveTrackInfo, let name = macPlayerName else { return }
         
         // Send status packet (includes albumArtUrl and current system volume)
-        let packet = DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl, volume: systemVolumePercent())
+        let packet = DataPacket.mprisStatusPacket(player: name, trackInfo: info, artUrl: currentArtUrl, volume: CoreAudioOutputVolume.readPercent())
         for device in outgoingDevices.values {
             device.send(packet)
         }
@@ -1027,60 +1026,12 @@ extension MediaPlayerService {
         if let shuffle = packet.body[DataPacket.MprisProperty.setShuffle.rawValue] as? Bool {
             controller.setShuffleMode(shuffle ? .songs : .off)
         }
-        // setVolume maps to macOS system output volume — MediaRemote.framework has no per-app volume API
+        // setVolume maps to macOS system output volume as MediaRemote.framework has no per-app volume API
         if let vol = packet.body[DataPacket.MprisProperty.setVolume.rawValue] as? Int {
-            setSystemVolume(percent: max(0, min(100, vol)))
+            CoreAudioOutputVolume.write(percent: max(0, min(100, vol)), unmutingIfMuted: true)
             Logger.services.debug("MPRIS::handleMacPlayerRequest — setVolume \(vol, privacy: .public)")
         }
     }
-    
-    // MARK: System Volume [CoreAudio] (Remote Device -> Mac Media)
-    // NOTE: Applies remote volume-change commands to system output volume. setVolume is handled here (not a separate service) because MediaRemote.framework has no per-app volume API. Maps MPRIS setVolume to macOS system output volume.
-    
-    private func defaultOutputDeviceID() -> AudioDeviceID? {
-        var deviceID = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID)
-        return status == noErr ? deviceID : nil
-    }
-    
-    private func systemVolumePercent() -> Int {
-        guard let deviceID = defaultOutputDeviceID() else { return 50 }
-        var volume = Float32(0)
-        var size = UInt32(MemoryLayout<Float32>.size)
-        var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyVolumeScalar,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain)
-        let status = AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &volume)
-        return status == noErr ? Int(volume * 100) : 50
-    }
-    
-    private func setSystemVolume(percent: Int) {
-        guard let deviceID = defaultOutputDeviceID() else { return }
-        var volume = Float32(percent) / 100.0
-        let volSize = UInt32(MemoryLayout<Float32>.size)
-        var volAddr = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyVolumeScalar,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain)
-        AudioObjectSetPropertyData(deviceID, &volAddr, 0, nil, volSize, &volume)
-        // Unmute if currently muted so the volume change is audible
-        var mute = UInt32(0)
-        let muteSize = UInt32(MemoryLayout<UInt32>.size)
-        var muteAddr = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyMute,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain)
-        if AudioObjectSetPropertyData(deviceID, &muteAddr, 0, nil, muteSize, &mute) != noErr {
-            Logger.services.debug("MPRIS::setSystemVolume — unmute not supported on this device")
-        }
-    }
-    
 }
 
 // MARK: - Incoming (Remote Device -> Soduto) Album Art Download + Cache
@@ -1234,9 +1185,7 @@ extension MediaPlayerService {
         let cacheDirectory = getCacheDirectory()
         
         do {
-            let contents = try FileManager.default.contentsOfDirectory(at: cacheDirectory,
-                                                                       includingPropertiesForKeys: [.contentModificationDateKey],
-                                                                       options: [])
+            let contents = try FileManager.default.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey], options: [])
             
             let cutoffDate = Date().addingTimeInterval(-7 * 24 * 60 * 60) // 7 days ago
             
@@ -1256,9 +1205,7 @@ extension MediaPlayerService {
         let cacheDirectory = getCacheDirectory()
         
         do {
-            let contents = try FileManager.default.contentsOfDirectory(at: cacheDirectory,
-                                                                       includingPropertiesForKeys: [.fileSizeKey],
-                                                                       options: [])
+            let contents = try FileManager.default.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.fileSizeKey], options: [])
             
             let totalSize = contents.compactMap { url -> Int? in
                 guard let resourceValues = try? url.resourceValues(forKeys: [.fileSizeKey]),
@@ -1708,14 +1655,14 @@ fileprivate extension DataPacket {
         guard let value = body[MprisProperty.albumArtUrl.rawValue] as? String else { throw MprisError.invalidArtUrl }
         return value
     }
-
+    
     /// Content URL of the currently playing track (xesam:url / MPRIS `url` field).
     /// Optional; returns nil if absent. Not validated strictly — callers should sanity-check
     /// schemes before use (Android skips non-http(s)/file URLs for "Continue Watching").
     func getUrl() -> String? {
         return body[MprisProperty.url.rawValue] as? String
     }
-
+    
     func getIsPlaying() throws -> Bool? {
         try validateMprisType()
         guard body.keys.contains(MprisProperty.isPlaying.rawValue) else { return nil }

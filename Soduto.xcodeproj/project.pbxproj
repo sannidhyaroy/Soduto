@@ -66,6 +66,7 @@
 		31AB4B5E2F5BA6DA00FE3DD4 /* StatusBarImageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AB4B5D2F5BA6D900FE3DD4 /* StatusBarImageProvider.swift */; };
 		31AB4B642F5C4BA700FE3DD4 /* TransferProgressHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AB4B632F5C4BA700FE3DD4 /* TransferProgressHUD.swift */; };
 		31AF2B0F2F6C2F03002C7D38 /* PresenterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AF2B0E2F6C2F03002C7D38 /* PresenterService.swift */; };
+		31AF2B112F6C9712002C7D38 /* SystemVolumeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AF2B102F6C9712002C7D38 /* SystemVolumeService.swift */; };
 		31DB2F072F3BE86300654096 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F062F3BE86300654096 /* Sparkle */; };
 		31DB2F0F2F3CEE8D00654096 /* NIOSSL in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F0E2F3CEE8D00654096 /* NIOSSL */; };
 		31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */; };
@@ -290,6 +291,7 @@
 		31AB4B5D2F5BA6D900FE3DD4 /* StatusBarImageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarImageProvider.swift; sourceTree = "<group>"; };
 		31AB4B632F5C4BA700FE3DD4 /* TransferProgressHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferProgressHUD.swift; sourceTree = "<group>"; };
 		31AF2B0E2F6C2F03002C7D38 /* PresenterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenterService.swift; sourceTree = "<group>"; };
+		31AF2B102F6C9712002C7D38 /* SystemVolumeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemVolumeService.swift; sourceTree = "<group>"; };
 		31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		31F3A14F293B5EA300550088 /* Soduto Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Soduto Share.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		31F3A153293B5EA300550088 /* ShareExtensionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionController.swift; sourceTree = "<group>"; };
@@ -832,6 +834,7 @@
 				F826E6C62DB302F000E736CE /* RunCommandService.swift */,
 				84651A751E5AEBE100D17601 /* SftpService.swift */,
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
+				31AF2B102F6C9712002C7D38 /* SystemVolumeService.swift */,
 				847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */,
 			);
 			path = Services;
@@ -1159,6 +1162,7 @@
 				3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */,
 				8499620E1D5728EE002B893A /* Test_Assertions.m in Sources */,
 				8421A8E71D761409008AC833 /* PreferencesWindowController.swift in Sources */,
+				31AF2B112F6C9712002C7D38 /* SystemVolumeService.swift in Sources */,
 				849237991DE06EBC00D95BBA /* ServiceAction.swift in Sources */,
 				31366D3C2F412C8D0013911D /* ChannelOptions+Keepalive.swift in Sources */,
 				8456F4A81D7DE393006EFE19 /* Pairable.swift in Sources */,
