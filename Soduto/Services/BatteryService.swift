@@ -27,7 +27,7 @@ import UserNotifications
 /// also answer this same kind of packages with its own information
 ///
 /// If the battery is low and discharging, it will notify the user
-public class BatteryService: BidirectionalService {
+public class BatteryService: BidirectionalService, ObservableObject {
     
     // MARK: Types
     
@@ -46,7 +46,7 @@ public class BatteryService: BidirectionalService {
     
     // MARK: Properties
     
-    public private(set) var statuses: [Device.Id:BatteryStatus] = [:]
+    @Published public private(set) var statuses: [Device.Id:BatteryStatus] = [:]
     
     var userDefaults: UserDefaults = .standard
     let incomingPreferenceKey = AppDefaultsStore.Preferences.Services.Battery.incomingKey

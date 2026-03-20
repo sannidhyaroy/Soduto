@@ -23,7 +23,7 @@ import os
 /// Remote sink volumes are stored in the scale declared by the sender's `maxVolume` field, which
 /// is 100 for macOS/Windows and 65536 for Linux (PulseAudio). Always store and use `maxVolume`
 /// per sink when building request packets for a remote device.
-public class SystemVolumeService: BidirectionalService {
+public class SystemVolumeService: BidirectionalService, ObservableObject {
     
     // MARK: Types
     
@@ -59,7 +59,7 @@ public class SystemVolumeService: BidirectionalService {
     private var kSysObj: AudioObjectID { AudioObjectID(kAudioObjectSystemObject) }
     
     /// Remote sinks keyed by `device.id` → sink name → `AudioSink` (incoming / controller side)
-    public private(set) var remoteSinks: [Device.Id: [String: AudioSink]] = [:]
+    @Published public private(set) var remoteSinks: [Device.Id: [String: AudioSink]] = [:]
     
     /// Local CoreAudio-backed sinks (outgoing / exposer side)
     private var localSinks: [String: AudioSink] = [:]
@@ -152,10 +152,16 @@ public class SystemVolumeService: BidirectionalService {
         }
     }
     
-    public func actions(for device: Device) -> [ServiceAction] {
-        // UI is deferred, since no menu actions exposed yet
-        // When a volume dashboard is ready, return an action here if remoteSinks[device.id] is non-empty
-        return []
+    public func actions(for device: Device) -> [ServiceAction] { [] }
+    
+    /// Sets the volume of a remote device's audio sink. Called from the dashboard.
+    public func setRemoteSinkVolume(_ volume: Int, sinkName: String, onDevice device: Device) {
+        request(DataPacket.systemVolumeSetVolumePacket(name: sinkName, volume: volume), from: device)
+    }
+    
+    /// Mutes or unmutes a remote device's audio sink. Called from the dashboard.
+    public func setRemoteSinkMuted(_ muted: Bool, sinkName: String, onDevice device: Device) {
+        request(DataPacket.systemVolumeSetMutedPacket(name: sinkName, muted: muted), from: device)
     }
     
     public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {}

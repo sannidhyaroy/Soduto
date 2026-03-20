@@ -19,7 +19,7 @@ import os
 ///     - signalStrength (int): Signal strength level (0-4)
 ///
 /// It also sends packages with type "kdeconnect.connectivity_report.request" to ask for updates.
-public class ConnectivityReportService: Service {
+public class ConnectivityReportService: Service, ObservableObject {
     
     // MARK: Types
     
@@ -36,7 +36,7 @@ public class ConnectivityReportService: Service {
     
     /// Per-device SIM statuses, ordered by subscriptionId ascending (SIM 1 first, SIM 2 second).
     /// At most 2 entries are kept. The stable ordering means SIM positions in the UI never swap.
-    public private(set) var statuses: [Device.Id: [ConnectivityStatus]] = [:]
+    @Published public private(set) var statuses: [Device.Id: [ConnectivityStatus]] = [:]
     private var devices: [Device] = []
     
     // MARK: Service
