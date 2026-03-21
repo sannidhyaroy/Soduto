@@ -304,41 +304,40 @@ struct PlayerRowView: View {
     }
     
     private var seekBar: some View {
-        TimelineView(.periodic(from: .now, by: 1.0)) { _ in
-            VStack(spacing: 3) {
-                Slider(
-                    value: Binding(
-                        get: {
-                            if isDraggingSeek {
-                                return seekFraction
-                            } else if let pending = pendingSeekPosition {
-                                return Double(pending) / Double(player.length)
-                            } else {
-                                return estimatedFraction
-                            }
-                        },
-                        set: { v in seekFraction = v; isDraggingSeek = true }
-                    ),
-                    in: 0...1,
-                    onEditingChanged: { editing in
-                        if !editing {
-                            let newPosition = Int(seekFraction * Double(player.length))
-                            isDraggingSeek = false
-                            sendSeekPosition(newPosition)
-                        }
-                    }
-                )
-                .disabled(!player.canSeek)
-                
-                HStack {
-                    Text(formatMs(displaySeekPosition))
-                    Spacer()
-                    Text(formatMs(player.length))
-                }
-                .font(.caption2)
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+        HStack(spacing: 8) {
+            TimelineView(.periodic(from: .now, by: 1.0)) { _ in
+                Text(formatMs(displaySeekPosition))
+                    .contentTransition(.numericText(countsDown: false))
+                    .animation(.linear(duration: 0.25), value: displaySeekPosition)
             }
+            .frame(width: 36, alignment: .leading)
+            .monospacedDigit()
+            
+            WaveMorphSeekBar(
+                positionMs: player.position,
+                lengthMs: player.length,
+                positionTimestamp: player.timestamp,
+                pendingSeekMs: pendingSeekPosition,
+                isPlaying: effectiveIsPlaying,
+                canSeek: player.canSeek,
+                onScrubChanged: { fraction, dragging in
+                    seekFraction = fraction
+                    isDraggingSeek = dragging
+                    if !dragging {
+                        sendSeekPosition(Int(fraction * Double(player.length)))
+                    }
+                }
+            )
+            .frame(height: 20)
+            
+            Text(formatMs(player.length))
+                .contentTransition(.numericText(countsDown: false))
+                .animation(.linear(duration: 0.25), value: player.length)
+                .frame(width: 36, alignment: .trailing)
+                .monospacedDigit()
         }
+        .font(.caption2)
+        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
     }
     
     private var volumeSlider: some View {
@@ -545,13 +544,310 @@ struct PlayerRowView: View {
         return min(player.length, player.position + elapsed)
     }
     
-    private var estimatedFraction: Double {
-        guard player.length > 0 else { return 0 }
-        return Double(estimatedPositionMs) / Double(player.length)
-    }
-    
     private func formatMs(_ ms: Int) -> String {
         let s = ms / 1000
         return String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
+// MARK: - Wave Morph Seek Bar
+
+private struct WaveMorphSeekBar: View {
+    // Raw playback data — fraction is computed per-frame inside TimelineView for smooth motion
+    let positionMs: Int
+    let lengthMs: Int
+    let positionTimestamp: Date
+    let pendingSeekMs: Int?
+    let isPlaying: Bool
+    let canSeek: Bool
+    let onScrubChanged: (_ fraction: Double, _ isDragging: Bool) -> Void
+    
+    @State private var isHovering = false
+    @State private var isDragging = false
+    @State private var dragFraction: Double = 0
+    // Drag-end: holds last drag position so the bar doesn't flash back to player.position
+    // while pendingSeekMs propagates from the parent.  Also suppresses the device echo animation.
+    @State private var localPendingFraction: Double? = nil
+    // Tap / ±10s button: animates the bar from the pre-tap position to the chosen target.
+    // Also suppresses the device echo animation once the animation is done.
+    @State private var localSeekTarget: Double? = nil
+    
+    // Timestamp-based animation state — all visual values are derived from these
+    // inside the TimelineView closure, so every frame gets correct interpolated values
+    // without relying on withAnimation + @State (which doesn't reliably drive Canvas).
+    @State private var interactiveTarget: Bool   = false
+    @State private var interactiveFrom: Double   = 0
+    @State private var interactiveChangedAt: Date = .distantPast
+    @State private var playingTarget: Bool       = false
+    @State private var playingFrom: Double       = 0
+    @State private var playingChangedAt: Date    = .distantPast
+    
+    // Seek-snap animation — smoothly blends bar from last visual position to new reported one
+    @State private var seekAnimFrom: Double      = 0
+    @State private var seekAnimChangedAt: Date   = .distantPast
+    // Previous-packet position: used to compute the pre-update visual fraction
+    @State private var knownPositionMs: Int      = 0
+    @State private var knownTimestamp: Date      = .distantPast
+    
+    private let restHeight: Double      = 3
+    private let playingHeight: Double   = 3.5      // playing but not hovering (between rest and hover)
+    private let hoverHeight: Double     = 5
+    private let maxAmplitude: Double    = 3.5
+    private let waveFreq: Double        = 0.15   // radians per pixel
+    private let waveSpeed: Double       = 2.5    // radians per second
+    private let taperWidth: Double      = 18     // px to fade wave at each end
+    private let thumbRadius: Double     = 5.5
+    private let animDuration: Double    = 0.3
+    
+    var body: some View {
+        GeometryReader { geo in
+            let barWidth = geo.size.width
+            
+            TimelineView(.animation) { tl in
+                let now              = tl.date
+                let phase            = now.timeIntervalSinceReferenceDate * waveSpeed
+                let interactiveProg  = eased(from: interactiveFrom, target: interactiveTarget ? 1 : 0,
+                                             changedAt: interactiveChangedAt, now: now)
+                let playingProg      = eased(from: playingFrom, target: playingTarget ? 1 : 0,
+                                             changedAt: playingChangedAt, now: now)
+                let fraction         = displayFraction(at: now)
+                
+                Canvas { ctx, size in
+                    renderBar(ctx: ctx, size: size, phase: phase, fraction: fraction,
+                              interactiveProg: interactiveProg, playingProg: playingProg)
+                }
+            }
+            .contentShape(Rectangle())
+            // Drag gesture: minimumDistance: 3 so genuine taps never enter the drag path.
+            .gesture(
+                DragGesture(minimumDistance: 3)
+                    .onChanged { val in
+                        guard canSeek else { return }
+                        let f = max(0, min(1, val.location.x / barWidth))
+                        if !isDragging {
+                            isDragging = true
+                            setInteraction(true)
+                        }
+                        dragFraction = f
+                        onScrubChanged(f, true)
+                    }
+                    .onEnded { val in
+                        guard canSeek else { return }
+                        let f = max(0, min(1, val.location.x / barWidth))
+                        dragFraction = f
+                        localPendingFraction = f   // hold position until device echoes
+                        isDragging = false
+                        setInteraction(isHovering)
+                        onScrubChanged(f, false)
+                    }
+            )
+            // Tap gesture: fires only when touch ends without significant movement,
+            // so isDragging is never set and the animation from resting→target plays cleanly.
+            .simultaneousGesture(
+                SpatialTapGesture()
+                    .onEnded { event in
+                        guard canSeek else { return }
+                        let f = max(0, min(1, event.location.x / barWidth))
+                        let now = Date()
+                        let pre: Double
+                        if let pending = pendingSeekMs {
+                            pre = Double(pending) / Double(max(1, lengthMs))
+                        } else if lengthMs > 0 {
+                            let elapsedMs = max(0, now.timeIntervalSince(positionTimestamp)) * 1000
+                            pre = isPlaying ? min(1, Double(positionMs + Int(elapsedMs)) / Double(lengthMs)) : Double(positionMs) / Double(lengthMs)
+                        } else {
+                            pre = 0
+                        }
+                        seekAnimFrom      = pre
+                        seekAnimChangedAt = now
+                        localSeekTarget   = f
+                        onScrubChanged(f, false)
+                    }
+            )
+            .onHover { hovering in
+                guard canSeek else { return }
+                isHovering = hovering
+                setInteraction(hovering || isDragging)
+            }
+        }
+        .onAppear {
+            setPlaying(isPlaying, animated: false)
+            knownPositionMs = positionMs
+            knownTimestamp  = positionTimestamp
+        }
+        .onChange(of: isPlaying)   { _, playing in setPlaying(playing) }
+        .onChange(of: canSeek)     { _, seeking in if !seeking { setInteraction(false) } }
+        .onChange(of: pendingSeekMs) { _, newPending in
+            guard let newPending else {
+                // Device confirmed the seek (pendingSeekMs cleared by parent).
+                // Update the reference point to where the bar was showing (tap target or
+                // drag endpoint) so that any concurrent positionTimestamp observer starts
+                // device animation from the correct visual position, not the old resting one.
+                // Handles the rare case where the device replies with a different position.
+                if let shown = localSeekTarget ?? localPendingFraction {
+                    knownPositionMs = Int(shown * Double(max(1, lengthMs)))
+                    knownTimestamp  = Date()
+                }
+                localSeekTarget      = nil
+                localPendingFraction = nil
+                seekAnimChangedAt    = .distantPast
+                return
+            }
+            // ±10s seek buttons (or any parent-initiated seek that isn't a drag): animate the thumb.
+            // Skip during drag (localPendingFraction is set).
+            guard localPendingFraction == nil else { return }
+            let targetFraction = Double(newPending) / Double(max(1, lengthMs))
+            // Skip if localSeekTarget already points here (e.g. tap already set it)
+            if let existing = localSeekTarget, abs(existing - targetFraction) < 0.001 { return }
+            let now = Date()
+            // Start from wherever the bar currently is (mid-animation or static)
+            let current: Double
+            if let prior = localSeekTarget {
+                let t = min(1.0, max(0.0, now.timeIntervalSince(seekAnimChangedAt)) / seekAnimDuration)
+                let curve = 1.0 - pow(1.0 - t, 3.0)
+                current = seekAnimFrom + (prior - seekAnimFrom) * curve
+            } else if lengthMs > 0 {
+                let elapsedMs = max(0, now.timeIntervalSince(positionTimestamp)) * 1000
+                current = isPlaying ? min(1, Double(positionMs + Int(elapsedMs)) / Double(lengthMs)) : Double(positionMs) / Double(lengthMs)
+            } else {
+                current = 0
+            }
+            seekAnimFrom      = current
+            seekAnimChangedAt = now
+            localSeekTarget   = targetFraction
+        }
+        .onChange(of: positionTimestamp) { _, newTimestamp in
+            defer {
+                knownPositionMs = positionMs
+                knownTimestamp  = newTimestamp
+            }
+            // While a user-initiated seek is in flight, skip device-update animation.
+            // localSeekTarget / localPendingFraction are cleared by onChange(of: pendingSeekMs)
+            // when pendingSeekMs goes nil — not here — so intermediate packets from the
+            // device never interrupt an ongoing tap or drag animation.
+            guard localPendingFraction == nil, localSeekTarget == nil else { return }
+            // Don't animate while dragging — the bar already tracks the finger
+            guard !isDragging, lengthMs > 0 else { return }
+            // Visual fraction just before this packet using old reference point
+            let elapsed = max(0, newTimestamp.timeIntervalSince(knownTimestamp)) * 1000
+            let prevFraction = isPlaying ? min(1, Double(knownPositionMs + Int(elapsed)) / Double(lengthMs)) : Double(knownPositionMs) / Double(max(1, lengthMs))
+            let newFraction = Double(positionMs) / Double(max(1, lengthMs))
+            // Skip trivially small deltas (position nudge of < 0.2% of track length)
+            guard abs(newFraction - prevFraction) > 0.002 else { return }
+            seekAnimFrom      = prevFraction
+            seekAnimChangedAt = newTimestamp
+        }
+    }
+    
+    // MARK: - Per-frame helpers
+    
+    private let seekAnimDuration: Double = 0.45
+    
+    private func displayFraction(at now: Date) -> Double {
+        if isDragging { return max(0, min(1, dragFraction)) }
+        if let local = localPendingFraction { return max(0, min(1, local)) }
+        if let target = localSeekTarget {
+            // Tap or ±10s: animate from pre-tap position toward chosen target
+            let t = min(1.0, max(0.0, now.timeIntervalSince(seekAnimChangedAt)) / seekAnimDuration)
+            let curve = 1.0 - pow(1.0 - t, 3.0)
+            return seekAnimFrom + (target - seekAnimFrom) * curve
+        }
+        if let pending = pendingSeekMs {
+            return Double(pending) / Double(max(1, lengthMs))
+        }
+        guard lengthMs > 0 else { return 0 }
+        // Live target: where playback actually is right now
+        let targetFraction: Double
+        if isPlaying {
+            let elapsedMs = max(0, now.timeIntervalSince(positionTimestamp)) * 1000
+            targetFraction = min(1, Double(positionMs + Int(elapsedMs)) / Double(lengthMs))
+        } else {
+            targetFraction = Double(positionMs) / Double(lengthMs)
+        }
+        // Blend from pre-packet visual position toward the live target so position
+        // updates animate in rather than snap. targetFraction advances with time
+        // during playback, so the blend converges naturally.
+        let t = min(1.0, max(0.0, now.timeIntervalSince(seekAnimChangedAt)) / seekAnimDuration)
+        guard t < 1.0 else { return targetFraction }
+        let curve = 1.0 - pow(1.0 - t, 3.0)
+        return seekAnimFrom + (targetFraction - seekAnimFrom) * curve
+    }
+    
+    private func renderBar(ctx: GraphicsContext, size: CGSize, phase: Double, fraction: Double, interactiveProg: Double, playingProg: Double) {
+        let w    = size.width
+        let h    = size.height
+        let midY = h / 2
+        
+        // Bar height: three levels — rest (paused+no hover), playing (no hover), hover/drag
+        // interactive overrides playing entirely; playing contributes only when not interacting
+        let combinedProg = max(playingProg, interactiveProg)
+        let barH  = restHeight + (playingHeight - restHeight) * playingProg * (1 - interactiveProg) + (hoverHeight   - restHeight) * interactiveProg
+        let r     = barH / 2
+        let waveAmp = maxAmplitude * playingProg * (1 - interactiveProg)
+        let fillX = max(0, min(w, w * fraction))
+        
+        // 1. Unfilled (right) — flat secondary track, slightly thinner than filled
+        let flatH = barH * 0.8
+        let flatR = flatH / 2
+        if fillX < w {
+            let rect = CGRect(x: fillX, y: midY - flatR, width: w - fillX, height: flatH)
+            ctx.fill(Path(roundedRect: rect, cornerRadius: flatR), with: .color(Color.secondary.opacity(0.22)))
+        }
+        
+        // 2. Filled (left) — sinusoidal wave when playing, flat accent bar when paused/hovering
+        if fillX > 0 {
+            if waveAmp > 0.1 {
+                // Symmetric taper at both ends ensures the path starts and ends at midY,
+                // eliminating the broken joint where the wave meets the thumb.
+                var wavePath = Path()
+                var x: Double = 0
+                while x <= fillX {
+                    let amp = waveAmp * min(1, x / taperWidth) * min(1, (fillX - x) / taperWidth)
+                    let y   = midY + amp * sin(waveFreq * x + phase)
+                    if x == 0 { wavePath.move(to: CGPoint(x: 0, y: y)) }
+                    else       { wavePath.addLine(to: CGPoint(x: x, y: y)) }
+                    x += 2
+                }
+                wavePath.addLine(to: CGPoint(x: fillX, y: midY))
+                ctx.stroke(wavePath, with: .color(Color.accentColor), style: StrokeStyle(lineWidth: barH, lineCap: .round, lineJoin: .round))
+            } else {
+                let rect = CGRect(x: 0, y: midY - r, width: fillX, height: barH)
+                ctx.fill(Path(roundedRect: rect, cornerRadius: r), with: .color(Color.accentColor))
+            }
+        }
+        
+        // 3. Thumb — visible when playing OR hovering/dragging; invisible when paused + no hover
+        // combinedProg drives both opacity and radius, so it fades in/out smoothly
+        if combinedProg > 0.01 {
+            let tr  = thumbRadius * combinedProg
+            let tcx = max(tr, min(w - tr, fillX))
+            ctx.fill(Path(ellipseIn: CGRect(x: tcx - tr - 1.2, y: midY - tr - 0.4, width: (tr + 1.2) * 2, height: (tr + 0.4) * 2)), with: .color(.black.opacity(0.12 * combinedProg)))
+            ctx.fill(Path(ellipseIn: CGRect(x: tcx - tr, y: midY - tr, width: tr * 2, height: tr * 2)), with: .color(.white.opacity(combinedProg)))
+        }
+    }
+    
+    // MARK: - Timestamp-based easing
+    
+    /// Cubic ease-out from `from` toward `target`, starting at `changedAt`.
+    private func eased(from: Double, target: Double, changedAt: Date, now: Date) -> Double {
+        let t     = min(1, max(0, now.timeIntervalSince(changedAt)) / animDuration)
+        let curve = 1 - pow(1 - t, 3)
+        return from + (target - from) * curve
+    }
+    
+    private func setInteraction(_ interactive: Bool, animated: Bool = true) {
+        guard interactive != interactiveTarget else { return }
+        let now = Date()
+        interactiveFrom = animated ? eased(from: interactiveFrom, target: interactiveTarget ? 1 : 0, changedAt: interactiveChangedAt, now: now) : (interactive ? 1 : 0)
+        interactiveTarget    = interactive
+        interactiveChangedAt = animated ? now : .distantPast
+    }
+    
+    private func setPlaying(_ playing: Bool, animated: Bool = true) {
+        guard playing != playingTarget else { return }
+        let now = Date()
+        playingFrom = animated ? eased(from: playingFrom, target: playingTarget ? 1 : 0, changedAt: playingChangedAt, now: now) : (playing ? 1 : 0)
+        playingTarget    = playing
+        playingChangedAt = animated ? now : .distantPast
     }
 }
