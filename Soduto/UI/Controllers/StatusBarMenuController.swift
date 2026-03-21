@@ -17,6 +17,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     @IBOutlet weak var statusBarMenu: NSMenu!
     @IBOutlet weak var availableDevicesItem: NSMenuItem!
     @IBOutlet weak var launchOnLoginItem: NSMenuItem!
+    @IBOutlet weak var dashboardMenuItem: NSMenuItem!
     
     public var deviceDataSource: DeviceDataSource?
     public var serviceManager: ServiceManager?
@@ -33,6 +34,8 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         controller.config = self.config
         return controller
     }()
+    
+    private var dashboardWindowController: DeviceDashboardWindowController?
     
     private var dragOperationPerformed: Bool = false
     
@@ -91,6 +94,21 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     
     @IBAction func openPreferences(_ sender: Any?) {
         self.preferencesWindowController?.showWindow(nil)
+    }
+    
+    @IBAction func openDashboard(_ sender: Any?) {
+        if dashboardWindowController == nil {
+            guard let deviceDataSource = deviceDataSource,
+                  let serviceManager = serviceManager else { return }
+            dashboardWindowController = DeviceDashboardWindowController(
+                deviceDataSource: deviceDataSource,
+                mediaPlayerService: serviceManager.service(ofType: MediaPlayerService.self),
+                systemVolumeService: serviceManager.service(ofType: SystemVolumeService.self),
+                batteryService: serviceManager.service(ofType: BatteryService.self),
+                connectivityReportService: serviceManager.service(ofType: ConnectivityReportService.self)
+            )
+        }
+        dashboardWindowController?.show()
     }
     
     @IBAction func showAboutWindow(_ sender: Any?) {
@@ -152,6 +170,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         // Only broadcast on: app start, network change, manual Cmd+R
         
         if menu == self.statusBarMenu {
+            self.dashboardMenuItem?.isEnabled = !(deviceDataSource?.pairedDevices.isEmpty ?? true) || !(deviceDataSource?.unavailableDevices.isEmpty ?? true)
             self.refreshMenuDeviceList()
             if #available(macOS 13.0, *) {
                 let loginItem = SMAppService.mainApp
@@ -177,6 +196,8 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     
     func refreshDeviceLists() {
         self.preferencesWindowController?.refreshDeviceLists()
+        self.dashboardWindowController?.refreshDeviceList()
+        self.dashboardMenuItem?.isEnabled = !(deviceDataSource?.pairedDevices.isEmpty ?? true) || !(deviceDataSource?.unavailableDevices.isEmpty ?? true)
     }
     
     /// Call this once from AppDelegate after all services have been registered.
