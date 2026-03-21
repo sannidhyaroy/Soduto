@@ -10,6 +10,7 @@ import Foundation
 import AppKit
 import ServiceManagement
 import UniformTypeIdentifiers
+import Combine
 
 public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate, NSDraggingDestination {
     
@@ -22,6 +23,9 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     public var config: Configuration?
     
     let statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    private var cancellables: Set<AnyCancellable> = []
+    /// Persistent references to device menu items keyed by device ID, for in-place image updates
+    private var deviceMenuItems: [String: NSMenuItem] = [:]
     
     lazy var preferencesWindowController: PreferencesWindowController? = {
         let controller = PreferencesWindowController.loadController()
@@ -48,6 +52,25 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             NSPasteboard.PasteboardType(UTType.text.identifier) ]
         self.statusBarItem.button?.window?.registerForDraggedTypes(dragTypes)
         self.statusBarItem.button?.window?.delegate = self
+    }
+    
+    private func setupServiceObservers() {
+        cancellables.removeAll()
+        guard let serviceManager = self.serviceManager else { return }
+        
+        if let batteryService = serviceManager.service(ofType: BatteryService.self) {
+            batteryService.$statuses
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in Task { @MainActor [weak self] in self?.updateDeviceImages() } }
+                .store(in: &cancellables)
+        }
+        
+        if let connectivityService = serviceManager.service(ofType: ConnectivityReportService.self) {
+            connectivityService.$statuses
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in Task { @MainActor [weak self] in self?.updateDeviceImages() } }
+                .store(in: &cancellables)
+        }
     }
     
     
@@ -156,21 +179,25 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         self.preferencesWindowController?.refreshDeviceLists()
     }
     
+    /// Call this once from AppDelegate after all services have been registered.
+    func startServiceObservers() {
+        setupServiceObservers()
+    }
+    
     
     // MARK: Private methods
     
     @MainActor
     private func refreshMenuDeviceList() {
-        // remove old device items
-        
+        // Remove all existing device items and clear stored references
+        deviceMenuItems.removeAll()
         var item = self.statusBarMenu.item(withTag: InterfaceElementTags.availableDeviceMenuItem.rawValue)
         while item != nil {
             self.statusBarMenu.removeItem(item!)
             item = self.statusBarMenu.item(withTag: InterfaceElementTags.availableDeviceMenuItem.rawValue)
         }
         
-        // add new device items
-        
+        // Re-add device items, storing references for live image updates
         let devices = self.deviceDataSource?.pairedDevices ?? []
         guard devices.count > 0 else { return }
         
@@ -183,6 +210,21 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             item.image = statusImage(for: device)
             index += 1
             self.statusBarMenu.insertItem(item, at: index)
+            deviceMenuItems[device.id] = item
+        }
+    }
+    
+    /// Updates only the status images on existing device menu items without rebuilding the menu.
+    /// Called by service observers for real-time battery/connectivity changes.
+    /// Also restores the title defensively as AppKit can drop the title text when the image
+    /// is updated while the menu is mid-render (transient layout glitch).
+    @MainActor
+    private func updateDeviceImages() {
+        guard let devices = self.deviceDataSource?.pairedDevices else { return }
+        for device in devices {
+            guard let item = deviceMenuItems[device.id] else { continue }
+            if item.title != device.name { item.title = device.name }
+            item.image = statusImage(for: device)
         }
     }
     

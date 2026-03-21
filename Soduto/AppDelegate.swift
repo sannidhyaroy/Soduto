@@ -69,6 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: RemoteControlService())
         self.serviceManager.add(service: RunCommandService())
         self.serviceManager.add(service: MediaPlayerService())
+        self.statusBarMenuController.startServiceObservers()
         
         self.updateValidDevices()
         self.startHeartbeat()
