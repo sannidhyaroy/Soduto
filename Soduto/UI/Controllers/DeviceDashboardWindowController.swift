@@ -74,8 +74,18 @@ final class DeviceDashboardWindowController: NSWindowController, NSWindowDelegat
         if let monitor = localKeyMonitor { NSEvent.removeMonitor(monitor) }
     }
     
+    // MARK: NSWindowDelegate
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
+    }
+
     // MARK: Public
-    
+
+    /// Called when the window closes. StatusBarMenuController sets this to nil out
+    /// its strong reference, fully releasing the model and all Combine subscriptions.
+    var onClose: (() -> Void)?
+
     func show() {
         if window?.isVisible == false {
             // Restore saved frame or fall back to center

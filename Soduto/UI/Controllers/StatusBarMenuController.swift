@@ -100,13 +100,15 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         if dashboardWindowController == nil {
             guard let deviceDataSource = deviceDataSource,
                   let serviceManager = serviceManager else { return }
-            dashboardWindowController = DeviceDashboardWindowController(
+            let controller = DeviceDashboardWindowController(
                 deviceDataSource: deviceDataSource,
                 mediaPlayerService: serviceManager.service(ofType: MediaPlayerService.self),
                 systemVolumeService: serviceManager.service(ofType: SystemVolumeService.self),
                 batteryService: serviceManager.service(ofType: BatteryService.self),
                 connectivityReportService: serviceManager.service(ofType: ConnectivityReportService.self)
             )
+            controller.onClose = { [weak self] in self?.dashboardWindowController = nil }
+            dashboardWindowController = controller
         }
         dashboardWindowController?.show()
     }

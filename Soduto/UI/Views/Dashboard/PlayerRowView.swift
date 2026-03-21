@@ -598,12 +598,28 @@ private struct WaveMorphSeekBar: View {
     private let taperWidth: Double      = 18     // px to fade wave at each end
     private let thumbRadius: Double     = 5.5
     private let animDuration: Double    = 0.3
-    
+
+    /// True whenever the Canvas needs per-frame updates. When false the TimelineView
+    /// is paused so SwiftUI stops scheduling display-link callbacks, dropping energy
+    /// use to near zero and halting the stream of CGPath/Metal allocations.
+    private var isAnimationActive: Bool {
+        // Continuous motion: wave flowing + position advancing
+        if isPlaying || isDragging { return true }
+        // Hover / playing state transitions still in flight
+        let now = Date()
+        if interactiveTarget || now.timeIntervalSince(interactiveChangedAt) < animDuration { return true }
+        if playingTarget     || now.timeIntervalSince(playingChangedAt)     < animDuration { return true }
+        // Seek animations
+        if localSeekTarget != nil || localPendingFraction != nil { return true }
+        if now.timeIntervalSince(seekAnimChangedAt) < seekAnimDuration { return true }
+        return false
+    }
+
     var body: some View {
         GeometryReader { geo in
             let barWidth = geo.size.width
-            
-            TimelineView(.animation) { tl in
+
+            TimelineView(.animation(paused: !isAnimationActive)) { tl in
                 let now              = tl.date
                 let phase            = now.timeIntervalSinceReferenceDate * waveSpeed
                 let interactiveProg  = eased(from: interactiveFrom, target: interactiveTarget ? 1 : 0,
@@ -806,7 +822,7 @@ private struct WaveMorphSeekBar: View {
                     let y   = midY + amp * sin(waveFreq * x + phase)
                     if x == 0 { wavePath.move(to: CGPoint(x: 0, y: y)) }
                     else       { wavePath.addLine(to: CGPoint(x: x, y: y)) }
-                    x += 2
+                    x += 3
                 }
                 wavePath.addLine(to: CGPoint(x: fillX, y: midY))
                 ctx.stroke(wavePath, with: .color(Color.accentColor), style: StrokeStyle(lineWidth: barH, lineCap: .round, lineJoin: .round))
