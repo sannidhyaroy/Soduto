@@ -12,11 +12,11 @@ import MediaPlayer
 import CryptoKit
 import MediaRemoteAdapter
 
-/// Media Player Service (KDE Connect MPRIS Plugin — both controller and exposer sides)
+/// Media Player Service (KDE Connect MPRIS Plugin)
 ///
 /// **Incoming (controller) side:** receives media player state from a connected device
-/// and exposes it via macOS Now Playing (MPNowPlayingInfoCenter), allowing macOS media
-/// keys and the Control Center widget to control remote playback.
+/// and exposes it via the Device Dashboard and macOS Now Playing (MPNowPlayingInfoCenter),
+/// allowing macOS media keys and the Control Center widget to control remote playback.
 ///
 /// **Outgoing (exposer) side:** advertises whatever is currently playing on the Mac to
 /// connected KDE Connect devices, letting the phone see and control Mac playback.
@@ -27,7 +27,7 @@ import MediaRemoteAdapter
 /// The feature degrades gracefully: if the Perl adapter fails, an empty playerList is
 /// sent to all devices and the outgoing side silently disables itself.
 ///
-/// Packets received — type "kdeconnect.mpris":
+/// Packets received [type "kdeconnect.mpris"]:
 /// - playerList (array): list of active media players on the remote device
 /// - supportAlbumArtPayload (boolean): sent with playerList; indicates the remote
 ///   supports transferring album art as a packet payload (Soduto reads this flag
@@ -38,16 +38,16 @@ import MediaRemoteAdapter
 /// - pos (int): current playback position (ms)
 /// - length (int): total track length (ms)
 /// - artist, title, album (string): track metadata
-/// - nowPlaying (string): deprecated "Artist - Title" combined field — received but ignored
+/// - nowPlaying (string): deprecated "Artist - Title" combined field (received but ignored)
 /// - albumArtUrl (string): URL of the current track's album art
 /// - transferringAlbumArt (boolean): marks a packet that carries an album art payload
 /// - volume (int): player volume (0–100)
-/// - loopStatus (string): loop mode — "None", "Track", or "Playlist" (wired but macOS now playing doesn't support)
-/// - shuffle (boolean): shuffle state (wired but macOS now playing doesn't support)
+/// - loopStatus (string): loop mode: one of "None" / "Track" / "Playlist" (shown in dashboard; macOS Now Playing doesn't support)
+/// - shuffle (boolean): shuffle state (shown in dashboard; macOS Now Playing doesn't support)
 /// - url (string): content URL of the current track (xesam:url); stored in PlayerRemote for future
 ///   dashboard use (Android uses this for "Continue Watching" video notifications)
 ///
-/// Packets received — type "kdeconnect.mpris.request" (for the Mac/outgoing player):
+/// Packets received [type "kdeconnect.mpris.request"] (for the Mac/outgoing player):
 /// - player (string): must match the current Mac player name for Soduto to handle it
 /// - action (string): "Play", "Pause", "PlayPause", "Stop", "Next", "Previous"
 /// - Seek (int): relative seek offset in µs (note capital S)
@@ -55,23 +55,23 @@ import MediaRemoteAdapter
 /// - setLoopStatus (string): "None", "Track", "Playlist"
 /// - setShuffle (boolean): shuffle on/off
 ///
-/// Packets sent — type "kdeconnect.mpris" (outgoing exposer):
+/// Packets sent [type "kdeconnect.mpris"] (outgoing exposer):
 /// - playerList (array): list of current Mac players (single-element: active app name)
-/// - supportAlbumArtPayload (boolean): true — album art is served on request via payload
+/// - supportAlbumArtPayload (boolean): true; album art is served on request via payload
 /// - player + title, artist, album, isPlaying, pos, length, canPlay/Pause/GoNext/GoPrevious/canSeek,
 ///   loopStatus, shuffle: current Mac player state
 ///
-/// Packets sent — type "kdeconnect.mpris.request" (to remote players):
+/// Packets sent [type "kdeconnect.mpris.request"] (to remote players):
 /// - requestPlayerList (boolean): ask the remote to send its player list
 /// - player (string): the player to target for the following command
 /// - requestNowPlaying (boolean): ask the remote to send current track info
 /// - requestVolume (boolean): ask the remote to send current volume
-/// - action (string): playback command — "Play", "Pause", "PlayPause", "Stop", "Next", "Previous"
+/// - action (string): playback command ("Play", "Pause", "PlayPause", "Stop", "Next", "Previous")
 /// - setVolume (int): set player volume (0–100)
-/// - Seek (int): seek relative to current position (µs — note capital S, different unit)
-/// - SetPosition (int): set absolute playback position (ms — note capital S)
+/// - Seek (int): seek relative to current position in µs (note capital S, different unit from SetPosition)
+/// - SetPosition (int): set absolute playback position in ms (note capital S)
 /// - albumArtUrl (string): request the remote to transfer album art for this URL as a payload
-/// - setLoopStatus (string): set loop mode — "None", "Track", "Playlist"
+/// - setLoopStatus (string): set loop mode ("None" / "Track" / "Playlist")
 /// - setShuffle (boolean): set shuffle mode
 ///
 /// Direction legend used in section names below:
@@ -132,6 +132,11 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     
     public static let serviceId: Service.Id = "com.soduto.services.mpris"
     
+    /// Player identities to exclude (system events, not actual media players)
+    private static let excludedPlayerNames: Set<String> = [
+        "Phone calls",  // Android system event, not a media player
+    ]
+    
     public let incomingCapabilities = Set<Service.Capability>([
         DataPacket.mprisPacketType,
         DataPacket.mprisRequestPacketType
@@ -150,7 +155,7 @@ public class MediaPlayerService: Service, DownloadTaskDelegate, ObservableObject
     /// Read from `supportAlbumArtPayload` in incoming `kdeconnect.mpris` packets
     private var deviceSupportsAlbumArtPayload: [String: Bool] = [:]
     /// Available players grouped by device
-    @Published private var players: [String: [PlayerRemote]] = [:]
+    @Published private(set) var players: [String: [PlayerRemote]] = [:]
     /// Keeps track of the last player that was playing
     private var lastActivePlayer: PlayerRemote? = nil
     /// Incoming album-art transfer/download tracking (remote device -> Soduto)
@@ -452,9 +457,10 @@ extension MediaPlayerService {
             players[device.id] = devicePlayers
         }
         
-        // Create or update players
+        // Create or update players (filter out excluded system events)
+        let mediaPlayers = playerList.filter { !Self.excludedPlayerNames.contains($0) }
         var updatedPlayers = [PlayerRemote]()
-        for playerIdentity in playerList {
+        for playerIdentity in mediaPlayers {
             var existingPlayer: PlayerRemote? = nil
             
             if let devicePlayers = players[device.id] {
@@ -485,27 +491,38 @@ extension MediaPlayerService {
         
         guard let devicePlayers = players[device.id] else { return }
         guard let playerToUpdate = devicePlayers.first(where: { $0.identity == player }) else { return }
+        let oldTitle = playerToUpdate.title  // capture before update() for track-change detection
         
         do {
             let isPlaying = try packet.getIsPlaying() ?? playerToUpdate.isPlaying
             let position = try packet.getPosition() ?? playerToUpdate.position
             let artist = try packet.getArtist() ?? playerToUpdate.artist
-            let title = try packet.getTitle() ?? playerToUpdate.title
+            let rawTitle = try packet.getTitle()
+            let title = rawTitle ?? playerToUpdate.title
             let album = try packet.getAlbum() ?? playerToUpdate.album
             let length = try packet.getLength() ?? playerToUpdate.length
-            let url = packet.getUrl() ?? playerToUpdate.url
+            let rawUrl = try packet.getUrl()
+            let url = rawUrl ?? playerToUpdate.url
             let albumArtUrl = try packet.getAlbumArtUrl()
-            let volume = try packet.getVolume() ?? playerToUpdate.volume
+            let rawVolume = try packet.getVolume()
+            let volume = rawVolume ?? playerToUpdate.volume
             let canPause = try packet.getCanPause() ?? playerToUpdate.canPause
             let canPlay = try packet.getCanPlay() ?? playerToUpdate.canPlay
             let canGoNext = try packet.getCanGoNext() ?? playerToUpdate.canGoNext
             let canGoPrevious = try packet.getCanGoPrevious() ?? playerToUpdate.canGoPrevious
             let canSeek = try packet.getCanSeek() ?? playerToUpdate.canSeek
-            let loopStatus = packet.getLoopStatus() ?? playerToUpdate.loopStatus
-            let shuffle = packet.getShuffle() ?? playerToUpdate.shuffle
+            let rawLoopStatus = try packet.getLoopStatus()
+            let loopStatus = rawLoopStatus ?? playerToUpdate.loopStatus
+            let rawShuffle = try packet.getShuffle()
+            let shuffle = rawShuffle ?? playerToUpdate.shuffle
             
             // url is stored directly; not included in update() since it doesn't affect Now Playing display
             playerToUpdate.url = url
+            
+            // Latch feature-support flags the first time a device proves it sends each optional field
+            if rawLoopStatus != nil { playerToUpdate.supportsLoopStatus = true }
+            if rawShuffle != nil { playerToUpdate.supportsShuffle = true }
+            if rawVolume != nil { playerToUpdate.supportsVolume = true }
             
             playerToUpdate.update(
                 isPlaying: isPlaying,
@@ -537,7 +554,7 @@ extension MediaPlayerService {
             }
             
             // Handle album art updates
-            if let albumArtUrl = albumArtUrl {
+            if let albumArtUrl = albumArtUrl, !albumArtUrl.isEmpty {
                 // Request album art if the URL changed, or if a previous download for this URL failed (albumArtUrl is set but albumArtImage is still nil)
                 if playerToUpdate.albumArtUrl != albumArtUrl || playerToUpdate.albumArtImage == nil {
                     Logger.services.debug("MPRIS::Album art URL changed for \(player, privacy: .public): \(albumArtUrl, privacy: .public)")
@@ -563,12 +580,22 @@ extension MediaPlayerService {
                         Logger.services.debug("MPRIS::Skipping album art request — device has not declared supportAlbumArtPayload")
                     }
                 }
-            } else if playerToUpdate.albumArtUrl != nil {
-                // Album art URL was cleared
-                Logger.services.debug("MPRIS::Album art cleared for \(player, privacy: .public)")
-                playerToUpdate.albumArtUrl = nil
-                playerToUpdate.albumArtImage = nil
-                playerToUpdate.updateNowPlayingInfo()
+            } else {
+                // Per the KDE Connect MPRIS protocol: "player packets can be incremental,
+                // ie: only contain the fields that changed since the last update."
+                // An absent albumArtUrl therefore means "unchanged", not "no art".
+                // Only clear the cached art when there is a concrete reason:
+                //   • albumArtUrl key was present but empty  → explicit "no art" signal from the device
+                //   • rawTitle was sent AND changed          → new track; old art belongs to the previous one
+                let artExplicitlyCleared = albumArtUrl != nil  // key was sent as ""
+                let trackChanged = rawTitle != nil && rawTitle != oldTitle
+                if (artExplicitlyCleared || trackChanged) && playerToUpdate.albumArtUrl != nil {
+                    Logger.services.debug("MPRIS::Album art cleared for \(player, privacy: .public) (\(artExplicitlyCleared ? "explicit" : "track change"))")
+                    playerToUpdate.albumArtUrl = nil
+                    playerToUpdate.albumArtImage = nil
+                    playerToUpdate.updateNowPlayingInfo()
+                }
+                // else: incremental update, art is unchanged
             }
             
             // Always update the command center when the active player sends any update.
@@ -579,19 +606,9 @@ extension MediaPlayerService {
                 updateCommandCenterForActivePlayer(playerToUpdate)
             }
             
-            // If this player is playing, ensure other players are marked as not playing
-            if isPlaying {
-                for deviceID in players.keys {
-                    if let devicePlayers = players[deviceID] {
-                        for otherPlayer in devicePlayers {
-                            if otherPlayer !== playerToUpdate && otherPlayer.isPlaying {
-                                Logger.services.debug("MPRIS::handlePlayerUpdate - marking \(otherPlayer.identity, privacy: .public) as not playing")
-                                otherPlayer.isPlaying = false
-                            }
-                        }
-                    }
-                }
-            }
+            // NOTE: Don't mark other players as not playing just because this one started.
+            // Multiple apps can play simultaneously (audio mixing).
+            // Only mark a player as not playing if we receive an explicit isPlaying=false.
             
         } catch {
             Logger.services.error("MPRIS::Error parsing player update: \(error, privacy: .public)")
@@ -825,17 +842,17 @@ extension MediaPlayerService {
         player.device.send(DataPacket.mprisRequestPacket(player: player.identity, action: "Previous"))
     }
     
-    // Reserved for future dashboard/UI controls. Not currently wired from macOS command center.
+    // Used by the dashboard via controlStop. macOS command center does not provide a Stop command.
     private func sendStopCommand(to player: PlayerRemote) {
         player.device.send(DataPacket.mprisRequestPacket(player: player.identity, action: "Stop"))
     }
     
-    // Reserved for future dashboard/UI controls. macOS command center does not provide a remote volume command here.
+    // Used by the dashboard via controlSetVolume. macOS command center does not provide a remote volume command.
     private func sendSetVolumeCommand(to player: PlayerRemote, volume: Int) {
         player.device.send(DataPacket.mprisSetVolumePacket(player: player.identity, volume: volume))
     }
     
-    // Reserved for future dashboard/UI controls. Current command-center integration uses absolute SetPosition.
+    // Exposed via controlSeek but unused in practice; the dashboard always uses SetPosition for absolute seeks.
     private func sendSeekCommand(to player: PlayerRemote, offset: Int) {
         player.device.send(DataPacket.mprisSeekPacket(player: player.identity, offset: offset))
     }
@@ -941,7 +958,7 @@ extension MediaPlayerService {
                 }
                 if let artData = pngData {
                     // Derive a stable URL from art content for phone-side caching.
-                    // Use file:// scheme — Android only fetches art for "file" or "kdeconnect" schemes.
+                    // Use file:// scheme; Android only fetches art for "file" or "kdeconnect" schemes.
                     let hash = SHA256.hash(data: artData)
                     let shortHash = hash.map { String(format: "%02x", $0) }.joined().prefix(16)
                     currentArtUrl = "file:///kdeconnect/albumart/\(shortHash).png"
@@ -965,7 +982,7 @@ extension MediaPlayerService {
             device.send(packet)
         }
         
-        // Proactively push album art when it changes — don't wait for the phone to request it.
+        // Proactively push album art when it changes; don't wait for the phone to request it.
         // Pull-based fallback (handleMacPlayerRequest) handles newly connected devices.
         if artActuallyChanged, let artData = currentArtData, let artUrl = currentArtUrl {
             Logger.services.debug("MPRIS::sendMacPlayerStatus — proactively pushing album art to \(self.outgoingDevices.count, privacy: .public) device(s)")
@@ -1224,53 +1241,61 @@ extension MediaPlayerService {
 
 // MARK: - Player Remote Class
 
-class PlayerRemote: NSObject {
+class PlayerRemote: NSObject, ObservableObject {
     // Player identity
     let device: Device
     let identity: String
     
     // Player state
-    var isPlaying: Bool = false {
+    @Published var isPlaying: Bool = false {
         didSet {
             if isPlaying != oldValue {
                 updateNowPlayingInfo()
             }
         }
     }
-    var position: Int = 0
+    @Published var position: Int = 0
     // timestamp records when `position` was last received from the remote.
     // macOS interpolates the displayed playback position automatically from
     // MPNowPlayingInfoPropertyElapsedPlaybackTime + MPNowPlayingInfoPropertyPlaybackRate,
     // so we don't need to extrapolate manually (unlike Android's lastPositionTime
     // or KDE's lastPositionTime which are used for D-Bus position reporting).
-    // Stored here for potential future use, e.g. more precise seek offset calculation.
-    var timestamp: Date = Date()
+    // Used by the dashboard to interpolate the displayed seek position between device updates.
+    @Published var timestamp: Date = Date()
     
     // Track metadata
-    var artist: String?
-    var title: String?
-    var album: String?
+    @Published var artist: String?
+    @Published var title: String?
+    @Published var album: String?
     /// Content URL from the remote player (xesam:url / MPRIS `url` field).
     /// Typically a file:// or streaming URI. On Android this enables "Continue Watching"
     /// notifications for video URLs. Stored here for future use.
-    var url: String?
-    var albumArtUrl: String?
-    var albumArtImage: NSImage?
-    var length: Int = 0
+    @Published var url: String?
+    @Published var albumArtUrl: String?
+    @Published var albumArtImage: NSImage?
+    @Published var length: Int = 0
     
     // Player capabilities and state
-    var volume: Int = 50
-    var canPause: Bool = false
-    var canPlay: Bool = false
-    var canGoNext: Bool = false
-    var canGoPrevious: Bool = false
-    var canSeek: Bool = false
-    var loopStatus: String = "None"  // "None", "Track", "Playlist"
-    var shuffle: Bool = false
-    var isActive: Bool = false
+    @Published var volume: Int = 50
+    @Published var canPause: Bool = false
+    @Published var canPlay: Bool = false
+    @Published var canGoNext: Bool = false
+    @Published var canGoPrevious: Bool = false
+    @Published var canSeek: Bool = false
+    @Published var loopStatus: String = "None"  // "None", "Track", "Playlist"
+    @Published var shuffle: Bool = false
+    @Published var isActive: Bool = false
+    
+    // Feature support flags: set to true the first time a device sends the respective field; never reset
+    @Published var supportsLoopStatus: Bool = false
+    @Published var supportsShuffle: Bool = false
+    @Published var supportsVolume: Bool = false
     
     // Now playing info
     private let nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
+    
+    /// Display title, falling back to player identity when title is absent or empty.
+    var displayTitle: String { title.flatMap { $0.isEmpty ? nil : $0 } ?? identity }
     
     init(device: Device, identity: String) {
         self.device = device
@@ -1361,10 +1386,9 @@ class PlayerRemote: NSObject {
         // player A lingering when player B takes over and has no art of its own)
         var nowPlayingInfo = [String: Any]()
         
-        // Set track info. Fall back to the player identity as the title when both
-        // title and artist are empty — macOS will suppress the Now Playing entry
-        // entirely if it finds no recognisable content in the dict.
-        let displayTitle = (title != nil && !title!.isEmpty) ? title! : identity
+        // Set track info. Fall back to the player identity when title is absent or empty —
+        // macOS will suppress the Now Playing entry entirely if it finds no recognisable
+        // content in the dict.
         nowPlayingInfo[MPMediaItemPropertyTitle] = displayTitle
         
         if let artist = self.artist, !artist.isEmpty {
@@ -1423,6 +1447,21 @@ class PlayerRemote: NSObject {
     }
 }
 
+// MARK: - Dashboard Controls
+
+extension MediaPlayerService {
+    func controlPlayPause(for player: PlayerRemote) { sendPlayPauseCommand(to: player) }
+    func controlStop(for player: PlayerRemote) { sendStopCommand(to: player) }
+    func controlNext(for player: PlayerRemote) { sendNextCommand(to: player) }
+    func controlPrevious(for player: PlayerRemote) { sendPreviousCommand(to: player) }
+    func controlSetVolume(for player: PlayerRemote, volume: Int) { sendSetVolumeCommand(to: player, volume: volume) }
+    func controlSetPosition(for player: PlayerRemote, positionMs: Int) { sendSetPositionCommand(to: player, positionMs: positionMs) }
+    func controlSeek(for player: PlayerRemote, offsetUs: Int) { sendSeekCommand(to: player, offset: offsetUs) }
+    func controlSetLoopStatus(for player: PlayerRemote, loopStatus: String) { sendSetLoopStatusCommand(to: player, loopStatus: loopStatus) }
+    func controlSetShuffle(for player: PlayerRemote, shuffle: Bool) { sendSetShuffleCommand(to: player, shuffle: shuffle) }
+}
+
+
 // MARK: - DataPacket (MPRIS)
 
 /// MPRIS service data packet utilities
@@ -1448,6 +1487,10 @@ fileprivate extension DataPacket {
         case invalidAlbum
         case invalidVolume
         case invalidTransferringAlbumArt
+        case invalidLoopStatus
+        case invalidShuffle
+        case invalidUrl
+        case invalidSupportAlbumArtPayload
         case partFileRenameFailed
     }
     
@@ -1492,7 +1535,7 @@ fileprivate extension DataPacket {
     var isMprisRequestPacket: Bool { return self.type == DataPacket.mprisRequestPacketType }
     
     
-    // MARK: Incoming Controller — Packets sent to control the phone's player
+    // MARK: Incoming Controller (Packets sent to control the phone's player)
     
     static func mprisRequestPlayerListPacket() -> DataPacket {
         return DataPacket(type: mprisRequestPacketType, body: [
@@ -1557,7 +1600,7 @@ fileprivate extension DataPacket {
         ])
     }
     
-    // MARK: Outgoing Exposer — Packets sent to advertise Mac's state
+    // MARK: Outgoing Exposer (Packets sent to advertise Mac's state)
     
     /// Sends the list of Mac players to the phone.
     static func mprisPlayerListPacket(playerList: [String]) -> DataPacket {
@@ -1609,7 +1652,7 @@ fileprivate extension DataPacket {
         }
         // TODO: `url` (xesam:url) field is intentionally absent here.
         // MediaRemote.framework / MediaRemoteAdapter does not expose a content URL
-        // for the active Now Playing app — only artwork, metadata, and playback state.
+        // for the active Now Playing app; only artwork, metadata, and playback state.
         // If a future MediaRemoteAdapter version exposes it, pass it as an optional
         // parameter and include it here so Android can show "Continue Watching" for video.
         return DataPacket(type: mprisPacketType, body: body)
@@ -1629,7 +1672,7 @@ fileprivate extension DataPacket {
         return packet
     }
     
-    // MARK: Incoming — Packet Getters
+    // MARK: Incoming Packet Getters
     
     func validateMprisType() throws {
         guard self.isMprisPacket || self.isMprisRequestPacket else { throw MprisError.wrongType }
@@ -1657,10 +1700,13 @@ fileprivate extension DataPacket {
     }
     
     /// Content URL of the currently playing track (xesam:url / MPRIS `url` field).
-    /// Optional; returns nil if absent. Not validated strictly — callers should sanity-check
+    /// Optional; returns nil if absent. Not validated strictly; callers should sanity-check
     /// schemes before use (Android skips non-http(s)/file URLs for "Continue Watching").
-    func getUrl() -> String? {
-        return body[MprisProperty.url.rawValue] as? String
+    func getUrl() throws -> String? {
+        try validateMprisType()
+        guard body.keys.contains(MprisProperty.url.rawValue) else { return nil }
+        guard let value = body[MprisProperty.url.rawValue] as? String else { throw MprisError.invalidUrl }
+        return value
     }
     
     func getIsPlaying() throws -> Bool? {
@@ -1705,13 +1751,17 @@ fileprivate extension DataPacket {
         return value
     }
     
-    func getLoopStatus() -> String? {
-        guard let value = body[MprisProperty.loopStatus.rawValue] as? String else { return nil }
+    func getLoopStatus() throws -> String? {
+        try validateMprisType()
+        guard body.keys.contains(MprisProperty.loopStatus.rawValue) else { return nil }
+        guard let value = body[MprisProperty.loopStatus.rawValue] as? String else { throw MprisError.invalidLoopStatus }
         return value
     }
     
-    func getShuffle() -> Bool? {
-        guard let value = body[MprisProperty.shuffle.rawValue] as? Bool else { return nil }
+    func getShuffle() throws -> Bool? {
+        try validateMprisType()
+        guard body.keys.contains(MprisProperty.shuffle.rawValue) else { return nil }
+        guard let value = body[MprisProperty.shuffle.rawValue] as? Bool else { throw MprisError.invalidShuffle }
         return value
     }
     
@@ -1760,16 +1810,14 @@ fileprivate extension DataPacket {
     func getTransferringAlbumArt() throws -> Bool? {
         try validateMprisType()
         guard body.keys.contains(MprisProperty.transferringAlbumArt.rawValue) else { return nil }
-        guard let value = body[MprisProperty.transferringAlbumArt.rawValue] as? Bool else {
-            throw MprisError.invalidTransferringAlbumArt
-        }
+        guard let value = body[MprisProperty.transferringAlbumArt.rawValue] as? Bool else { throw MprisError.invalidTransferringAlbumArt }
         return value
     }
     
     func getSupportAlbumArtPayload() throws -> Bool? {
         try validateMprisType()
         guard body.keys.contains(MprisProperty.supportAlbumArtPayload.rawValue) else { return nil }
-        guard let value = body[MprisProperty.supportAlbumArtPayload.rawValue] as? Bool else { return nil }
+        guard let value = body[MprisProperty.supportAlbumArtPayload.rawValue] as? Bool else { throw MprisError.invalidSupportAlbumArtPayload }
         return value
     }
     
