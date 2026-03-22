@@ -8,6 +8,7 @@
 
 import Cocoa
 import os
+import Combine
 import MediaPlayer
 import CryptoKit
 import MediaRemoteAdapter
@@ -518,7 +519,7 @@ extension MediaPlayerService {
             
             // url is stored directly; not included in update() since it doesn't affect Now Playing display
             if playerToUpdate.url != url { playerToUpdate.url = url }
-
+            
             // Latch feature-support flags the first time a device proves it sends each optional field
             if rawLoopStatus != nil && !playerToUpdate.supportsLoopStatus { playerToUpdate.supportsLoopStatus = true }
             if rawShuffle != nil && !playerToUpdate.supportsShuffle { playerToUpdate.supportsShuffle = true }
@@ -1254,14 +1255,14 @@ class PlayerRemote: NSObject, ObservableObject {
             }
         }
     }
-    @Published var position: Int = 0
-    // timestamp records when `position` was last received from the remote.
-    // macOS interpolates the displayed playback position automatically from
-    // MPNowPlayingInfoPropertyElapsedPlaybackTime + MPNowPlayingInfoPropertyPlaybackRate,
-    // so we don't need to extrapolate manually (unlike Android's lastPositionTime
-    // or KDE's lastPositionTime which are used for D-Bus position reporting).
-    // Used by the dashboard to interpolate the displayed seek position between device updates.
-    @Published var timestamp: Date = Date()
+    /// Position and timestamp are intentionally NOT @Published. Frequent MPRIS
+    /// updates (~3 s) would trigger SwiftUI body re-evaluations on every observing
+    /// view, accumulating dead attribute-graph nodes (sawtooth memory pattern).
+    /// The seek bar subscribes directly via `positionSubject` and updates its NSView
+    /// through Combine without involving SwiftUI's observation machinery.
+    var position: Int = 0
+    var timestamp: Date = Date()
+    let positionSubject = PassthroughSubject<(position: Int, timestamp: Date), Never>()
     
     // Track metadata
     @Published var artist: String?
@@ -1335,8 +1336,9 @@ class PlayerRemote: NSObject, ObservableObject {
         if self.position != position {
             self.position = position
             self.timestamp = Date()
+            positionSubject.send((position: self.position, timestamp: self.timestamp))
         }
-
+        
         if self.artist != artist || self.title != title || self.album != album || self.length != length {
             self.artist = artist
             self.title = title
@@ -1344,7 +1346,7 @@ class PlayerRemote: NSObject, ObservableObject {
             self.length = length
             needsInfoUpdate = true
         }
-
+        
         if self.volume != volume { self.volume = volume }
         if self.canPause != canPause { self.canPause = canPause }
         if self.canPlay != canPlay { self.canPlay = canPlay }

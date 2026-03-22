@@ -15,7 +15,6 @@ struct PlayerRowView: View {
     @State private var isExpanded: Bool
     @State private var showArtworkPopover = false
     @State private var muteVolume: Int = 0
-    @State private var positionLabel: String = "0:00"
     
     // Pending command state: each pair holds the optimistic value and a timeout task
     // that reverts it with an error toast if the device doesn't confirm within 3s
@@ -157,17 +156,6 @@ struct PlayerRowView: View {
                 pendingTrackTask = nil
             }
         }
-        .onChange(of: player.position) { _, newValue in
-            pendingSeekPosition = nil
-            pendingSeekTask?.cancel()
-            pendingSeekTask = nil
-            // Position reset near track start also confirms Next/Prev (handles identical tracks)
-            if pendingTrackChange && newValue < 2_000 {
-                pendingTrackChange = false
-                pendingTrackTask?.cancel()
-                pendingTrackTask = nil
-            }
-        }
     }
     
     // MARK: - Subviews
@@ -286,37 +274,29 @@ struct PlayerRowView: View {
     }
     
     private var seekBar: some View {
-        HStack(spacing: 8) {
-            Text(positionLabel)
-                .contentTransition(.numericText(countsDown: false))
-                .animation(.linear(duration: 0.25), value: positionLabel)
-                .frame(width: 36, alignment: .leading)
-                .monospacedDigit()
-            
-            WaveSeekBar(
-                positionMs: player.position,
-                lengthMs: player.length,
-                positionTimestamp: player.timestamp,
-                pendingSeekMs: pendingSeekPosition,
-                isPlaying: effectiveIsPlaying,
-                canSeek: player.canSeek,
-                onSeekCommitted: { positionMs in
-                    sendSeekPosition(positionMs)
-                },
-                onPositionLabelChanged: { label in
-                    positionLabel = label
+        WaveSeekBar(
+            player: player,
+            lengthMs: player.length,
+            pendingSeekMs: pendingSeekPosition,
+            isPlaying: effectiveIsPlaying,
+            canSeek: player.canSeek,
+            onSeekCommitted: { positionMs in
+                sendSeekPosition(positionMs)
+            },
+            onPositionReceived: { positionMs in
+                if pendingSeekPosition != nil {
+                    pendingSeekPosition = nil
+                    pendingSeekTask?.cancel()
+                    pendingSeekTask = nil
                 }
-            )
-            .frame(height: 20)
-            
-            Text(formatMs(player.length))
-                .contentTransition(.numericText(countsDown: false))
-                .animation(.linear(duration: 0.25), value: player.length)
-                .frame(width: 36, alignment: .trailing)
-                .monospacedDigit()
-        }
-        .font(.caption2)
-        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                if pendingTrackChange && positionMs < 2_000 {
+                    pendingTrackChange = false
+                    pendingTrackTask?.cancel()
+                    pendingTrackTask = nil
+                }
+            }
+        )
+        .frame(height: 20)
     }
     
     private var volumeSlider: some View {

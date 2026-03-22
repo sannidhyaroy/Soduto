@@ -8,37 +8,43 @@
 
 import SwiftUI
 import AppKit
+import Combine
 
 // MARK: - WaveSeekBar
 
 /// NSViewRepresentable wrapper for WaveBarNSView
-/// All rendering and animation live in the NSView layer to avoid SwiftUI TimelineView's attribute-graph leak
+///
+/// All rendering (wave bar, time labels, digit-flip animations) live in the NSView layer.
+/// Position updates flow directly from `PlayerRemote.positionSubject` → NSView via Combine.
+/// During normal playback, zero SwiftUI body re-evaluations occur from this component.
 struct WaveSeekBar: NSViewRepresentable {
-    let positionMs: Int
+    let player: PlayerRemote
     let lengthMs: Int
-    let positionTimestamp: Date
     let pendingSeekMs: Int?
     let isPlaying: Bool
     let canSeek: Bool
     let onSeekCommitted: (_ positionMs: Int) -> Void
-    let onPositionLabelChanged: (_ label: String) -> Void
+    let onPositionReceived: (_ positionMs: Int) -> Void
     
-    func makeNSView(context: Context) -> WaveBarNSView { WaveBarNSView() }
+    func makeNSView(context: Context) -> WaveBarNSView {
+        let view = WaveBarNSView()
+        view.subscribeToPlayer(player)
+        return view
+    }
     
     func updateNSView(_ view: WaveBarNSView, context: Context) {
         view.onSeekCommitted = onSeekCommitted
-        view.onPositionLabelChanged = onPositionLabelChanged
-        view.externalUpdate(positionMs: positionMs, lengthMs: lengthMs,
-                            positionTimestamp: positionTimestamp,
-                            pendingSeekMs: pendingSeekMs,
-                            isPlaying: isPlaying, canSeek: canSeek)
+        view.onPositionReceived = onPositionReceived
+        view.updateState(lengthMs: lengthMs, pendingSeekMs: pendingSeekMs, isPlaying: isPlaying, canSeek: canSeek)
     }
 }
 
 // MARK: - WaveBarNSView
 
-/// Core Graphics wave seek bar driven by a 30 fps Timer
-/// Fires an `onPositionLabelChanged` callback once per second so the SwiftUI layer can animate the time label without hosting a TimelineView
+/// Core Graphics wave seek bar with integrated time labels, driven by a 30 fps Timer.
+///
+/// Time labels use a per-character "digit flip" animation (vertical slide + fade)
+/// implemented entirely in Core Graphics.
 final class WaveBarNSView: NSView {
     
     // MARK: Constants
@@ -54,10 +60,22 @@ final class WaveBarNSView: NSView {
     private let animDuration: Double     = 0.3
     private let seekAnimDuration: Double = 0.45
     
-    // MARK: Cached colors
+    private let labelWidth: CGFloat         = 36
+    private let labelSpacing: CGFloat       = 8
+    private let labelAnimDuration: Double   = 0.4
+    private let labelSlideDistance: CGFloat  = 5
+    
+    // MARK: Cached colors + font
     
     private var cachedAccentColor: CGColor    = NSColor.controlAccentColor.cgColor
     private var cachedSecondaryColor: CGColor = NSColor.secondaryLabelColor.cgColor
+    private var cachedTertiaryColor: NSColor  = .tertiaryLabelColor
+    private let labelFont: NSFont = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    private lazy var labelAttributes: [NSAttributedString.Key: Any] = [
+        .font: labelFont,
+        .foregroundColor: cachedTertiaryColor
+    ]
+    private var charSizeCache: [Character: CGSize] = [:]
     
     // MARK: Playback state
     
@@ -84,6 +102,20 @@ final class WaveBarNSView: NSView {
     private var knownPositionMs: Int          = 0
     private var knownTimestamp: Date          = .distantPast
     
+    // MARK: Digit flip state
+    
+    private struct CharFlip {
+        var current: Character
+        var previous: Character
+        var changedAt: Date
+        var slidesUp: Bool  // true = old slides up / new enters from below; false = reverse
+    }
+    private var positionFlips: [CharFlip] = []
+    private var currentPositionLabel: String = ""
+    private var lengthFlips: [CharFlip] = []
+    private var currentLengthLabel: String = ""
+    private var lastLabelFlipTime: Date = .distantPast
+    
     // MARK: Interaction state
     
     private var isHovering: Bool     = false
@@ -91,13 +123,13 @@ final class WaveBarNSView: NSView {
     private var dragFraction: Double = 0
     private var mouseDownX: CGFloat  = 0
     
-    // MARK: Timer + callbacks
+    // MARK: Combine + callbacks
     
+    private var positionCancellable: AnyCancellable?
     private var animationTimer: Timer?
     private var initialized = false
-    private var lastPositionLabel: String = ""
     var onSeekCommitted: ((_ positionMs: Int) -> Void)?
-    var onPositionLabelChanged: ((_ label: String) -> Void)?
+    var onPositionReceived: ((_ positionMs: Int) -> Void)?
     
     // MARK: Init / lifecycle
     
@@ -119,6 +151,8 @@ final class WaveBarNSView: NSView {
     
     override func removeFromSuperview() {
         stopAnimation()
+        positionCancellable?.cancel()
+        positionCancellable = nil
         super.removeFromSuperview()
     }
     
@@ -134,23 +168,70 @@ final class WaveBarNSView: NSView {
     override func viewDidChangeEffectiveAppearance() {
         cachedAccentColor = NSColor.controlAccentColor.cgColor
         cachedSecondaryColor = NSColor.secondaryLabelColor.cgColor
+        cachedTertiaryColor = .tertiaryLabelColor
+        labelAttributes[.foregroundColor] = cachedTertiaryColor
+        charSizeCache.removeAll()
         needsDisplay = true
     }
     
-    // MARK: External update (from SwiftUI)
+    // MARK: Player subscription
     
-    func externalUpdate(positionMs: Int, lengthMs: Int, positionTimestamp: Date,
-                        pendingSeekMs: Int?, isPlaying: Bool, canSeek: Bool) {
-        let isFirst       = !initialized
-        initialized       = true
-        let oldTimestamp   = self.positionTimestamp
-        let oldPending    = self.pendingSeekMs
-        let oldCanSeek    = self.canSeek
+    /// Subscribe to position updates directly from the player's Combine subject.
+    /// Position flows through Combine → NSView, never touching SwiftUI's observation.
+    func subscribeToPlayer(_ player: PlayerRemote) {
+        positionMs        = player.position
+        positionTimestamp = player.timestamp
+        knownPositionMs   = player.position
+        knownTimestamp    = player.timestamp
         
-        self.positionMs        = positionMs
-        self.lengthMs          = lengthMs
-        self.positionTimestamp  = positionTimestamp
-        self.canSeek           = canSeek
+        // Initialize position label without animation
+        let label = formatMs(player.position)
+        currentPositionLabel = label
+        positionFlips = Array(label).map {
+            CharFlip(current: $0, previous: $0, changedAt: .distantPast, slidesUp: true)
+        }
+        
+        positionCancellable = player.positionSubject
+            .sink { [weak self] position, timestamp in
+                self?.handlePositionUpdate(positionMs: position, timestamp: timestamp)
+            }
+    }
+    
+    private func handlePositionUpdate(positionMs: Int, timestamp: Date) {
+        let oldTimestamp    = self.positionTimestamp
+        self.positionMs    = positionMs
+        self.positionTimestamp = timestamp
+        
+        if timestamp != oldTimestamp {
+            handleTimestampChange()
+        }
+        
+        refreshAnimation()
+        onPositionReceived?(positionMs)
+    }
+    
+    // MARK: State update (from SwiftUI / non-position properties only)
+    
+    func updateState(lengthMs: Int, pendingSeekMs: Int?, isPlaying: Bool, canSeek: Bool) {
+        let isFirst    = !initialized
+        initialized    = true
+        let oldPending = self.pendingSeekMs
+        let oldCanSeek = self.canSeek
+        
+        self.lengthMs = lengthMs
+        self.canSeek  = canSeek
+        let newLengthLabel = formatMs(lengthMs)
+        if newLengthLabel != currentLengthLabel {
+            if isFirst {
+                // Initialize without animation
+                currentLengthLabel = newLengthLabel
+                lengthFlips = Array(newLengthLabel).map {
+                    CharFlip(current: $0, previous: $0, changedAt: .distantPast, slidesUp: true)
+                }
+            } else {
+                updateLengthFlips(to: newLengthLabel, at: Date())
+            }
+        }
         
         if isPlaying != _isPlaying {
             _isPlaying = isPlaying
@@ -163,13 +244,6 @@ final class WaveBarNSView: NSView {
         }
         self.pendingSeekMs = pendingSeekMs
         
-        if isFirst {
-            knownPositionMs = positionMs
-            knownTimestamp  = positionTimestamp
-        } else if positionTimestamp != oldTimestamp {
-            handleTimestampChange()
-        }
-        
         refreshAnimation()
     }
     
@@ -181,34 +255,52 @@ final class WaveBarNSView: NSView {
         guard w > 0, h > 0 else { return }
         let now = Date()
         
+        // Layout: [positionLabel 36] [8] [--- wave bar ---] [8] [lengthLabel 36]
+        let barLeft  = labelWidth + labelSpacing
+        let barRight = w - labelWidth - labelSpacing
+        let barWidth = max(1, barRight - barLeft)
+        
         let interactiveProg = eased(from: interactiveFrom, target: interactiveTarget ? 1 : 0, changedAt: interactiveChangedAt, now: now)
         let playingProg = eased(from: playingFrom, target: playingTarget ? 1 : 0, changedAt: playingChangedAt, now: now)
         let fraction     = displayFraction(at: now)
         let combinedProg = max(playingProg, interactiveProg)
         let barH = restHeight + (playingHeight - restHeight) * playingProg * (1 - interactiveProg) + (hoverHeight - restHeight) * interactiveProg
         let waveAmp = maxAmplitude * playingProg * (1 - interactiveProg)
-        let fillX   = max(0, min(w, w * fraction))
+        let fillX   = max(barLeft, min(barRight, barLeft + barWidth * fraction))
         let flatH   = barH * 0.8
         let midY    = h / 2
         let phase   = Float(fmod(now.timeIntervalSinceReferenceDate * waveSpeed, 2 * .pi))
         
         ctx.clear(bounds)
         
+        // Update position label (detect changes for digit flip)
+        let currentMs = Int(fraction * Double(max(1, lengthMs)))
+        let newLabel = formatMs(currentMs)
+        if newLabel != currentPositionLabel {
+            updatePositionFlips(to: newLabel, at: now)
+        }
+        
+        // Position label (left, with digit flip animation)
+        drawPositionLabel(ctx, midY: midY, now: now)
+        
+        // Length label (right, with digit flip animation)
+        drawLengthLabel(ctx, barRight: barRight, midY: midY, now: now)
+        
         // Unfilled track
-        if w - fillX > 0.5 {
+        if barRight - fillX > 0.5 {
             let r = flatH / 2
             ctx.saveGState()
             ctx.setAlpha(0.22)
             ctx.setFillColor(cachedSecondaryColor)
-            ctx.addPath(CGPath(roundedRect: CGRect(x: fillX, y: midY - r, width: w - fillX, height: flatH), cornerWidth: r, cornerHeight: r, transform: nil))
+            ctx.addPath(CGPath(roundedRect: CGRect(x: fillX, y: midY - r, width: barRight - fillX, height: flatH), cornerWidth: r, cornerHeight: r, transform: nil))
             ctx.fillPath()
             ctx.restoreGState()
         }
         
         // Filled wave bar
-        if fillX > 0.5 {
+        if fillX - barLeft > 0.5 {
             let halfH  = barH / 2
-            let startX = halfH
+            let startX = barLeft + halfH
             let endX   = max(startX, fillX - halfH)
             
             ctx.setStrokeColor(cachedAccentColor)
@@ -220,19 +312,22 @@ final class WaveBarNSView: NSView {
             var x = startX
             var first = true
             while x <= endX {
-                let tp = min(1, x / max(taperWidth, 0.001)) * min(1, (fillX - x) / max(taperWidth, 0.001))
-                let y  = midY + CGFloat(sinf(Float(x) * waveFreq + phase)) * waveAmp * tp
+                let localX = x - barLeft
+                let tp = min(1, localX / max(taperWidth, 0.001)) * min(1, (fillX - x) / max(taperWidth, 0.001))
+                let y  = midY + CGFloat(sinf(Float(localX) * waveFreq + phase)) * waveAmp * tp
                 if first { ctx.move(to: CGPoint(x: x, y: y)); first = false }
                 else     { ctx.addLine(to: CGPoint(x: x, y: y)) }
                 x += step
             }
             if !first {
-                let tp = min(1, endX / max(taperWidth, 0.001)) * min(1, (fillX - endX) / max(taperWidth, 0.001))
-                let y  = midY + CGFloat(sinf(Float(endX) * waveFreq + phase)) * waveAmp * tp
+                let localX = endX - barLeft
+                let tp = min(1, localX / max(taperWidth, 0.001)) * min(1, (fillX - endX) / max(taperWidth, 0.001))
+                let y  = midY + CGFloat(sinf(Float(localX) * waveFreq + phase)) * waveAmp * tp
                 ctx.addLine(to: CGPoint(x: endX, y: y))
             } else {
-                ctx.move(to: CGPoint(x: fillX / 2, y: midY))
-                ctx.addLine(to: CGPoint(x: fillX / 2, y: midY))
+                let midBar = (barLeft + fillX) / 2
+                ctx.move(to: CGPoint(x: midBar, y: midY))
+                ctx.addLine(to: CGPoint(x: midBar, y: midY))
             }
             ctx.strokePath()
         }
@@ -240,20 +335,122 @@ final class WaveBarNSView: NSView {
         // Thumb
         if combinedProg > 0.01 {
             let tr  = thumbRadius * combinedProg
-            let tcx = max(tr, min(w - tr, fillX))
+            let tcx = max(barLeft + tr, min(barRight - tr, fillX))
             ctx.setFillColor(CGColor(gray: 0, alpha: 0.12 * combinedProg))
             ctx.fillEllipse(in: CGRect(x: tcx - (tr + 1.2), y: midY - (tr + 0.4), width: (tr + 1.2) * 2, height: (tr + 0.4) * 2))
             ctx.setFillColor(CGColor(gray: 1, alpha: combinedProg))
             ctx.fillEllipse(in: CGRect(x: tcx - tr, y: midY - tr, width: tr * 2, height: tr * 2))
         }
+    }
+    
+    // MARK: Label drawing
+    
+    /// Draw position label with digit flip animation (left-aligned).
+    private func drawPositionLabel(_ ctx: CGContext, midY: CGFloat, now: Date) {
+        drawFlippingLabel(ctx, flips: positionFlips, originX: 0, midY: midY, now: now, rightAlign: false)
+    }
+    
+    /// Draw length label with digit flip animation (right-aligned).
+    private func drawLengthLabel(_ ctx: CGContext, barRight: CGFloat, midY: CGFloat, now: Date) {
+        let originX = barRight + labelSpacing
+        drawFlippingLabel(ctx, flips: lengthFlips, originX: originX, midY: midY, now: now, rightAlign: true)
+    }
+    
+    /// Shared digit flip drawing for both labels.
+    private func drawFlippingLabel(_ ctx: CGContext, flips: [CharFlip], originX: CGFloat,
+                                   midY: CGFloat, now: Date, rightAlign: Bool) {
+        guard !flips.isEmpty else { return }
+        let textHeight = labelFont.ascender - labelFont.descender
+        let baseY = midY - textHeight / 2
         
-        // Position label callback (~1/sec)
-        let currentMs = Int(fraction * Double(max(1, lengthMs)))
-        let label = formatMs(currentMs)
-        if label != lastPositionLabel {
-            lastPositionLabel = label
-            onPositionLabelChanged?(label)
+        // Compute total width for right-alignment
+        var startX = originX
+        if rightAlign {
+            var total: CGFloat = 0
+            for flip in flips { total += cachedCharSize(flip.current).width }
+            startX = originX + labelWidth - total
         }
+        
+        var x = startX
+        for flip in flips {
+            let size = cachedCharSize(flip.current)
+            let elapsed = now.timeIntervalSince(flip.changedAt)
+            
+            if elapsed < labelAnimDuration && flip.previous != flip.current {
+                let t = min(1, elapsed / labelAnimDuration)
+                // Ease-in-out cubic: smooth acceleration and deceleration
+                let progress = t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+                
+                // Slide direction: up for increasing digits, down for decreasing
+                let dir: CGFloat = flip.slidesUp ? 1 : -1
+                
+                // Clip to character cell
+                ctx.saveGState()
+                ctx.clip(to: CGRect(x: x - 0.5, y: baseY - 0.5, width: size.width + 1, height: textHeight + 1))
+                
+                // Old character sliding out + fading
+                let oldY = baseY - dir * labelSlideDistance * progress
+                ctx.saveGState()
+                ctx.setAlpha(CGFloat(1 - progress))
+                (String(flip.previous) as NSString).draw(at: NSPoint(x: x, y: oldY), withAttributes: labelAttributes)
+                ctx.restoreGState()
+                
+                // New character sliding in + fading
+                let newY = baseY + dir * labelSlideDistance * (1 - progress)
+                ctx.saveGState()
+                ctx.setAlpha(CGFloat(progress))
+                (String(flip.current) as NSString).draw(at: NSPoint(x: x, y: newY), withAttributes: labelAttributes)
+                ctx.restoreGState()
+                
+                ctx.restoreGState()
+            } else {
+                (String(flip.current) as NSString).draw(at: NSPoint(x: x, y: baseY), withAttributes: labelAttributes)
+            }
+            
+            x += size.width
+        }
+    }
+    
+    // MARK: Flip state management
+    
+    private func updatePositionFlips(to newLabel: String, at now: Date) {
+        updateFlips(&positionFlips, to: newLabel, at: now)
+        currentPositionLabel = newLabel
+        lastLabelFlipTime = now
+    }
+    
+    private func updateLengthFlips(to newLabel: String, at now: Date) {
+        updateFlips(&lengthFlips, to: newLabel, at: now)
+        currentLengthLabel = newLabel
+        lastLabelFlipTime = now
+    }
+    
+    private func updateFlips(_ flips: inout [CharFlip], to newLabel: String, at now: Date) {
+        let newChars = Array(newLabel)
+        
+        if flips.count != newChars.count {
+            // Character count changed (e.g. "9:59" → "10:00"), flip all
+            let grows = newChars.count > flips.count
+            flips = newChars.map {
+                CharFlip(current: $0, previous: " ", changedAt: now, slidesUp: grows)
+            }
+        } else {
+            for i in 0..<newChars.count {
+                if newChars[i] != flips[i].current {
+                    flips[i].previous = flips[i].current
+                    flips[i].slidesUp = newChars[i] > flips[i].current
+                    flips[i].current = newChars[i]
+                    flips[i].changedAt = now
+                }
+            }
+        }
+    }
+    
+    private func cachedCharSize(_ char: Character) -> CGSize {
+        if let cached = charSizeCache[char] { return cached }
+        let size = (String(char) as NSString).size(withAttributes: labelAttributes)
+        charSizeCache[char] = size
+        return size
     }
     
     // MARK: Mouse events
@@ -282,14 +479,14 @@ final class WaveBarNSView: NSView {
             isDragging = true
             setInteraction(true)
         }
-        dragFraction = max(0, min(1, x / max(1, bounds.width)))
+        dragFraction = barFraction(forX: x)
         refreshAnimation()
     }
     
     override func mouseUp(with event: NSEvent) {
         guard canSeek else { return }
         let x = convert(event.locationInWindow, from: nil).x
-        let f = max(0, min(1, x / max(1, bounds.width)))
+        let f = barFraction(forX: x)
         
         if isDragging {
             dragFraction = f
@@ -298,7 +495,7 @@ final class WaveBarNSView: NSView {
             setInteraction(isHovering)
             onSeekCommitted?(Int(f * Double(max(1, lengthMs))))
         } else {
-            // Tap — animate from current visual position to tap target
+            // Tap: animate from current visual position to tap target
             let now = Date()
             let pre: Double
             if let pending = pendingSeekMs {
@@ -315,6 +512,12 @@ final class WaveBarNSView: NSView {
         refreshAnimation()
     }
     
+    private func barFraction(forX x: CGFloat) -> Double {
+        let barLeft  = labelWidth + labelSpacing
+        let barWidth = bounds.width - 2 * (labelWidth + labelSpacing)
+        return max(0, min(1, (x - barLeft) / max(1, barWidth)))
+    }
+    
     // MARK: Animation control
     
     private var needsAnimation: Bool {
@@ -325,6 +528,7 @@ final class WaveBarNSView: NSView {
         if now.timeIntervalSince(playingChangedAt) < animDuration { return true }
         if localSeekTarget != nil || localPendingFraction != nil { return true }
         if now.timeIntervalSince(seekAnimChangedAt) < seekAnimDuration { return true }
+        if now.timeIntervalSince(lastLabelFlipTime) < labelAnimDuration { return true }
         return false
     }
     
