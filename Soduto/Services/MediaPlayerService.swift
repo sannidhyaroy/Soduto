@@ -517,12 +517,12 @@ extension MediaPlayerService {
             let shuffle = rawShuffle ?? playerToUpdate.shuffle
             
             // url is stored directly; not included in update() since it doesn't affect Now Playing display
-            playerToUpdate.url = url
-            
+            if playerToUpdate.url != url { playerToUpdate.url = url }
+
             // Latch feature-support flags the first time a device proves it sends each optional field
-            if rawLoopStatus != nil { playerToUpdate.supportsLoopStatus = true }
-            if rawShuffle != nil { playerToUpdate.supportsShuffle = true }
-            if rawVolume != nil { playerToUpdate.supportsVolume = true }
+            if rawLoopStatus != nil && !playerToUpdate.supportsLoopStatus { playerToUpdate.supportsLoopStatus = true }
+            if rawShuffle != nil && !playerToUpdate.supportsShuffle { playerToUpdate.supportsShuffle = true }
+            if rawVolume != nil && !playerToUpdate.supportsVolume { playerToUpdate.supportsVolume = true }
             
             playerToUpdate.update(
                 isPlaying: isPlaying,
@@ -1332,9 +1332,11 @@ class PlayerRemote: NSObject, ObservableObject {
             needsInfoUpdate = true
         }
         
-        self.position = position
-        self.timestamp = Date()
-        
+        if self.position != position {
+            self.position = position
+            self.timestamp = Date()
+        }
+
         if self.artist != artist || self.title != title || self.album != album || self.length != length {
             self.artist = artist
             self.title = title
@@ -1342,13 +1344,13 @@ class PlayerRemote: NSObject, ObservableObject {
             self.length = length
             needsInfoUpdate = true
         }
-        
-        self.volume = volume
-        self.canPause = canPause
-        self.canPlay = canPlay
-        self.canGoNext = canGoNext
-        self.canGoPrevious = canGoPrevious
-        self.canSeek = canSeek
+
+        if self.volume != volume { self.volume = volume }
+        if self.canPause != canPause { self.canPause = canPause }
+        if self.canPlay != canPlay { self.canPlay = canPlay }
+        if self.canGoNext != canGoNext { self.canGoNext = canGoNext }
+        if self.canGoPrevious != canGoPrevious { self.canGoPrevious = canGoPrevious }
+        if self.canSeek != canSeek { self.canSeek = canSeek }
         
         if self.loopStatus != loopStatus || self.shuffle != shuffle {
             self.loopStatus = loopStatus

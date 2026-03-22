@@ -79,6 +79,7 @@
 		31AF2B112F6C9712002C7D38 /* SystemVolumeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AF2B102F6C9712002C7D38 /* SystemVolumeService.swift */; };
 		31DB2F072F3BE86300654096 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F062F3BE86300654096 /* Sparkle */; };
 		31DB2F0F2F3CEE8D00654096 /* NIOSSL in Frameworks */ = {isa = PBXBuildFile; productRef = 31DB2F0E2F3CEE8D00654096 /* NIOSSL */; };
+		31E059DD2F7044540019F4FE /* WaveSeekBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31E059DC2F7044540019F4FE /* WaveSeekBar.swift */; };
 		31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */; };
 		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareExtensionController.swift */; };
@@ -312,6 +313,7 @@
 		31AB4B632F5C4BA700FE3DD4 /* TransferProgressHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferProgressHUD.swift; sourceTree = "<group>"; };
 		31AF2B0E2F6C2F03002C7D38 /* PresenterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenterService.swift; sourceTree = "<group>"; };
 		31AF2B102F6C9712002C7D38 /* SystemVolumeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemVolumeService.swift; sourceTree = "<group>"; };
+		31E059DC2F7044540019F4FE /* WaveSeekBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveSeekBar.swift; sourceTree = "<group>"; };
 		31E1E1BC2F2C83DE002158D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		31F3A14F293B5EA300550088 /* Soduto Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Soduto Share.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		31F3A153293B5EA300550088 /* ShareExtensionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionController.swift; sourceTree = "<group>"; };
@@ -512,6 +514,7 @@
 				31332A322F6CCE190085A93A /* PlayerRowView.swift */,
 				317F28E22F6E34E40084B108 /* SinkRowView.swift */,
 				31332A342F6CCE320085A93A /* SystemVolumeSectionView.swift */,
+				31E059DC2F7044540019F4FE /* WaveSeekBar.swift */,
 			);
 			path = Dashboard;
 			sourceTree = "<group>";
@@ -1193,6 +1196,7 @@
 				84FA45E41DDDDB7F00EF3992 /* InterfaceElementTags.swift in Sources */,
 				849237A31DE4E76E00D95BBA /* UserNotificationManager.swift in Sources */,
 				845BE2E21EC246EE00F3BD62 /* LoadingWindowController.swift in Sources */,
+				31E059DD2F7044540019F4FE /* WaveSeekBar.swift in Sources */,
 				84651A761E5AEBE100D17601 /* SftpService.swift in Sources */,
 				84FFDA2A1E1D8D370069AC9A /* SimplePing.m in Sources */,
 				311BC28F2F2865A200E4A33F /* UserNotificationHelper.swift in Sources */,

@@ -54,24 +54,19 @@ final class DeviceDashboardModel: ObservableObject {
         self.batteryService = batteryService
         self.connectivityReportService = connectivityReportService
 
-        mediaPlayerService?.$players
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.rebuildDevices() }
-            .store(in: &cancellables)
+        // Merge all service-change signals and debounce so rapid-fire packets
+        // (battery every 3-8s, connectivity, player list) coalesce into a single
+        // rebuildDevices() call instead of hammering the SwiftUI view tree.
+        let serviceChanges: [AnyPublisher<Void, Never>] = [
+            mediaPlayerService?.$players.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            systemVolumeService?.$remoteSinks.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            batteryService?.$statuses.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            connectivityReportService?.$statuses.dropFirst().map { _ in () }.eraseToAnyPublisher()
+        ].compactMap { $0 }
 
-        systemVolumeService?.$remoteSinks
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.rebuildDevices() }
-            .store(in: &cancellables)
-
-        batteryService?.$statuses
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.rebuildDevices() }
-            .store(in: &cancellables)
-
-        connectivityReportService?.$statuses
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.rebuildDevices() }
+        Publishers.MergeMany(serviceChanges)
+            .debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)
+            .sink { [weak self] in self?.rebuildDevices() }
             .store(in: &cancellables)
 
         rebuildDevices()
