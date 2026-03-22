@@ -167,20 +167,16 @@ struct PlayerRowView: View {
                 .frame(width: 200, height: 200)
             
             VStack(spacing: 4) {
-                Text(player.displayTitle)
-                    .font(.headline)
-                    .lineLimit(2)
+                MarqueeText(text: player.displayTitle, font: .headline)
                 let artistAlbum = [player.artist, player.album]
                     .compactMap { $0.flatMap { $0.isEmpty ? nil : $0 } }
                     .joined(separator: " • ")
                 if !artistAlbum.isEmpty {
-                    Text(artistAlbum)
-                        .font(.subheadline)
+                    MarqueeText(text: artistAlbum, font: .subheadline)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: 200)
         }
         .padding(16)
     }
