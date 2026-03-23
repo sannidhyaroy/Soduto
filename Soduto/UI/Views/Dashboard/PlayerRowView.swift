@@ -14,7 +14,6 @@ struct PlayerRowView: View {
     
     @State private var isExpanded: Bool
     @State private var showArtworkPopover = false
-    @State private var muteVolume: Int = 0
     
     // Pending command state: each pair holds the optimistic value and a timeout task
     // that reverts it with an error toast if the device doesn't confirm within 3s
@@ -32,6 +31,8 @@ struct PlayerRowView: View {
     @State private var pendingTrackTask: Task<Void, Never>? = nil
     @State private var isDraggingVolume = false
     @State private var draggingVolume: Double = 0
+    @State private var isMuted = false
+    @State private var premuteVolume = 0
     
     init(player: PlayerRemote, model: DeviceDashboardModel) {
         self.player = player
@@ -106,7 +107,6 @@ struct PlayerRowView: View {
                 VStack(spacing: 12) {
                     transportControls
                     if player.length > 0 { seekBar }
-                    if player.supportsVolume { volumeSlider }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -134,6 +134,7 @@ struct PlayerRowView: View {
                 pendingVolumeTask?.cancel()
                 pendingVolumeTask = nil
             }
+            if newValue > 0 && isMuted { isMuted = false }
         }
         .onChange(of: player.shuffle) { _, newValue in
             if let pending = pendingShuffle, newValue == pending {
@@ -238,29 +239,57 @@ struct PlayerRowView: View {
                 .disabled(!player.canGoNext)
             }
             
-            // Side buttons (float over center to avoid affecting its centering)
+            // Side controls (float over center to avoid affecting its centering)
             HStack {
-                if player.supportsShuffle {
+                // Left: shuffle + stop + loop (always shown; disabled when not supported)
+                HStack(spacing: 12) {
                     Button { sendShuffle() } label: {
                         Image(systemName: "shuffle")
                             .font(.system(size: 14))
                             .foregroundStyle(effectiveShuffle ? Color.accentColor : Color.secondary)
                     }
-                }
-                
-                Spacer()
-                
-                Button { sendStop() } label: {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.secondary)
-                }
-                
-                if player.supportsLoopStatus {
+                    .disabled(!player.supportsShuffle)
+                    
+                    Button { sendStop() } label: {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.secondary)
+                    }
+                    
                     Button { sendLoop() } label: {
                         Image(systemName: effectiveLoopStatus == "Track" ? "repeat.1" : "repeat")
                             .font(.system(size: 14))
                             .foregroundStyle(effectiveLoopStatus == "None" ? Color.secondary : Color.accentColor)
+                    }
+                    .disabled(!player.supportsLoopStatus)
+                }
+                
+                Spacer()
+                
+                // Right: compact volume control
+                if player.supportsVolume {
+                    HStack(spacing: 4) {
+                        Button { toggleMute() } label: {
+                            Image(systemName: volumeIcon)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20, alignment: .leading)
+                        }
+                        .help("\(effectiveVolume)%")
+                        
+                        VolumeBar(
+                            value: Double(effectiveVolume),
+                            onChanging: { v in
+                                isDraggingVolume = true
+                                draggingVolume = v
+                            },
+                            onCommit: { v in
+                                isDraggingVolume = false
+                                isMuted = false
+                                sendVolume(Int(v))
+                            }
+                        )
+                        .frame(width: 48)
                     }
                 }
             }
@@ -295,67 +324,6 @@ struct PlayerRowView: View {
         .frame(height: 20)
     }
     
-    private var volumeSlider: some View {
-        let vol = effectiveVolume
-        return HStack(spacing: 8) {
-            Button {
-                if vol == 0 {
-                    sendVolume(muteVolume > 0 ? muteVolume : 50)
-                } else {
-                    muteVolume = vol
-                    sendVolume(0)
-                }
-            } label: {
-                Text("Volume")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .frame(width: 44, alignment: .leading)
-            
-            Button {
-                sendVolume(max(0, vol - 5))
-            } label: {
-                Image(systemName: "speaker.wave.1.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14)
-            }
-            .buttonStyle(.plain)
-            
-            Slider(
-                value: Binding(
-                    get: { Double(vol) },
-                    set: { v in isDraggingVolume = true; draggingVolume = v }
-                ),
-                in: 0...100,
-                step: 5,
-                onEditingChanged: { editing in
-                    if !editing {
-                        isDraggingVolume = false
-                        sendVolume(Int(draggingVolume))
-                    }
-                }
-            )
-            
-            Button {
-                sendVolume(min(100, vol + 5))
-            } label: {
-                Image(systemName: "speaker.wave.3.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14)
-            }
-            .buttonStyle(.plain)
-            
-            Text("\(vol)%")
-                .font(.caption2)
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-                .frame(width: 32, alignment: .trailing)
-                .monospacedDigit()
-        }
-    }
-    
     // MARK: - Effective (pending-aware) state
     
     private var effectiveIsPlaying: Bool { pendingIsPlaying ?? player.isPlaying }
@@ -363,6 +331,15 @@ struct PlayerRowView: View {
     private var effectiveLoopStatus: String { pendingLoopStatus ?? player.loopStatus }
     private var effectiveVolume: Int {
         isDraggingVolume ? Int(draggingVolume) : (pendingVolume ?? player.volume)
+    }
+    
+    private var volumeIcon: String {
+        if isMuted { return "speaker.slash.fill" }
+        let v = effectiveVolume
+        if v == 0  { return "speaker.fill" }
+        if v < 34  { return "speaker.wave.1.fill" }
+        if v < 67  { return "speaker.wave.2.fill" }
+        return "speaker.wave.3.fill"
     }
     
     // MARK: - Command Senders
@@ -447,6 +424,17 @@ struct PlayerRowView: View {
         model.setVolume(volume, for: player)
     }
     
+    private func toggleMute() {
+        if isMuted {
+            isMuted = false
+            sendVolume(premuteVolume)
+        } else if effectiveVolume > 0 {
+            premuteVolume = effectiveVolume
+            isMuted = true
+            sendVolume(0)
+        }
+    }
+    
     private func sendShuffle() {
         let newValue = !effectiveShuffle
         pendingShuffle = newValue
@@ -498,3 +486,4 @@ struct PlayerRowView: View {
         return String(format: "%d:%02d", s / 60, s % 60)
     }
 }
+

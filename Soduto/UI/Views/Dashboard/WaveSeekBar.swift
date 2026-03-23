@@ -70,6 +70,8 @@ final class WaveBarNSView: NSView {
     private var cachedAccentColor: CGColor    = NSColor.controlAccentColor.cgColor
     private var cachedSecondaryColor: CGColor = NSColor.secondaryLabelColor.cgColor
     private var cachedTertiaryColor: NSColor  = .tertiaryLabelColor
+    private var cachedCalloutBgColor: CGColor = NSColor.controlBackgroundColor.cgColor
+    private var cachedLabelColor: NSColor     = .labelColor
     private let labelFont: NSFont = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
     private lazy var labelAttributes: [NSAttributedString.Key: Any] = [
         .font: labelFont,
@@ -122,6 +124,7 @@ final class WaveBarNSView: NSView {
     private var isDragging: Bool     = false
     private var dragFraction: Double = 0
     private var mouseDownX: CGFloat  = 0
+    private var hoverX: CGFloat      = 0
     
     // MARK: Combine + callbacks
     
@@ -161,14 +164,16 @@ final class WaveBarNSView: NSView {
         for ta in trackingAreas { removeTrackingArea(ta) }
         addTrackingArea(NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeInActiveApp, .inVisibleRect],
             owner: self))
     }
     
     override func viewDidChangeEffectiveAppearance() {
-        cachedAccentColor = NSColor.controlAccentColor.cgColor
+        cachedAccentColor    = NSColor.controlAccentColor.cgColor
         cachedSecondaryColor = NSColor.secondaryLabelColor.cgColor
-        cachedTertiaryColor = .tertiaryLabelColor
+        cachedTertiaryColor  = .tertiaryLabelColor
+        cachedCalloutBgColor = NSColor.controlBackgroundColor.cgColor
+        cachedLabelColor     = .labelColor
         labelAttributes[.foregroundColor] = cachedTertiaryColor
         charSizeCache.removeAll()
         needsDisplay = true
@@ -341,6 +346,50 @@ final class WaveBarNSView: NSView {
             ctx.setFillColor(CGColor(gray: 1, alpha: combinedProg))
             ctx.fillEllipse(in: CGRect(x: tcx - tr, y: midY - tr, width: tr * 2, height: tr * 2))
         }
+        
+        // Hover time callout (shows seek target at the cursor position)
+        if isHovering && !isDragging && lengthMs > 0 {
+            let hoverFrac = barFraction(forX: hoverX)
+            let hoverMs   = Int(hoverFrac * Double(lengthMs))
+            let label     = formatMs(hoverMs)
+            let calloutAttrs: [NSAttributedString.Key: Any] = [
+                .font: labelFont,
+                .foregroundColor: cachedLabelColor
+            ]
+            let textSize = (label as NSString).size(withAttributes: calloutAttrs)
+            let hPad: CGFloat = 5, vPad: CGFloat = 2
+            let boxW = textSize.width + hPad * 2
+            let boxH = textSize.height + vPad * 2
+            let arrowW: CGFloat = 6, arrowH: CGFloat = 3
+            // Clamp callout center so it stays within the bar's horizontal span
+            let cx = max(barLeft + boxW / 2, min(barRight - boxW / 2, hoverX))
+            // In flipped coords: visually above the bar top = smaller y
+            let arrowTip = midY - barH / 2 - 3           // 3pt gap above bar top edge
+            let boxY     = arrowTip - arrowH - boxH
+            
+            ctx.saveGState()
+            
+            // Badge background + shadow
+            let boxPath = CGPath(roundedRect: CGRect(x: cx - boxW / 2, y: boxY, width: boxW, height: boxH), cornerWidth: 3, cornerHeight: 3, transform: nil)
+            ctx.setShadow(offset: CGSize(width: 0, height: -1), blur: 3, color: CGColor(gray: 0, alpha: 0.18))
+            ctx.setFillColor(cachedCalloutBgColor)
+            ctx.addPath(boxPath)
+            ctx.fillPath()
+            ctx.setShadow(offset: .zero, blur: 0)
+            
+            // Downward arrow
+            ctx.beginPath()
+            ctx.move(to: CGPoint(x: cx - arrowW / 2, y: arrowTip - arrowH))
+            ctx.addLine(to: CGPoint(x: cx + arrowW / 2, y: arrowTip - arrowH))
+            ctx.addLine(to: CGPoint(x: cx, y: arrowTip))
+            ctx.closePath()
+            ctx.fillPath()
+            
+            // Label text
+            (label as NSString).draw(at: NSPoint(x: cx - boxW / 2 + hPad, y: boxY + vPad), withAttributes: calloutAttrs)
+            
+            ctx.restoreGState()
+        }
     }
     
     // MARK: Label drawing
@@ -464,6 +513,11 @@ final class WaveBarNSView: NSView {
     override func mouseExited(with event: NSEvent) {
         isHovering = false
         if !isDragging { setInteraction(false) }
+    }
+    
+    override func mouseMoved(with event: NSEvent) {
+        hoverX = convert(event.locationInWindow, from: nil).x
+        needsDisplay = true
     }
     
     override func mouseDown(with event: NSEvent) {

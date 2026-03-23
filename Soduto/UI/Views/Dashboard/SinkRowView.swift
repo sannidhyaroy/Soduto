@@ -56,19 +56,10 @@ struct SinkRowView: View {
             .buttonStyle(.plain)
             .disabled(effectiveMuted)
             
-            Slider(
-                value: Binding(
-                    get: { Double(effectiveVolumePercent) },
-                    set: { v in isDragging = true; draggingVolume = v }
-                ),
-                in: 0...100,
-                step: 5,
-                onEditingChanged: { editing in
-                    if !editing {
-                        isDragging = false
-                        sendVolume(Int(draggingVolume))
-                    }
-                }
+            VolumeBar(
+                value: Double(effectiveVolumePercent),
+                onChanging: { v in isDragging = true; draggingVolume = v },
+                onCommit: { v in isDragging = false; sendVolume(Int(v)) }
             )
             .disabled(effectiveMuted)
             
@@ -82,12 +73,6 @@ struct SinkRowView: View {
             }
             .buttonStyle(.plain)
             .disabled(effectiveMuted)
-            
-            Text("\(effectiveVolumePercent)%")
-                .font(.caption2)
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-                .frame(width: 32, alignment: .trailing)
-                .monospacedDigit()
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
