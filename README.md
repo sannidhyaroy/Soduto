@@ -33,6 +33,7 @@
 - [Troubleshooting](#troubleshooting)
 - [Documentation & Resources](#documentation--resources)
 - [Get in touch](#get-in-touch)
+- [Star History](#star-history)
 - [FAQ](#faq)
 - [License](#license)
 ---
@@ -409,6 +410,19 @@ To ask a question, offer suggestions or share an idea, please use the [discussio
 If you spot any bugs or vulnerabilities, please [create an issue](https://github.com/sannidhyaroy/soduto/issues/). It's always a good idea to make sure there aren't any similar issues open, before creating a new one!
 
 ---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=sannidhyaroy%2FSoduto&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=sannidhyaroy/Soduto&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=sannidhyaroy/Soduto&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=sannidhyaroy/Soduto&type=date&legend=bottom-right" />
+ </picture>
+</a>
+
+---
+
 ## FAQ
 
 ### Is this the official version of Soduto?
