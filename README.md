@@ -411,6 +411,16 @@ If you spot any bugs or vulnerabilities, please [create an issue](https://github
 
 ---
 
+### Contributors
+
+This project only exists because of all the people who have contributed.
+
+<a href="https://github.com/sannidhyaroy/Soduto/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=sannidhyaroy/Soduto" />
+</a>
+
+---
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=sannidhyaroy%2FSoduto&type=date&legend=bottom-right">
