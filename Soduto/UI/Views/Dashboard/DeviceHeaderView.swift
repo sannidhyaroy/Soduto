@@ -36,12 +36,10 @@ struct DeviceHeaderView: View {
                             .aspectRatio(contentMode: .fit)
                             .frame(height: 13)
                     } else {
-                        Label(
-                            device.isReachable ? "Connected" : "Disconnected",
-                            systemImage: device.isReachable ? "wifi" : "wifi.slash"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(device.isReachable ? Color.green : Color.red)
+                        let label = device.isReachable ? "Connected" : (device.lastSeenDate.map { "Last seen \(shortTime($0))" } ?? "Disconnected")
+                        Label(label, systemImage: device.isReachable ? "wifi" : "wifi.slash")
+                            .font(.caption)
+                            .foregroundStyle(device.isReachable ? Color.green : Color.secondary)
                     }
                     
                     // Battery badge
@@ -58,5 +56,32 @@ struct DeviceHeaderView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
+    }
+    
+    // MARK: - Helpers
+    
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return f
+    }()
+    
+    private static let dateTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .medium
+        return f
+    }()
+    
+    private func shortTime(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return "today at \(Self.timeFormatter.string(from: date))"
+        } else if calendar.isDateInYesterday(date) {
+            return "yesterday at \(Self.timeFormatter.string(from: date))"
+        } else {
+            return Self.dateTimeFormatter.string(from: date)
+        }
     }
 }
