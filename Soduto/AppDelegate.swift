@@ -66,6 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: FindMyPhoneService())
         self.serviceManager.add(service: PresenterService())
         self.serviceManager.add(service: RemoteInputService())
+        self.serviceManager.add(service: DigitizerService())
         self.serviceManager.add(service: RemoteControlService())
         self.serviceManager.add(service: RunCommandService())
         self.serviceManager.add(service: MediaPlayerService())
