@@ -26,6 +26,8 @@ struct DashboardDevice: Identifiable {
     /// Connectivity status: used as an invalidation key so SwiftUI re-renders when it changes
     /// Views use `connectivityReportService.statusBarImage()` for the actual rendered image
     var connectivityStatus: [ConnectivityReportService.ConnectivityStatus]?
+    /// Remote device lock state, or `nil` if not yet reported by the device
+    var isLocked: Bool?
 }
 
 /// Central observable model for the Device Dashboard.
@@ -44,6 +46,7 @@ final class DeviceDashboardModel: ObservableObject {
     let systemVolumeService: SystemVolumeService?
     let batteryService: BatteryService?
     let connectivityReportService: ConnectivityReportService?
+    let lockService: LockService?
     
     private var cancellables: Set<AnyCancellable> = []
     /// Stamped when a device transitions from reachable → unreachable. Session-only.
@@ -57,12 +60,14 @@ final class DeviceDashboardModel: ObservableObject {
          mediaPlayerService: MediaPlayerService?,
          systemVolumeService: SystemVolumeService?,
          batteryService: BatteryService?,
-         connectivityReportService: ConnectivityReportService?) {
+         connectivityReportService: ConnectivityReportService?,
+         lockService: LockService?) {
         self.deviceDataSource = deviceDataSource
         self.mediaPlayerService = mediaPlayerService
         self.systemVolumeService = systemVolumeService
         self.batteryService = batteryService
         self.connectivityReportService = connectivityReportService
+        self.lockService = lockService
         
         // Merge all service-change signals and debounce so rapid-fire packets
         // (battery every 3-8s, connectivity, player list) coalesce into a single
@@ -71,7 +76,8 @@ final class DeviceDashboardModel: ObservableObject {
             mediaPlayerService?.$players.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             systemVolumeService?.$remoteSinks.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             batteryService?.$statuses.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            connectivityReportService?.$statuses.dropFirst().map { _ in () }.eraseToAnyPublisher()
+            connectivityReportService?.$statuses.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            lockService?.$remoteLockStates.dropFirst().map { _ in () }.eraseToAnyPublisher()
         ].compactMap { $0 }
         
         Publishers.MergeMany(serviceChanges)
@@ -202,7 +208,8 @@ final class DeviceDashboardModel: ObservableObject {
                     players: players,
                     sinks: sinks,
                     batteryStatus: self.batteryService?.statuses[device.id],
-                    connectivityStatus: self.connectivityReportService?.statuses[device.id]
+                    connectivityStatus: self.connectivityReportService?.statuses[device.id],
+                    isLocked: self.lockService?.remoteLockStates[device.id]
                 )
             }
             .sorted { $0.device.name < $1.device.name }

@@ -20,13 +20,15 @@ final class DeviceDashboardWindowController: NSWindowController, NSWindowDelegat
          mediaPlayerService: MediaPlayerService?,
          systemVolumeService: SystemVolumeService?,
          batteryService: BatteryService?,
-         connectivityReportService: ConnectivityReportService?) {
+         connectivityReportService: ConnectivityReportService?,
+         lockService: LockService?) {
         let model = DeviceDashboardModel(
             deviceDataSource: deviceDataSource,
             mediaPlayerService: mediaPlayerService,
             systemVolumeService: systemVolumeService,
             batteryService: batteryService,
-            connectivityReportService: connectivityReportService
+            connectivityReportService: connectivityReportService,
+            lockService: lockService
         )
         self.model = model
         

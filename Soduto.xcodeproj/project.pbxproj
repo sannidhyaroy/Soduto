@@ -62,6 +62,7 @@
 		31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		31905C172F75F22900F259CE /* DigitizerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31905C162F75F22800F259CE /* DigitizerService.swift */; };
+		31905C192F76443300F259CE /* LockService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31905C182F76443300F259CE /* LockService.swift */; };
 		31905C202F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
 		31905C212F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
 		31905C222F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
@@ -308,6 +309,7 @@
 		317F28E22F6E34E40084B108 /* SinkRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SinkRowView.swift; sourceTree = "<group>"; };
 		31864DCE293C3CE100334902 /* SharedUserDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUserDefaults.swift; sourceTree = SOURCE_ROOT; };
 		31905C162F75F22800F259CE /* DigitizerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitizerService.swift; sourceTree = "<group>"; };
+		31905C182F76443300F259CE /* LockService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockService.swift; sourceTree = "<group>"; };
 		31905C1F2F78865B00F259CE /* Icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = Icon.icon; sourceTree = "<group>"; };
 		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
@@ -889,6 +891,7 @@
 				F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */,
 				31905C162F75F22800F259CE /* DigitizerService.swift */,
 				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
+				31905C182F76443300F259CE /* LockService.swift */,
 				31711BA72F17435000E3B9FE /* MediaPlayerService.swift */,
 				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
 				84FA45EC1DDF525200EF3992 /* PingService.swift */,
@@ -1177,6 +1180,7 @@
 				31332A2D2F6CCD6A0085A93A /* DeviceDetailView.swift in Sources */,
 				31F8A6042F4A53DC00CA5A61 /* PairingView.swift in Sources */,
 				84218DC81D789BAB00C7CEBE /* DeviceListItemView.swift in Sources */,
+				31905C192F76443300F259CE /* LockService.swift in Sources */,
 				311BC2912F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */,
 				F80E30722DBE0D880047D068 /* RemoteControlService.swift in Sources */,
 				84FA45E81DDE088B00EF3992 /* ServiceManager.swift in Sources */,

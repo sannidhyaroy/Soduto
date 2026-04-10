@@ -91,6 +91,10 @@ enum AppDefaultsStore {
                 static let base = "\(Services.base).systemvolume"
             }
             
+            enum Lock: ServiceToggle {
+                static let base = "\(Services.base).lock"
+            }
+            
             enum Presenter: ServiceIncomingToggle {
                 static let base = "\(Services.base).presenter"
             }
