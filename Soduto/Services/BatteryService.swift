@@ -184,7 +184,7 @@ public class BatteryService: BidirectionalService, ObservableObject {
         let subtitle = NSLocalizedString("Low Battery", comment: "notification title")
         let info = NSString(format: NSLocalizedString("%d%% of battery remaining", comment: "notification info") as NSString, status.currentCharge)
         
-        UserNotificationHelper.show(title: title, subtitle: subtitle, body: info as String, sound: true, id: self.notificationId(for: device), urgency: .active)
+        UserNotificationHelper.show(title: title, subtitle: subtitle, body: info as String, sound: true, id: self.notificationId(for: device), urgency: .active, threadIdentifier: "battery")
     }
     
     private func hideNotification(for device: Device) {

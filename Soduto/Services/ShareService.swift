@@ -560,7 +560,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     @discardableResult
     public func shareFromExtension(url: URL, to device: Device) -> ExtensionShareResult {
         guard device.isReachable && device.pairingStatus == .Paired else {
-            UserNotificationHelper.show(title: device.name, subtitle: "Outbound Transfer Failed", body: "\(device.name) is no longer reachable.", sound: true, id: "DeviceUnreachableUpload", urgency: .timeSensitive)
+            UserNotificationHelper.show(title: device.name, subtitle: "Outbound Transfer Failed", body: "\(device.name) is no longer reachable.", sound: true, id: "DeviceUnreachableUpload", urgency: .timeSensitive, threadIdentifier: "share")
             return .skipped
         }
         
@@ -590,7 +590,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
     /// Called by AppDelegate's upload observer when the Share extension signals text to share
     public func shareFromExtension(text: String, to device: Device) {
         guard device.isReachable && device.pairingStatus == .Paired else {
-            UserNotificationHelper.show(title: device.name, subtitle: "Outbound Transfer Failed", body: "\(device.name) is no longer reachable.", sound: true, id: "DeviceUnreachableUpload", urgency: .timeSensitive)
+            UserNotificationHelper.show(title: device.name, subtitle: "Outbound Transfer Failed", body: "\(device.name) is no longer reachable.", sound: true, id: "DeviceUnreachableUpload", urgency: .timeSensitive, threadIdentifier: "share")
             return
         }
         let dataPacket = self.dataPacket(forText: text)
@@ -870,6 +870,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         content.subtitle = subtitle
         content.body = body
         content.sound = sound
+        content.threadIdentifier = "share"
         content.setUrgency(urgency)
         if let url = fileUrl {
             content.userInfo = [

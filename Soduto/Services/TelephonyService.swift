@@ -213,6 +213,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             notification.subtitle = displayName.isEmpty ? "Incoming call" : "Incoming call from \(displayName)"
             notification.sound = .default
             notification.categoryIdentifier = "IncomingCall"
+            notification.threadIdentifier = "telephony"
             notification.setUrgency(.timeSensitive)
             
             if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
@@ -253,6 +254,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             notification.title = device.name
             notification.subtitle = "Missed a call from \(displayName)"
             notification.sound = .default
+            notification.threadIdentifier = "telephony"
             notification.setUrgency(.active)
             
             if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
@@ -318,6 +320,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 notification.subtitle = displayName.isEmpty ? "New SMS message" : "SMS from \(displayName)"
                 notification.body = messageBody
                 notification.sound = .default
+                notification.threadIdentifier = "telephony"
                 notification.setUrgency(.active)
                 
                 if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Messages")) {

@@ -955,6 +955,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         notification.title = "\(appName) | \(device.name)"
         notification.subtitle = title ?? ""
         notification.body = body ?? ticker
+        notification.threadIdentifier = "\(device.id).\(appName)"
         
         let hasReply = replyId != nil
         let actionTitles = Array(filteredActions.prefix(3))

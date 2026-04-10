@@ -113,6 +113,7 @@ public class PingService: Service {
         notification.title = device.name
         notification.body = (try? dataPacket.getMessage()) ?? "Device was pinged for testing connection status!"
         notification.sound = .default
+        notification.threadIdentifier = "ping"
         notification.setUrgency(.active)
         
         let id = "\(self.id).\(device.id)"
