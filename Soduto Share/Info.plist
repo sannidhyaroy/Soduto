@@ -1,20 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-    <dict>
-        <key>TeamIdentifierPrefix</key>
-        <string>$(TeamIdentifierPrefix)</string>
-        <key>NSExtension</key>
-        <dict>
-            <key>NSExtensionAttributes</key>
-            <dict>
-                <key>NSExtensionActivationRule</key>
-                <string>SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $att, (ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.data" OR ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url" OR ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.text") AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.directory" AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.package" AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.symlink" AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.volume" AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.folder").@count >= 1).@count >= 1</string>
-            </dict>
-            <key>NSExtensionPointIdentifier</key>
-            <string>com.apple.share-services</string>
-            <key>NSExtensionPrincipalClass</key>
-            <string>$(PRODUCT_MODULE_NAME).ShareExtensionController</string>
-        </dict>
-    </dict>
+<dict>
+	<key>CFBundleIconFile</key>
+	<string>Icon</string>
+	<key>TeamIdentifierPrefix</key>
+	<string>$(TeamIdentifierPrefix)</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>NSExtensionActivationRule</key>
+			<string>SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $att, (ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO &quot;public.data&quot; OR ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO &quot;public.url&quot; OR ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO &quot;public.text&quot;) AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO &quot;public.directory&quot; AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO &quot;com.apple.package&quot; AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO &quot;public.symlink&quot; AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO &quot;public.volume&quot; AND NOT ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO &quot;public.folder&quot;).@count &gt;= 1).@count &gt;= 1</string>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.share-services</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).ShareExtensionController</string>
+	</dict>
+</dict>
 </plist>

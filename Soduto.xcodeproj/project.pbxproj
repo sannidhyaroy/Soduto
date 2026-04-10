@@ -61,6 +61,10 @@
 		317F28E32F6E34E40084B108 /* SinkRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317F28E22F6E34E40084B108 /* SinkRowView.swift */; };
 		31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
+		31905C202F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
+		31905C212F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
+		31905C222F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
+		31905C232F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
 		319320BC2F66402700A46DD9 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 319320BB2F66402700A46DD9 /* MediaRemoteAdapter */; };
 		319320BD2F6640E700A46DD9 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 319320BB2F66402700A46DD9 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		319CBA282939662400DAE301 /* Phone.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA272939662400DAE301 /* Phone.png */; };
@@ -302,6 +306,7 @@
 		31711BAB2F17638000E3B9FE /* ImageLoader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImageLoader.swift; sourceTree = "<group>"; };
 		317F28E22F6E34E40084B108 /* SinkRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SinkRowView.swift; sourceTree = "<group>"; };
 		31864DCE293C3CE100334902 /* SharedUserDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUserDefaults.swift; sourceTree = SOURCE_ROOT; };
+		31905C1F2F78865B00F259CE /* Icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = Icon.icon; sourceTree = "<group>"; };
 		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
 		31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetView.swift; sourceTree = "<group>"; };
@@ -681,6 +686,7 @@
 				8454D12C1D34228D00788632 /* Soduto-Bridging-Header.h */,
 				0236D2B81F9CFB2500E0F6A6 /* Acknowledgements.html */,
 				0236D2AD1F9CFB1A00E0F6A6 /* License.html */,
+				31905C1F2F78865B00F259CE /* Icon.icon */,
 				8433016A1D2D8CB8008934BB /* Info.plist */,
 				84FA45E51DDDE87F00EF3992 /* AppDelegate.swift */,
 				8438A9251E45145F00922155 /* StatusBarApplication.swift */,
@@ -1078,6 +1084,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				31905C222F78865B00F259CE /* Icon.icon in Resources */,
 				31E1E1BD2F2C83DE002158D0 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1100,6 +1107,7 @@
 				023382B31F8D58AC00A832DD /* AboutWindow.storyboard in Resources */,
 				319CBA282939662400DAE301 /* Phone.png in Resources */,
 				843301691D2D8CB8008934BB /* MainMenu.xib in Resources */,
+				31905C232F78865B00F259CE /* Icon.icon in Resources */,
 				024B435F1F23BEEB00037A33 /* PreferencesWindow.storyboard in Resources */,
 				842506371ED3692300AEE25F /* WelcomeWindow.storyboard in Resources */,
 			);
@@ -1110,6 +1118,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8435AEFF1E26DD27005CD719 /* Assets.xcassets in Resources */,
+				31905C202F78865B00F259CE /* Icon.icon in Resources */,
 				8435AF021E26DD27005CD719 /* MainMenu.xib in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1120,6 +1129,7 @@
 			files = (
 				0236D2BB1F9D067A00E0F6A6 /* Acknowledgements.html in Resources */,
 				0236D2BC1F9D067A00E0F6A6 /* License.html in Resources */,
+				31905C212F78865B00F259CE /* Icon.icon in Resources */,
 				849927811E6C5CA600AF8CF4 /* IconItem.xib in Resources */,
 				845BC7281E6A062900DC9B81 /* BrowserWindow.xib in Resources */,
 				845BC70F1E69F00E00DC9B81 /* Assets.xcassets in Resources */,
@@ -1583,7 +1593,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Soduto/Soduto.entitlements;
 				CODE_SIGN_IDENTITY = "Mac Developer";
@@ -1614,7 +1624,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Soduto/Soduto.entitlements;
 				CODE_SIGN_IDENTITY = "Mac Developer";
@@ -1643,7 +1653,7 @@
 		8435AF051E26DD27005CD719 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = SodutoLauncher/SodutoLauncher.entitlements;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
@@ -1663,7 +1673,7 @@
 		8435AF061E26DD27005CD719 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = SodutoLauncher/SodutoLauncher.entitlements;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
@@ -1683,7 +1693,7 @@
 		845BC7141E69F00E00DC9B81 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = "Soduto Files/Soduto_Files.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
@@ -1709,7 +1719,7 @@
 		845BC7151E69F00E00DC9B81 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Icon;
 				CODE_SIGN_ENTITLEMENTS = "Soduto Files/Soduto_Files.entitlements";
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
