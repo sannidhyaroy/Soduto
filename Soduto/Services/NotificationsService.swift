@@ -25,14 +25,20 @@ import UserNotifications
 /// The received packages will contain the following fields:
 ///
 /// "id" (string): A unique notification id.
-/// "appName" (string): The app that generated the notification
-/// "ticker" (string): The title or headline of the notification.
+/// "appName" (string): The app that generated the notification.
+/// "ticker" (string): Brief summary of the notification.
+/// "title" (string, optional): Notification title (e.g., sender name in messaging apps).
+/// "text" (string, optional): Full notification body text.
 /// "isClearable" (boolean): True if we can request to dismiss the notification.
 /// "isCancel" (boolean): True if the notification was dismissed in the peer device.
-/// "requestAnswer" (boolean): True if this is an answer to a "request" package.
+/// "silent" (boolean): True if the notification is pre-existing (not fresh).
+/// "actions" (string[], optional): Available action buttons.
+/// "requestReplyId" (string, optional): UUID for repliable notifications (e.g., chat replies).
+/// "payloadHash" (string, optional): MD5 hash of the notification icon (requires payload download).
+/// "groupName" (string, optional): Group name for group conversation messages.
+/// "conversation" ([{sender, content}], optional): Message history for messaging-style notifications.
 ///
-/// Additionally the package can contain a payload with the icon of the notification
-/// in PNG format.
+/// Additionally the package can contain a payload with the icon of the notification in PNG format.
 ///
 /// The content of these fields is used to display the notifications to the user.
 /// Note that if we receive a second notification with the same "id", we should
@@ -892,10 +898,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         for dataPacket: DataPacket,
         from device: Device,
         of packetNotificationId: String,
+        conversation: [DataPacket.ConversationMessage]?,
         isSilent: Bool,
         dontPresent: Bool,
         title: String?,
         body: String?,
+        groupName: String?,
         ticker: String,
         appName: String,
         replyId: String?,
@@ -953,8 +961,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         notification.userInfo = userInfo
         notification.title = "\(appName) | \(device.name)"
-        notification.subtitle = title ?? ""
-        notification.body = body ?? ticker
+        
+        (notification.subtitle, notification.body) = renderNotificationContent(
+            title: title,
+            body: body,
+            ticker: ticker,
+            groupName: groupName,
+            conversation: conversation
+        )
         notification.threadIdentifier = "\(device.id).\(appName)"
         
         let hasReply = replyId != nil
@@ -981,6 +995,59 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
         
         return notification
+    }
+    
+    /// Renders the subtitle and body for a notification, with conversation-aware formatting.
+    ///
+    /// Conversation rendering follows KDE Desktop's approach:
+    ///  - **Group conversation** (groupName present): subtitle = groupName, body shows sender labels
+    ///    only when the sender changes between consecutive messages.
+    ///  - **1:1 conversation** (no groupName): subtitle = first message's sender (or existing title),
+    ///    body shows message content only (single sender, no labels needed).
+    ///  - **Non-conversation**: subtitle = title, body = text (or ticker fallback).
+    ///
+    /// - Parameters:
+    ///   - title: The notification title (e.g., sender name in messaging apps)
+    ///   - body: The notification body text
+    ///   - ticker: The notification summary (fallback)
+    ///   - groupName: The group name if this is a group conversation
+    ///   - conversation: Message history array if this is a conversation notification
+    /// - Returns: A tuple of (subtitle, body) for the notification content
+    private func renderNotificationContent(
+        title: String?,
+        body: String?,
+        ticker: String,
+        groupName: String?,
+        conversation: [DataPacket.ConversationMessage]?
+    ) -> (subtitle: String, body: String) {
+        guard let messages = conversation, !messages.isEmpty else {
+            return (subtitle: groupName ?? title ?? "", body: body ?? ticker)
+        }
+        
+        let isGroup = groupName != nil
+        let subtitle = isGroup ? groupName! : (messages.first?.sender ?? title ?? "")
+        
+        var lines: [String] = []
+        var previousSender: String? = subtitle
+        for message in messages {
+            guard !message.content.isEmpty else { continue }
+            if isGroup {
+                if message.sender != previousSender {
+                    lines.append("\(message.sender): \(message.content)")
+                    previousSender = message.sender
+                } else {
+                    lines.append("  \(message.content)")
+                }
+            } else if message.sender != subtitle {
+                // 1:1: mark non-contact messages with › (e.g. the user's own replies)
+                lines.append("› \(message.content)")
+            } else {
+                lines.append(message.content)
+            }
+        }
+        let renderedBody = lines.isEmpty ? (body ?? ticker) : lines.joined(separator: "\n")
+        
+        return (subtitle: subtitle, body: renderedBody)
     }
     
     private func showNotification(for dataPacket: DataPacket, from device: Device) async {
@@ -1011,6 +1078,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             
             let title = try dataPacket.getTitle()
             let body = try dataPacket.getText()
+            let groupName = try dataPacket.getGroupName()
+            let conversation = try dataPacket.getConversation()
             let replyId = try dataPacket.getReplyRequestId()
             let actions = try dataPacket.getActions()
             let isAnswer = try dataPacket.getAnswerFlag()
@@ -1021,8 +1090,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let shouldShow = await MainActor.run { () -> Bool in
                 let isAlreadyDisplayed = state.notificationIds[device.id]?.contains(notificationId) ?? false
                 
-                /// Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content)
-                let contentForHash = body ?? ticker
+                /// Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content).
+                /// For conversations, hash includes all message content so new messages in the thread trigger an update.
+                let contentForHash: String
+                if let conversation = conversation, !conversation.isEmpty {
+                    contentForHash = conversation.map { "\($0.sender)\u{1F}\($0.content)" }.joined(separator: "\u{1E}")
+                } else {
+                    contentForHash = body ?? ticker
+                }
                 let currentContentHash = StableHashing.sha256(contentForHash)
                 let previousContentHash = state.notificationContentHashes[notificationId]
                 let isContentChanged = previousContentHash == nil || previousContentHash != currentContentHash
@@ -1061,10 +1136,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 for: dataPacket,
                 from: device,
                 of: packetNotificationId,
+                conversation: conversation,
                 isSilent: isSilent,
                 dontPresent: dontPresent,
                 title: title,
                 body: body,
+                groupName: groupName,
                 ticker: ticker,
                 appName: appName,
                 replyId: replyId,
@@ -1392,6 +1469,10 @@ fileprivate extension DataPacket {
         case invalidReplyIdRequest
         case invalidId
         case invalidAppName
+        case invalidGroupName
+        case invalidTitle
+        case invalidConversation
+        case invalidText
         case invalidTicker
         case invalidActions
         case invalidClearableFlag
@@ -1419,13 +1500,21 @@ fileprivate extension DataPacket {
         case appName = "appName"             /// (string): The app that generated the notification
         case title = "title"                 /// (string): The notification title (e.g., sender name in messaging apps)
         case text = "text"                   /// (string): The full notification body text (may contain newlines for message history)
+        case groupName = "groupName"         /// (string): The group name if the notification is a group conversation message
         case ticker = "ticker"               /// (string): The notification summary
+        case conversation = "conversation"   /// (array): List of {sender, content} messages if the notification is a conversation
         case actions = "actions"             /// (string array): The available actions of the notification.
         case isClearable = "isClearable"     /// (boolean): True if we can request to dismiss the notification.
         case isCancel = "isCancel"           /// (boolean): True if the notification was dismissed in the peer device.
         case requestAnswer = "requestAnswer" /// (boolean): True if this is an answer to a "request" package.
         case silent = "silent"               /// (boolean): True if this notification should be silent.
         case payloadHash = "payloadHash"     /// (string): The hash of the payload
+    }
+    
+    /// Represents a single message in a conversation notification.
+    struct ConversationMessage {
+        let sender: String
+        let content: String
     }
     
     
@@ -1501,6 +1590,29 @@ fileprivate extension DataPacket {
         return value
     }
     
+    /// Gets the group name for group conversation notifications (e.g., a Signal group chat name).
+    func getGroupName() throws -> String? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.groupName.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.groupName.rawValue] as? String else { throw NotificationError.invalidGroupName }
+        return value.isEmpty ? nil : value
+    }
+    
+    /// Gets the conversation message history from messaging-style notifications.
+    /// Returns nil if the field is absent. Messages with missing sender or content are skipped.
+    func getConversation() throws -> [ConversationMessage]? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.conversation.rawValue) else { return nil }
+        guard let array = body[NotificationProperty.conversation.rawValue] as? [[String: Any]] else { throw NotificationError.invalidConversation }
+        
+        var messages: [ConversationMessage] = []
+        for obj in array {
+            guard let sender = obj["sender"] as? String, let content = obj["content"] as? String else { continue }
+            messages.append(ConversationMessage(sender: sender, content: content))
+        }
+        return messages
+    }
+    
     /// Gets the notification ticker (a brief summary, e.g., "Sender: message")
     func getTicker() throws -> String? {
         try self.validateNotificationType()
@@ -1513,7 +1625,7 @@ fileprivate extension DataPacket {
     func getTitle() throws -> String? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.title.rawValue) else { return nil }
-        guard let value = body[NotificationProperty.title.rawValue] as? String else { return nil }
+        guard let value = body[NotificationProperty.title.rawValue] as? String else { throw NotificationError.invalidTitle }
         return value
     }
     
@@ -1521,7 +1633,7 @@ fileprivate extension DataPacket {
     func getText() throws -> String? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.text.rawValue) else { return nil }
-        guard let value = body[NotificationProperty.text.rawValue] as? String else { return nil }
+        guard let value = body[NotificationProperty.text.rawValue] as? String else { throw NotificationError.invalidText }
         return value
     }
     
