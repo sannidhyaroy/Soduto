@@ -11,6 +11,7 @@ import SwiftUI
 struct PlayerRowView: View {
     @ObservedObject var player: PlayerRemote
     @ObservedObject var model: DeviceDashboardModel
+    var isReachable: Bool = true
     
     @State private var isExpanded: Bool
     @State private var showArtworkPopover = false
@@ -34,9 +35,10 @@ struct PlayerRowView: View {
     @State private var isMuted = false
     @State private var premuteVolume = 0
     
-    init(player: PlayerRemote, model: DeviceDashboardModel) {
+    init(player: PlayerRemote, model: DeviceDashboardModel, isReachable: Bool = true) {
         self.player = player
         self.model = model
+        self.isReachable = isReachable
         self._isExpanded = State(initialValue: player.isPlaying)
     }
     
@@ -84,7 +86,7 @@ struct PlayerRowView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .disabled(!player.canPlay && !player.canPause)
+                .disabled(!isReachable || (!player.canPlay && !player.canPause))
                 
                 Button {
                     withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
@@ -108,6 +110,7 @@ struct PlayerRowView: View {
                     transportControls
                     if player.length > 0 { seekBar }
                 }
+                .disabled(!isReachable)
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 14)

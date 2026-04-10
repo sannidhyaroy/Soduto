@@ -16,8 +16,10 @@ struct DashboardDevice: Identifiable {
     var isReachable: Bool
     /// Stamped when this device last transitioned from reachable → unreachable
     var lastSeenDate: Date?
-    /// Remote players reported by MediaPlayerService for this device
+    /// Remote players; frozen at last-known state when unreachable
     var players: [PlayerRemote]
+    /// Audio sinks; frozen at last-known state when unreachable
+    var sinks: [String: SystemVolumeService.AudioSink]
     /// Battery status: used as an invalidation key so SwiftUI re-renders when it changes
     /// Views use `batteryService.statusBarImage()` for the actual rendered image
     var batteryStatus: BatteryService.BatteryStatus?
@@ -44,8 +46,12 @@ final class DeviceDashboardModel: ObservableObject {
     let connectivityReportService: ConnectivityReportService?
     
     private var cancellables: Set<AnyCancellable> = []
-    /// Stamped when a device transitions from reachable → unreachable
+    /// Stamped when a device transitions from reachable → unreachable. Session-only.
     private var lastSeenDates: [Device.Id: Date] = [:]
+    /// Last-known players before service cleared them on disconnect.
+    private var cachedPlayers: [Device.Id: [PlayerRemote]] = [:]
+    /// Last-known sinks before service cleared them on disconnect.
+    private var cachedSinks: [Device.Id: [String: SystemVolumeService.AudioSink]] = [:]
     
     init(deviceDataSource: DeviceDataSource,
          mediaPlayerService: MediaPlayerService?,
@@ -71,6 +77,34 @@ final class DeviceDashboardModel: ObservableObject {
         Publishers.MergeMany(serviceChanges)
             .debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)
             .sink { [weak self] in self?.rebuildDevices() }
+            .store(in: &cancellables)
+        
+        // Use .scan to observe (previous, new) pairs so we can capture last-known
+        // player/sink state at the exact moment the service clears it on disconnect.
+        // This fires synchronously on the main thread when @Published changes.
+        mediaPlayerService?.$players
+            .scan(([Device.Id: [PlayerRemote]](), [Device.Id: [PlayerRemote]]())) { ($0.1, $1) }
+            .sink { [weak self] old, new in
+                guard let self else { return }
+                for id in old.keys where new[id] == nil || new[id]!.isEmpty {
+                    if let players = old[id], !players.isEmpty {
+                        self.cachedPlayers[id] = players
+                    }
+                }
+            }
+            .store(in: &cancellables)
+        
+        systemVolumeService?.$remoteSinks
+            .scan(([Device.Id: [String: SystemVolumeService.AudioSink]](),
+                   [Device.Id: [String: SystemVolumeService.AudioSink]]())) { ($0.1, $1) }
+            .sink { [weak self] old, new in
+                guard let self else { return }
+                for id in old.keys where new[id] == nil || new[id]!.isEmpty {
+                    if let sinks = old[id], !sinks.isEmpty {
+                        self.cachedSinks[id] = sinks
+                    }
+                }
+            }
             .store(in: &cancellables)
         
         rebuildDevices()
@@ -151,12 +185,22 @@ final class DeviceDashboardModel: ObservableObject {
             }
             
             self.devices = allPaired.map { device in
+                let isNowReachable = reachableIds.contains(device.id)
+                // Use live service data when reachable; fall back to cache when offline
+                // so the UI shows a frozen but meaningful last-known state.
+                let players = isNowReachable
+                ? (self.mediaPlayerService?.players[device.id] ?? [])
+                : (self.cachedPlayers[device.id] ?? [])
+                let sinks = isNowReachable
+                ? (self.systemVolumeService?.remoteSinks[device.id] ?? [:])
+                : (self.cachedSinks[device.id] ?? [:])
                 return DashboardDevice(
                     id: device.id,
                     device: device,
-                    isReachable: reachableIds.contains(device.id),
+                    isReachable: isNowReachable,
                     lastSeenDate: self.lastSeenDates[device.id],
-                    players: self.mediaPlayerService?.players[device.id] ?? [],
+                    players: players,
+                    sinks: sinks,
                     batteryStatus: self.batteryService?.statuses[device.id],
                     connectivityStatus: self.connectivityReportService?.statuses[device.id]
                 )

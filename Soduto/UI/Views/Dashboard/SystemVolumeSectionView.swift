@@ -16,15 +16,18 @@ struct SystemVolumeSectionView: View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHeader(title: "Device Volume")
             
-            if let sinks = model.systemVolumeService?.remoteSinks[device.id], !sinks.isEmpty {
-                ForEach(sinks.sorted(by: { $0.key < $1.key }), id: \.key) { sinkName, sink in
+            if !device.sinks.isEmpty {
+                let sorted = device.sinks.sorted(by: { $0.key < $1.key })
+                ForEach(sorted, id: \.key) { sinkName, sink in
                     SinkRowView(sink: sink, device: device, model: model)
                     
-                    if sinkName != sinks.keys.sorted().last {
+                    if sinkName != sorted.last?.key {
                         Divider()
                             .padding(.horizontal, 20)
                     }
                 }
+                .disabled(!device.isReachable)
+                .opacity(device.isReachable ? 1 : 0.4)
             } else {
                 Text("No audio outputs available")
                     .font(.callout)

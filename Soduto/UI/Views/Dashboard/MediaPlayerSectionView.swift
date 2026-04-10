@@ -24,7 +24,7 @@ struct MediaPlayerSectionView: View {
                     .padding(.vertical, 20)
             } else {
                 ForEach(device.players, id: \.identity) { player in
-                    PlayerRowView(player: player, model: model)
+                    PlayerRowView(player: player, model: model, isReachable: device.isReachable)
                     
                     if player.identity != device.players.last?.identity {
                         Divider()
@@ -32,6 +32,7 @@ struct MediaPlayerSectionView: View {
                             .padding(.trailing, 20)
                     }
                 }
+                .opacity(device.isReachable ? 1 : 0.4)
             }
         }
     }
