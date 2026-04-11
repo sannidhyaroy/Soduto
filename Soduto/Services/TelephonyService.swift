@@ -51,7 +51,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     
     private var pendingSMSPackets: [String:([DataPacket], Timer)] = [:]
     private lazy var sendMessageController = SendMessageWindowController.loadController()
-    private let audioManager = AudioManager()
+    private let mediaController = SystemMediaController()
     
     /// IDs of devices for which this service is currently set up
     private var connectedDeviceIds = Set<String>()
@@ -83,6 +83,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             if try dataPacket.getCancelFlag() {
                 self.hideNotification(for: dataPacket, from: device)
                 self.dismissOngoingCallHUD(for: device)
+                self.mediaController.resume()
             }
             else if let event = try dataPacket.getEvent() ?? nil {
                 switch event {
@@ -95,6 +96,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 case DataPacket.TelephonyEvent.talking.rawValue:
                     self.hideNotification(for: dataPacket, from: device)
                     self.showOngoingCallHUD(for: dataPacket, from: device)
+                    self.mediaController.pause()
                     break
                 case DataPacket.TelephonyEvent.sms.rawValue:
                     self.handleSMSPacket(dataPacket, from: device)
@@ -264,9 +266,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         guard dataPacket.isTelephonyPacket else { return }
         guard (try? dataPacket.getEvent()) == DataPacket.TelephonyEvent.ringing.rawValue else { return }
         
-        // Handle audio settings for ringing call
-        handleRingingCallAudio()
-        
         do {
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
             let phoneNumber = try dataPacket.getPhoneNumber() ?? "Unknown Number"
@@ -414,19 +413,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
         
         guard let id = self.notificationId(for: dataPacket, from: device) else { return }
-        
-        // If this is handling a ringing call that ended, restore audio state
-        do {
-            if let event = try dataPacket.getEvent() {
-                if event == DataPacket.TelephonyEvent.ringing.rawValue || event == DataPacket.TelephonyEvent.talking.rawValue {
-                    // Restore audio state when call ends
-                    restoreAudioState()
-                }
-            }
-        } catch {
-            Logger.services.error("Error determining call event type: \(error, privacy: .public)")
-        }
-        
         un.removeNotification(withId: id)
         
         Logger.services.debug("Notification hidden: \(id, privacy: .public)")
@@ -474,19 +460,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         pendingSMSPackets[id] = (packets, timer)
     }
     
-    // MARK: - Call Audio Handling Methods
-    
-    /// Handle audio settings for incoming (ringing) calls
-    private func handleRingingCallAudio() {
-        // Always pause media for incoming calls
-        audioManager.pauseAllMedia()
-    }
-    
-    /// Restore audio settings when call ends
-    private func restoreAudioState() {
-        // Resume media playback
-        audioManager.resumeAllMedia()
-    }
 }
 
 
@@ -608,64 +581,5 @@ fileprivate extension DataPacket {
     
     func validateTelephonyOrSmsRequestType() throws {
         guard self.isTelephonyPacket || self.isSmsRequestPacket else { throw TelephonyError.wrongType }
-    }
-}
-
-/// AudioManager handles media playback control
-/// for call handling in TelephonyService
-class AudioManager {
-    
-    // MARK: Properties
-    
-    private var mediaPlayersWerePaused: [String: Bool] = [:]
-    
-    // MARK: Media Playback Control Methods
-    
-    /// Pause all currently playing media
-    func pauseAllMedia() {
-        // Only send the pause event if it's not already paused
-        if !mediaPlayersWerePaused.isEmpty {
-            return
-        }
-        
-        // Mark that we've paused media
-        mediaPlayersWerePaused["default"] = true
-        
-        // Send pause media control event
-        sendMediaControlEvent(isPlay: false)
-    }
-    
-    /// Resume all previously paused media
-    func resumeAllMedia() {
-        // Only resume if we previously paused
-        if mediaPlayersWerePaused.isEmpty {
-            return
-        }
-        
-        // Reset the tracking
-        mediaPlayersWerePaused.removeAll()
-        
-        // Send play media control event
-        sendMediaControlEvent(isPlay: true)
-    }
-    
-    /// Helper method to send media control events
-    private func sendMediaControlEvent(isPlay: Bool) {
-        // Create the appropriate media control event
-        let controlEvent = NSEvent.otherEvent(
-            with: .applicationDefined,
-            location: NSPoint.zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            subtype: 8,
-            data1: isPlay ? 19 : 20,  // 19 is play, 20 is pause
-            data2: 0
-        )
-        
-        if let event = controlEvent {
-            NSApplication.shared.sendEvent(event)
-        }
     }
 }
