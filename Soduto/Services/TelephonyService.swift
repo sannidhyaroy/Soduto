@@ -171,6 +171,32 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     
     // MARK: Private methods
     
+    /// Returns a notification attachment using the contact's photo from the packet when available,
+    /// falling back to a named image from the app bundle.
+    private func notificationAttachment(for dataPacket: DataPacket, fallbackImageName: String, identifier: String) -> UNNotificationAttachment? {
+        if let image = try? dataPacket.getPhoneThumbnail(),
+           let tiff = image.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiff),
+           let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: NSNumber(value: 0.9)]) {
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(identifier).appendingPathExtension("jpg")
+            do {
+                try jpeg.write(to: tempURL)
+                // Do NOT delete tempURL here — UNNotificationAttachment on macOS stores a
+                // reference to the file rather than copying it eagerly. The OS cleans /tmp.
+                return try UNNotificationAttachment(identifier: identifier, url: tempURL)
+            } catch {
+                Logger.services.error("Failed to create contact photo attachment: \(error, privacy: .public)")
+            }
+        }
+        guard let iconPath = Bundle.main.pathForImageResource(NSImage.Name(fallbackImageName)) else { return nil }
+        do {
+            return try UNNotificationAttachment(identifier: identifier, url: URL(fileURLWithPath: iconPath))
+        } catch {
+            Logger.services.error("Failed to create fallback icon attachment (\(fallbackImageName, privacy: .public)): \(error, privacy: .public)")
+            return nil
+        }
+    }
+    
     private func notificationId(for dataPacket: DataPacket, from device: Device) -> String? {
         guard dataPacket.isTelephonyPacket else { return nil }
         guard (try? dataPacket.getEvent()) != nil else { return nil }
@@ -216,14 +242,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             notification.threadIdentifier = "telephony"
             notification.setUrgency(.timeSensitive)
             
-            if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
-                let notificationIconURL = URL(fileURLWithPath: iconPath)
-                do {
-                    let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
-                    notification.attachments = [attachment]
-                } catch {
-                    Logger.services.error("Failed to create ringing notification attachment: \(error, privacy: .public)")
-                }
+            if let attachment = notificationAttachment(for: dataPacket, fallbackImageName: "Phone", identifier: notificationId) {
+                notification.attachments = [attachment]
             }
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
@@ -257,14 +277,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             notification.threadIdentifier = "telephony"
             notification.setUrgency(.active)
             
-            if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
-                let notificationIconURL = URL(fileURLWithPath: iconPath)
-                do {
-                    let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
-                    notification.attachments = [attachment]
-                } catch {
-                    Logger.services.error("Failed to create missed call notification attachment: \(error, privacy: .public)")
-                }
+            if let attachment = notificationAttachment(for: dataPacket, fallbackImageName: "Phone", identifier: notificationId) {
+                notification.attachments = [attachment]
             }
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
@@ -528,8 +542,9 @@ fileprivate extension DataPacket {
     func getPhoneThumbnail() throws -> NSImage? {
         try self.validateTelephonyType()
         guard body.keys.contains(TelephonyProperty.phoneThumbnail.rawValue) else { return nil }
-        guard let data = body[TelephonyProperty.phoneThumbnail.rawValue] as? Data else { throw TelephonyError.invalidEvent }
-        guard let image = NSImage(data: data) else { throw TelephonyError.invalidEvent }
+        guard let base64String = body[TelephonyProperty.phoneThumbnail.rawValue] as? String else { throw TelephonyError.invalidPhoneThumbnail }
+        guard let data = Data(base64Encoded: base64String, options: .ignoreUnknownCharacters) else { throw TelephonyError.invalidPhoneThumbnail }
+        guard let image = NSImage(data: data) else { throw TelephonyError.invalidPhoneThumbnail }
         return image
     }
     
