@@ -52,7 +52,6 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
     /// Keys for storing notification-related data in userInfo dictionaries.
     public enum Property: String {
         case actionHandlerClass = "com.soduto.usernotificationmanager.actionhandlerclass"
-        case dontPresent = "com.soduto.usernotificationmanager.dontPresent"
         case shouldMute = "com.soduto.usernotificationmanager.shouldMute"
         // Positional action mappings - store the semantic action string from the remote device
         case action1 = "com.soduto.usernotificationmanager.action1"
@@ -154,15 +153,9 @@ public class UserNotificationManager: NSObject, UNUserNotificationCenterDelegate
     }
     
     /// Determines how to present notifications when the app is in the foreground.
-    /// - `dontPresent`: Notification not presented at all (e.g., answer packets)
     /// - `shouldMute`: Notification shows banner but without sound (silent notifications from Android)
     public nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let userInfo = notification.request.content.userInfo
-        
-        // Check if the notification should not be presented
-        if let dontPresent = userInfo[Property.dontPresent.rawValue] as? NSNumber, dontPresent.boolValue {
-            return completionHandler([])
-        }
         
         // Check if the notification should be shown without sound (silent notifications from Android)
         if let shouldMute = userInfo[Property.shouldMute.rawValue] as? NSNumber, shouldMute.boolValue {

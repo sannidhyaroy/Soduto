@@ -73,7 +73,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         case requestReplyId = "com.soduto.services.notifications.requestReplyId"
         case isCancelable = "com.soduto.services.notifications.isCancelable"
         case appName = "com.soduto.services.notifications.appName"
-        case dontPresent = "com.soduto.services.notifications.dontPresent"
     }
     
     enum ActionId: ServiceAction.Id {
@@ -964,7 +963,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         of packetNotificationId: String,
         conversation: [DataPacket.ConversationMessage]?,
         isSilent: Bool,
-        dontPresent: Bool,
         title: String?,
         body: String?,
         groupName: String?,
@@ -1006,7 +1004,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             UserInfoProperty.notificationId.rawValue: packetNotificationId,
             UserInfoProperty.requestReplyId.rawValue: replyId as Any,
             UserInfoProperty.isCancelable.rawValue: NSNumber(value: isCancelable),
-            UserNotificationManager.Property.dontPresent.rawValue: NSNumber(value: dontPresent),
             UserNotificationManager.Property.shouldMute.rawValue: NSNumber(value: shouldMute),
             UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(NotificationsService.self)
         ]
@@ -1148,7 +1145,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let conversation = try dataPacket.getConversation()
             let replyId = try dataPacket.getReplyRequestId()
             let actions = try dataPacket.getActions()
-            let isAnswer = try dataPacket.getAnswerFlag()
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
             
@@ -1183,14 +1179,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             
             guard shouldShow else { return }
             
-            // Don't show notification
-            let dontPresent = isAnswer
-            
             // Determine the thread identifier for grouping.
-            // Answer packets are sync-protocol traffic, they must not count toward the threshold.
             let payloadHash = try? dataPacket.getPayloadHash()
             let (threadId, needsRegroup): (String, Bool) = await MainActor.run {
-                guard !dontPresent, !appName.isEmpty else { return (device.id, false) }
+                guard !appName.isEmpty else { return (device.id, false) }
                 return state.threadIdentifier(for: appName, deviceId: device.id, notificationId: notificationId, payloadHash: payloadHash)
             }
             
@@ -1212,7 +1204,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 of: packetNotificationId,
                 conversation: conversation,
                 isSilent: isSilent,
-                dontPresent: dontPresent,
                 title: title,
                 body: body,
                 groupName: groupName,
@@ -1595,7 +1586,6 @@ fileprivate extension DataPacket {
         case invalidActions
         case invalidClearableFlag
         case invalidCancelFlag
-        case invalidAnswerFlag
         case invalidSilentFlag
         case invalidPayloadHash
         case partFileRenameFailed
@@ -1624,7 +1614,6 @@ fileprivate extension DataPacket {
         case actions = "actions"             /// (string array): The available actions of the notification.
         case isClearable = "isClearable"     /// (boolean): True if we can request to dismiss the notification.
         case isCancel = "isCancel"           /// (boolean): True if the notification was dismissed in the peer device.
-        case requestAnswer = "requestAnswer" /// (boolean): True if this is an answer to a "request" package.
         case silent = "silent"               /// (boolean): True if this notification should be silent.
         case payloadHash = "payloadHash"     /// (string): The hash of the payload
     }
@@ -1783,13 +1772,6 @@ fileprivate extension DataPacket {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.silent.rawValue) else { return false }
         guard let value = body[NotificationProperty.silent.rawValue] as? NSNumber else { throw NotificationError.invalidSilentFlag }
-        return value.boolValue
-    }
-    
-    func getAnswerFlag() throws -> Bool {
-        try self.validateNotificationType()
-        guard body.keys.contains(NotificationProperty.requestAnswer.rawValue) else { return false }
-        guard let value = body[NotificationProperty.requestAnswer.rawValue] as? NSNumber else { throw NotificationError.invalidAnswerFlag }
         return value.boolValue
     }
     
