@@ -59,7 +59,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     public static let serviceId: Service.Id = "com.soduto.services.telephony"
     
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.telephonyPacketType ])
-    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.telephonyRequestPacketType, DataPacket.smsRequestPacketType ])
+    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.telephonyMuteRequestPacketType, DataPacket.smsRequestPacketType ])
     
     
     // MARK: Service methods
@@ -456,17 +456,12 @@ fileprivate extension DataPacket {
         case talking = "talking"
     }
     
-    enum TelephonyAction: String {
-        case mute = "mute"
-    }
-    
     enum TelephonyProperty: String {
         case event = "event"                    // (string): can be one of TelephonyEvent values
         case phoneNumber = "phoneNumber"        // (string)
         case contactName = "contactName"        // (string)
         case messageBody = "messageBody"        // (string)
-        case phoneThumbnail = "phoneThumbnail"  // (bytes)
-        case action = "action"                  // (string): 'mute' for muting the phone
+        case phoneThumbnail = "phoneThumbnail"  // (base64 JPEG)
         case sendSms = "sendSms"                // (boolean): true to send sms
         case isCancel = "isCancel"              // (boolean): cancel previous event
     }
@@ -475,12 +470,12 @@ fileprivate extension DataPacket {
     // MARK: Properties
     
     static let telephonyPacketType = "kdeconnect.telephony"
-    static let telephonyRequestPacketType = "kdeconnect.telephony.request"
+    static let telephonyMuteRequestPacketType = "kdeconnect.telephony.request_mute"
     static let smsRequestPacketType = "kdeconnect.sms.request"
     
     var isTelephonyPacket: Bool { return self.type == DataPacket.telephonyPacketType }
     
-    var isTelephonyRequestPacket: Bool { return self.type == DataPacket.telephonyRequestPacketType }
+    var isTelephonyMuteRequestPacket: Bool { return self.type == DataPacket.telephonyMuteRequestPacketType }
     
     var isSmsRequestPacket: Bool { return self.type == DataPacket.smsRequestPacketType }
     
@@ -496,9 +491,7 @@ fileprivate extension DataPacket {
     }
     
     static func mutePhonePacket() -> DataPacket {
-        return DataPacket(type: telephonyRequestPacketType, body: [
-            TelephonyProperty.action.rawValue: TelephonyAction.mute.rawValue as AnyObject
-        ])
+        return DataPacket(type: telephonyMuteRequestPacketType, body: [:])
     }
     
     
