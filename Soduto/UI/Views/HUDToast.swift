@@ -157,6 +157,12 @@ final class HUDToast: NSPanel {
         toast.present()
     }
     
+    /// Dismisses the currently visible toast, if any.
+    @MainActor
+    static func dismiss() {
+        currentToast?.dismissImmediately()
+    }
+    
     // MARK: - Initialization
     
     private init(message: String, style: Style) {

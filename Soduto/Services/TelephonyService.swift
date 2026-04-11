@@ -53,6 +53,12 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     private lazy var sendMessageController = SendMessageWindowController.loadController()
     private let audioManager = AudioManager()
     
+    /// IDs of devices for which this service is currently set up
+    private var connectedDeviceIds = Set<String>()
+    
+    /// ID of the device whose active-call HUD is currently on screen, if any
+    private var activeCallToastDeviceId: String? = nil
+    
     
     // MARK: Service properties
     
@@ -76,6 +82,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         do {
             if try dataPacket.getCancelFlag() {
                 self.hideNotification(for: dataPacket, from: device)
+                self.dismissOngoingCallHUD(for: device)
             }
             else if let event = try dataPacket.getEvent() ?? nil {
                 switch event {
@@ -87,6 +94,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     break
                 case DataPacket.TelephonyEvent.talking.rawValue:
                     self.hideNotification(for: dataPacket, from: device)
+                    self.showOngoingCallHUD(for: dataPacket, from: device)
                     break
                 case DataPacket.TelephonyEvent.sms.rawValue:
                     self.handleSMSPacket(dataPacket, from: device)
@@ -104,9 +112,13 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         return true
     }
     
-    public func setup(for device: Device) {}
+    public func setup(for device: Device) {
+        connectedDeviceIds.insert(device.id)
+    }
     
-    public func cleanup(for device: Device) {}
+    public func cleanup(for device: Device) {
+        connectedDeviceIds.remove(device.id)
+    }
     
     public func actions(for device: Device) -> [ServiceAction] {
         guard device.incomingCapabilities.contains(DataPacket.smsRequestPacketType) else { return [] }
@@ -194,6 +206,38 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         } catch {
             Logger.services.error("Failed to create fallback icon attachment (\(fallbackImageName, privacy: .public)): \(error, privacy: .public)")
             return nil
+        }
+    }
+    
+    /// Shows a persistent HUD toast indicating an active call
+    private func showOngoingCallHUD(for dataPacket: DataPacket, from device: Device) {
+        let contactName = (try? dataPacket.getContactName())?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phoneNumber = (try? dataPacket.getPhoneNumber())?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let caller = [contactName, phoneNumber].compactMap { $0 }.first { !$0.isEmpty }
+        
+        let isMultiDevice = connectedDeviceIds.count > 1
+        let message: String
+        if let caller {
+            message = isMultiDevice ? "On a call with \(caller) · \(device.name)" : "On a call with \(caller)"
+        } else {
+            message = isMultiDevice ? "On an active call · \(device.name)" : "On an active call"
+        }
+        
+        var style = HUDToast.Style.success
+        style.symbolName = "phone.badge.waveform.fill"
+        
+        activeCallToastDeviceId = device.id
+        MainActor.assumeIsolated {
+            HUDToast.show(message, style: style)
+        }
+    }
+    
+    /// Dismisses the active-call HUD if it belongs to the given device
+    private func dismissOngoingCallHUD(for device: Device) {
+        guard activeCallToastDeviceId == device.id else { return }
+        activeCallToastDeviceId = nil
+        MainActor.assumeIsolated {
+            HUDToast.dismiss()
         }
     }
     
