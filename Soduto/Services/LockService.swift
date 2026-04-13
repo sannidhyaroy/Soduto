@@ -24,7 +24,12 @@ public class LockService: NSObject, BidirectionalService, ObservableObject {
     
     // MARK: Types
     
-    let un = UNUserNotificationCenter.current()
+    /// Per-device capability flags from the `canLock`/`canUnlock` protocol extension.
+    /// `nil` means the remote did not advertise the field — treated as "unknown" (show the control).
+    public struct LockCapabilities {
+        var canLock: Bool?
+        var canUnlock: Bool?
+    }
     
     enum ActionId: ServiceAction.Id {
         case lockDevice
@@ -34,7 +39,10 @@ public class LockService: NSObject, BidirectionalService, ObservableObject {
     
     // MARK: Properties
     
+    let un = UNUserNotificationCenter.current()
+    
     @Published private(set) var remoteLockStates: [Device.Id: Bool] = [:]
+    private(set) var remoteCapabilities: [Device.Id: LockCapabilities] = [:]
     
     var userDefaults: UserDefaults = .standard
     let incomingPreferenceKey = AppDefaultsStore.Preferences.Services.Lock.incomingKey
@@ -114,6 +122,7 @@ public class LockService: NSObject, BidirectionalService, ObservableObject {
     
     public func cleanup(for device: Device) {
         self.remoteLockStates.removeValue(forKey: device.id)
+        self.remoteCapabilities.removeValue(forKey: device.id)
         
         if let index = self.devices.firstIndex(where: { $0.id == device.id }) {
             self.devices.remove(at: index)
@@ -124,12 +133,18 @@ public class LockService: NSObject, BidirectionalService, ObservableObject {
         guard device.incomingCapabilities.contains(DataPacket.lockRequestPacketType) else { return [] }
         guard device.pairingStatus == .Paired else { return [] }
         
+        let caps = remoteCapabilities[device.id]
         let isLocked = remoteLockStates[device.id] ?? false
+        
         if isLocked {
+            // Show Unlock only if canUnlock is explicitly true, or unknown (nil = backward compat)
+            guard caps?.canUnlock != false else { return [] }
             return [
                 ServiceAction(id: ActionId.unlockDevice.rawValue, title: "Unlock Device", description: "Unlock the remote device screen", service: self, device: device)
             ]
         } else {
+            // Show Lock only if canLock is explicitly true, or unknown (nil = backward compat)
+            guard caps?.canLock != false else { return [] }
             return [
                 ServiceAction(id: ActionId.lockDevice.rawValue, title: "Lock Device", description: "Lock the remote device screen", service: self, device: device)
             ]
@@ -169,12 +184,23 @@ public class LockService: NSObject, BidirectionalService, ObservableObject {
         return dict["CGSSessionScreenIsLocked"] as? Bool ?? false
     }
     
+    /// Whether this Mac can be locked remotely (true iff SACLockScreenImmediate loaded successfully).
+    private var localCanLock: Bool { LockService.lockFunction != nil }
+    /// macOS does not support remote unlock.
+    private let localCanUnlock: Bool = false
+    
     private func handle(statePacket packet: DataPacket, fromDevice device: Device) throws {
         if let success = try packet.getLockResult() {
             showLockResultNotification(success: success, device: device)
         }
         if packet.body.keys.contains(DataPacket.LockProperty.isLocked) {
             self.remoteLockStates[device.id] = try packet.getIsLocked()
+        }
+        // Parse canLock/canUnlock capability extensions; nil = field absent = unknown
+        let canLock = try packet.getCanLock()
+        let canUnlock = try packet.getCanUnlock()
+        if canLock != nil || canUnlock != nil {
+            self.remoteCapabilities[device.id] = LockCapabilities(canLock: canLock, canUnlock: canUnlock)
         }
     }
     
@@ -187,7 +213,7 @@ public class LockService: NSObject, BidirectionalService, ObservableObject {
             if setLocked {
                 let success = lockScreen()
                 if success { localLocked = true }
-                send(DataPacket.lockResultPacket(success: success, isLocked: localLocked), to: device)
+                send(DataPacket.lockResultPacket(success: success, isLocked: localLocked, canLock: localCanLock, canUnlock: localCanUnlock), to: device)
             }
             // Always report current state after any lock/unlock attempt
             sendLocalState(to: device)
@@ -207,11 +233,11 @@ public class LockService: NSObject, BidirectionalService, ObservableObject {
     }
     
     private func sendLocalState(to device: Device) {
-        send(DataPacket.lockStatePacket(isLocked: localLocked), to: device)
+        send(DataPacket.lockStatePacket(isLocked: localLocked, canLock: localCanLock, canUnlock: localCanUnlock), to: device)
     }
     
     private func broadcastLocalState() {
-        let packet = DataPacket.lockStatePacket(isLocked: localLocked)
+        let packet = DataPacket.lockStatePacket(isLocked: localLocked, canLock: localCanLock, canUnlock: localCanUnlock)
         for device in devices {
             send(packet, to: device)
         }
@@ -294,6 +320,8 @@ fileprivate extension DataPacket {
         case wrongType
         case invalidLockedFlag
         case invalidLockResult
+        case invalidCanLock
+        case invalidCanUnlock
         case invalidSetLockedFlag
     }
     
@@ -302,6 +330,8 @@ fileprivate extension DataPacket {
         static let lockResult = "lockResult"
         static let requestLocked = "requestLocked"
         static let setLocked = "setLocked"
+        static let canLock = "canLock"
+        static let canUnlock = "canUnlock"
     }
     
     
@@ -316,18 +346,23 @@ fileprivate extension DataPacket {
     
     // MARK: Public static methods
     
-    /// Lock state announcement: `{ "isLocked": bool }`
-    static func lockStatePacket(isLocked: Bool) -> DataPacket {
+    /// Lock state announcement: `{ "isLocked": bool, "canLock": bool, "canUnlock": bool }`
+    /// `canLock`/`canUnlock` are the Soduto protocol extension fields (protocol-extensions.md).
+    static func lockStatePacket(isLocked: Bool, canLock: Bool, canUnlock: Bool) -> DataPacket {
         return DataPacket(type: lockPacketType, body: [
-            LockProperty.isLocked: isLocked as AnyObject
+            LockProperty.isLocked: isLocked as AnyObject,
+            LockProperty.canLock: canLock as AnyObject,
+            LockProperty.canUnlock: canUnlock as AnyObject
         ])
     }
     
-    /// Lock operation result with state: `{ "lockResult": bool, "isLocked": bool }`
-    static func lockResultPacket(success: Bool, isLocked: Bool) -> DataPacket {
+    /// Lock operation result with state: `{ "lockResult": bool, "isLocked": bool, "canLock": bool, "canUnlock": bool }`
+    static func lockResultPacket(success: Bool, isLocked: Bool, canLock: Bool, canUnlock: Bool) -> DataPacket {
         return DataPacket(type: lockPacketType, body: [
             LockProperty.lockResult: success as AnyObject,
-            LockProperty.isLocked: isLocked as AnyObject
+            LockProperty.isLocked: isLocked as AnyObject,
+            LockProperty.canLock: canLock as AnyObject,
+            LockProperty.canUnlock: canUnlock as AnyObject
         ])
     }
     
@@ -373,6 +408,22 @@ fileprivate extension DataPacket {
         try self.validateLockRequestType()
         guard body.keys.contains(LockProperty.setLocked) else { return nil }
         guard let value = body[LockProperty.setLocked] as? NSNumber else { throw LockError.invalidSetLockedFlag }
+        return value.boolValue
+    }
+    
+    /// Returns the `canLock` capability field, or `nil` if absent (unknown — backward compat).
+    func getCanLock() throws -> Bool? {
+        try self.validateLockType()
+        guard body.keys.contains(LockProperty.canLock) else { return nil }
+        guard let value = body[LockProperty.canLock] as? NSNumber else { throw LockError.invalidCanLock }
+        return value.boolValue
+    }
+    
+    /// Returns the `canUnlock` capability field, or `nil` if absent (unknown — backward compat).
+    func getCanUnlock() throws -> Bool? {
+        try self.validateLockType()
+        guard body.keys.contains(LockProperty.canUnlock) else { return nil }
+        guard let value = body[LockProperty.canUnlock] as? NSNumber else { throw LockError.invalidCanUnlock }
         return value.boolValue
     }
     
