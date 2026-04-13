@@ -54,15 +54,6 @@ import UserNotifications
 /// Due to KDE Connect protocol limitations, some remote notifications may not be mirrored.
 public class NotificationsService: Service, DownloadTaskDelegate, UserNotificationActionHandler {
     
-    let un = UNUserNotificationCenter.current()
-    
-    @MainActor
-    private var userNotificationManager: UserNotificationManager {
-        let manager = AppDelegate.shared().userNotificationManager
-        precondition(manager != nil, "UserNotificationManager accessed before applicationDidFinishLaunching")
-        return manager!
-    }
-    
     // MARK: Types
     
     public typealias NotificationId = String
@@ -405,6 +396,19 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             ungroupedEntries[deviceId] = nil
         }
     }
+    
+    
+    // MARK: Properties
+    
+    let un = UNUserNotificationCenter.current()
+    
+    @MainActor
+    private var userNotificationManager: UserNotificationManager {
+        let manager = AppDelegate.shared().userNotificationManager
+        precondition(manager != nil, "UserNotificationManager accessed before applicationDidFinishLaunching")
+        return manager!
+    }
+    
     
     // MARK: Service properties
     

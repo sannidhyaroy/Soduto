@@ -35,9 +35,6 @@ import UserNotifications
 /// Upload completion events are forwarded by `Device`, which owns the active connection lifecycle
 public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDelegate, UserNotificationActionHandler, NSDraggingDestination {
     
-    let un = UNUserNotificationCenter.current()
-    let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("AirDrop"))
-    
     // MARK: Types
     
     public enum ExtensionShareResult {
@@ -123,6 +120,12 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         var completed: Int { succeeded + failed }
         var isDone: Bool { completed >= total }
     }
+    
+    
+    // MARK: Properties
+    
+    let un = UNUserNotificationCenter.current()
+    let notificationIconPath = Bundle.main.pathForImageResource(NSImage.Name("AirDrop"))
     
     
     // MARK: Service properties

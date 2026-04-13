@@ -31,8 +31,6 @@ public class BatteryService: BidirectionalService, ObservableObject {
     
     // MARK: Types
     
-    let un = UNUserNotificationCenter.current()
-    
     public struct BatteryStatus {
         var currentCharge: Int
         var isCharging: Bool
@@ -45,6 +43,8 @@ public class BatteryService: BidirectionalService, ObservableObject {
     
     
     // MARK: Properties
+    
+    let un = UNUserNotificationCenter.current()
     
     @Published public private(set) var statuses: [Device.Id:BatteryStatus] = [:]
     

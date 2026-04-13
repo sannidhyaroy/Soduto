@@ -51,13 +51,16 @@ fileprivate extension DataPacket {
 /// field, that will be displayed in the notification body.
 public class PingService: Service {
     
-    let un = UNUserNotificationCenter.current()
-    
     // MARK: Types
     
     enum ActionId: ServiceAction.Id {
         case send
     }
+    
+    
+    // MARK: Properties
+    
+    let un = UNUserNotificationCenter.current()
     
     
     // MARK: Service properties

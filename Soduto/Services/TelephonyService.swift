@@ -31,8 +31,6 @@ import MediaPlayer
 /// If the incoming package contains "isCancel" set to true, the package is ignored.
 public class TelephonyService: Service, UserNotificationActionHandler {
     
-    let un = UNUserNotificationCenter.current()
-    
     // MARK: Types
     
     enum NotificationProperty: String {
@@ -48,6 +46,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     }
     
     // MARK: Private properties
+    
+    let un = UNUserNotificationCenter.current()
     
     private var pendingSMSPackets: [String:([DataPacket], Timer)] = [:]
     private lazy var sendMessageController = SendMessageWindowController.loadController()
