@@ -24,6 +24,7 @@ final class WebcamPreviewModel: ObservableObject {
     @Published var flashActive: Bool = false
     @Published var rotation: Int = 0
     @Published var currentCamera: String = "back"
+    @Published var isMirrored: Bool = false
     
     let displayLayer = AVSampleBufferDisplayLayer()
     
@@ -339,15 +340,14 @@ struct WebcamPreviewContentView: View {
                 SampleBufferLayerView(displayLayer: model.displayLayer)
                     .frame(width: geo.size.width, height: geo.size.height)
                     .rotationEffect(.degrees(Double(model.rotation)))
-                    .scaleEffect(scale)
+                    .scaleEffect(x: model.isMirrored ? -scale : scale, y: scale)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.75), value: model.isMirrored)
                     .frame(width: geo.size.width, height: geo.size.height)
             }
             .ignoresSafeArea()
             
-            if model.cameras.count > 1 || !model.zoomLevels.isEmpty || model.flashAvailable {
-                controlBar
-                    .padding(.bottom, 20)
-            }
+            controlBar
+                .padding(.bottom, 20)
         }
         .background(Color.black)
         .frame(minWidth: 640, minHeight: 360)
@@ -385,6 +385,14 @@ struct WebcamPreviewContentView: View {
                 }
                 .buttonStyle(.plain)
             }
+            
+            Button { model.isMirrored.toggle() } label: {
+                Image(systemName: "flip.horizontal")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(model.isMirrored ? Color.yellow : Color.white)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, zoomActive ? 6 : 4)
