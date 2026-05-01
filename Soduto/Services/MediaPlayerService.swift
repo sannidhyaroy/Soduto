@@ -268,10 +268,12 @@ extension MediaPlayerService {
     }
     
     private func cleanupOutgoingDeviceState(for device: Device) {
-        // Outgoing MPRIS: deregister device; stop controller if no devices remain
+        // Outgoing MPRIS: deregister device; release observers if no devices remain.
+        // Don't call stopListening() as SystemMediaController owns the shared MediaController.
         outgoingDevices.removeValue(forKey: device.id)
         if outgoingDevices.isEmpty {
-            mediaController?.stopListening()
+            SystemMediaController.shared.trackInfoObserver = nil
+            SystemMediaController.shared.listenerTerminatedObserver = nil
             mediaController = nil
         }
     }
@@ -891,14 +893,17 @@ extension MediaPlayerService {
 
 extension MediaPlayerService {
     private func startMediaController() {
-        let controller = MediaController()
-        controller.onTrackInfoReceived = { [weak self] trackInfo in
-            // MediaController already dispatches callbacks to main queue
+        // Borrow the shared MediaController from SystemMediaController rather than creating
+        // a second instance. Browser media sessions (Arc, Orion, etc.) bind to the most
+        // recently started mediaremoted listener, so a second instance would steal command
+        // routing and make SystemMediaController's pause/play invisible to browsers.
+        let controller = SystemMediaController.shared.mediaController
+        SystemMediaController.shared.trackInfoObserver = { [weak self] trackInfo in
             self?.sendMacPlayerStatus(trackInfo)
         }
-        controller.onListenerTerminated = { [weak self] in
+        SystemMediaController.shared.listenerTerminatedObserver = { [weak self] in
             Logger.services.notice("MPRIS::MediaController listener terminated — Perl adapter unavailable (Apple may have patched the bypass)")
-            guard let self = self else { return }
+            guard let self else { return }
             self.macPlayerName = nil
             self.lastSentTrackInfo = nil
             self.mediaController = nil
@@ -907,9 +912,9 @@ extension MediaPlayerService {
                 device.send(DataPacket.mprisPlayerListPacket(playerList: []))
             }
         }
-        controller.startListening()
+        // Don't call startListening() as SystemMediaController already started it at launch.
         mediaController = controller
-        Logger.services.debug("MPRIS::startMediaController — MediaController started")
+        Logger.services.debug("MPRIS::startMediaController — using shared SystemMediaController.mediaController")
     }
     
     private func sendMacPlayerStatus(_ trackInfo: TrackInfo?) {

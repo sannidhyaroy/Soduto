@@ -51,7 +51,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     
     private var pendingSMSPackets: [String:([DataPacket], Timer)] = [:]
     private lazy var sendMessageController = SendMessageWindowController.loadController()
-    private let mediaController = SystemMediaController()
+    private let mediaController = SystemMediaController.shared
     
     /// IDs of devices for which this service is currently set up
     private var connectedDeviceIds = Set<String>()
@@ -83,7 +83,9 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             if try dataPacket.getCancelFlag() {
                 self.hideNotification(for: dataPacket, from: device)
                 self.dismissOngoingCallHUD(for: device)
+                Logger.services.debug("Telephony::isCancel, requesting media resume (pausedByController=\(self.mediaController.pausedByController, privacy: .public))")
                 self.mediaController.resume()
+                Logger.services.debug("Telephony::isCancel, after media resume request (pausedByController=\(self.mediaController.pausedByController, privacy: .public))")
             }
             else if let event = try dataPacket.getEvent() ?? nil {
                 switch event {
@@ -96,7 +98,9 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 case DataPacket.TelephonyEvent.talking.rawValue:
                     self.hideNotification(for: dataPacket, from: device)
                     self.showOngoingCallHUD(for: dataPacket, from: device)
+                    Logger.services.debug("Telephony::talking, requesting media pause (pausedByController=\(self.mediaController.pausedByController, privacy: .public))")
                     self.mediaController.pause()
+                    Logger.services.debug("Telephony::talking, after media pause request (pausedByController=\(self.mediaController.pausedByController, privacy: .public))")
                     break
                 case DataPacket.TelephonyEvent.sms.rawValue:
                     self.handleSMSPacket(dataPacket, from: device)
