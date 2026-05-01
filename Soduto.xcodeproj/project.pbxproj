@@ -56,6 +56,7 @@
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
+		3170649A2F8E30BC00BC6593 /* WebcamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317064992F8E30BC00BC6593 /* WebcamService.swift */; };
 		31711BA82F17435000E3B9FE /* MediaPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BA72F17435000E3B9FE /* MediaPlayerService.swift */; };
 		31711BAC2F17638000E3B9FE /* ImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BAB2F17638000E3B9FE /* ImageLoader.swift */; };
 		317C4DF62F8A88AD00067638 /* SystemMediaController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317C4DF52F8A88AD00067638 /* SystemMediaController.swift */; };
@@ -68,6 +69,7 @@
 		31905C212F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
 		31905C222F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
 		31905C232F78865B00F259CE /* Icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 31905C1F2F78865B00F259CE /* Icon.icon */; };
+		3190DEAB2F9D44DD00F4DFA2 /* WebcamPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3190DEAA2F9D44DD00F4DFA2 /* WebcamPreviewView.swift */; };
 		319320BC2F66402700A46DD9 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 319320BB2F66402700A46DD9 /* MediaRemoteAdapter */; };
 		319320BD2F6640E700A46DD9 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 319320BB2F66402700A46DD9 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		319CBA282939662400DAE301 /* Phone.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA272939662400DAE301 /* Phone.png */; };
@@ -303,6 +305,7 @@
 		3152C3F22F353AFA005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F42F353B1E005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F72F368F7B005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
+		317064992F8E30BC00BC6593 /* WebcamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebcamService.swift; sourceTree = "<group>"; };
 		31711BA72F17435000E3B9FE /* MediaPlayerService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MediaPlayerService.swift; sourceTree = "<group>"; };
 		31711BAB2F17638000E3B9FE /* ImageLoader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImageLoader.swift; sourceTree = "<group>"; };
 		317C4DF52F8A88AD00067638 /* SystemMediaController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemMediaController.swift; sourceTree = "<group>"; };
@@ -311,6 +314,7 @@
 		31905C162F75F22800F259CE /* DigitizerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitizerService.swift; sourceTree = "<group>"; };
 		31905C182F76443300F259CE /* LockService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockService.swift; sourceTree = "<group>"; };
 		31905C1F2F78865B00F259CE /* Icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = Icon.icon; sourceTree = "<group>"; };
+		3190DEAA2F9D44DD00F4DFA2 /* WebcamPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebcamPreviewView.swift; sourceTree = "<group>"; };
 		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
 		31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetView.swift; sourceTree = "<group>"; };
@@ -631,6 +635,7 @@
 				8492379E1DE1C87600D95BBA /* ServiceActionMenuItem.swift */,
 				31AB4B632F5C4BA700FE3DD4 /* TransferProgressHUD.swift */,
 				842B50561E4295D200969AA7 /* UnifiedTitlebarWindow.swift */,
+				3190DEAA2F9D44DD00F4DFA2 /* WebcamPreviewView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -900,6 +905,7 @@
 				843B67031DF1E64A00289EC9 /* ShareService.swift */,
 				31AF2B102F6C9712002C7D38 /* SystemVolumeService.swift */,
 				847E9D2A1DF5E2640042D3CE /* TelephonyService.swift */,
+				317064992F8E30BC00BC6593 /* WebcamService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1229,6 +1235,7 @@
 				8456F4AA1D7DEA47006EFE19 /* DefaultPairingHandler.swift in Sources */,
 				8492379F1DE1C87600D95BBA /* ServiceActionMenuItem.swift in Sources */,
 				31711BA82F17435000E3B9FE /* MediaPlayerService.swift in Sources */,
+				3170649A2F8E30BC00BC6593 /* WebcamService.swift in Sources */,
 				31A0A3C52F2C7C6100CDA243 /* ShareSheetView.swift in Sources */,
 				8436DEFA1E958ABA00529362 /* FileManager.swift in Sources */,
 				0225F6111F06E2380021BFE2 /* NSAttributedString.swift in Sources */,
@@ -1241,6 +1248,7 @@
 				8499620E1D5728EE002B893A /* Test_Assertions.m in Sources */,
 				8421A8E71D761409008AC833 /* PreferencesWindowController.swift in Sources */,
 				31AF2B112F6C9712002C7D38 /* SystemVolumeService.swift in Sources */,
+				3190DEAB2F9D44DD00F4DFA2 /* WebcamPreviewView.swift in Sources */,
 				849237991DE06EBC00D95BBA /* ServiceAction.swift in Sources */,
 				31332A2B2F6CCD5A0085A93A /* DeviceSidebarView.swift in Sources */,
 				31366D3C2F412C8D0013911D /* ChannelOptions+Keepalive.swift in Sources */,

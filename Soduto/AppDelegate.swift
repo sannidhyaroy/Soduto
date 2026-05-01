@@ -69,6 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.serviceManager.add(service: DigitizerService())
         self.serviceManager.add(service: RemoteControlService())
         self.serviceManager.add(service: LockService())
+        self.serviceManager.add(service: WebcamService())
         self.serviceManager.add(service: RunCommandService())
         self.serviceManager.add(service: MediaPlayerService())
         self.statusBarMenuController.startServiceObservers()

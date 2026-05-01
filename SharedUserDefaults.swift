@@ -102,6 +102,10 @@ enum AppDefaultsStore {
             enum Digitizer: ServiceIncomingToggle {
                 static let base = "\(Services.base).digitizer"
             }
+            
+            enum Webcam: ServiceIncomingToggle {
+                static let base = "\(Services.base).webcam"
+            }
         }
     }
 }
