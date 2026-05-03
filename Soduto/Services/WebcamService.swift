@@ -906,6 +906,7 @@ final class WebcamPreviewWindowController: NSWindowController, NSWindowDelegate 
     private let model: WebcamPreviewModel
     private let audioEngine = AVAudioEngine()
     private let playerNode  = AVAudioPlayerNode()
+    private var localKeyMonitor: Any?
     
     init(deviceName: String) {
         model = WebcamPreviewModel()
@@ -931,12 +932,31 @@ final class WebcamPreviewWindowController: NSWindowController, NSWindowDelegate 
         window.setContentSize(NSSize(width: 1280, height: 720))
         window.center()
         window.delegate = self
-        
+
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let ch = event.charactersIgnoringModifiers
+            if flags == .command && ch == "w" {
+                self.window?.performClose(nil)
+                return nil
+            }
+            if flags == [.command, .control] && ch == "f" {
+                self.window?.toggleFullScreen(nil)
+                return nil
+            }
+            return event
+        }
+
         setupAudioEngine()
     }
-    
+
     required init?(coder: NSCoder) { fatalError("not used") }
-    
+
+    deinit {
+        if let monitor = localKeyMonitor { NSEvent.removeMonitor(monitor) }
+    }
+
     // MARK: Public API
     
     func applyRotation(_ degrees: Int) {
