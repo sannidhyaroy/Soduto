@@ -105,6 +105,8 @@ enum AppDefaultsStore {
             
             enum Webcam: ServiceIncomingToggle {
                 static let base = "\(Services.base).webcam"
+                static let fpsKey = "\(base).fps"
+                static let bitrateKey = "\(base).bitrateBps"
             }
         }
     }

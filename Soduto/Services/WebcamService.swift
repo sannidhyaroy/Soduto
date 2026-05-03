@@ -77,6 +77,17 @@ public class WebcamService: IncomingService {
     /// controller cannot tear down a newly-started stream.
     private var streamGeneration: Int = 0
     
+    // MARK: Stream preferences (persisted in UserDefaults)
+    
+    private var preferredFPS: Int {
+        get { (UserDefaults.standard.object(forKey: AppDefaultsStore.Preferences.Services.Webcam.fpsKey) as? Int) ?? 30 }
+        set { UserDefaults.standard.set(newValue, forKey: AppDefaultsStore.Preferences.Services.Webcam.fpsKey) }
+    }
+    private var preferredBitrateBps: Int {
+        get { (UserDefaults.standard.object(forKey: AppDefaultsStore.Preferences.Services.Webcam.bitrateKey) as? Int) ?? -1 }
+        set { UserDefaults.standard.set(newValue, forKey: AppDefaultsStore.Preferences.Services.Webcam.bitrateKey) }
+    }
+    
     // MARK: Camera
     
     /// Camera currently in use (sent in request_stream and switch_camera packets).
@@ -178,10 +189,14 @@ public class WebcamService: IncomingService {
             if let error = dataPacket.body["error"] as? String {
                 Logger.services.error("WebcamService: stream_status error=\(error, privacy: .public)")
                 DispatchQueue.main.async { self.showErrorAlert(message: error, deviceName: device.name) }
-            } else {
+                teardown()
+            } else if case .streaming(let d, _) = streamState, d.id == device.id {
+                // Remote-initiated stop — tear everything down.
+                // Guard on .streaming so a delayed stop response that arrives during
+                // .requestSent (e.g. quick stop → restart) doesn't kill the new stream.
                 Logger.services.info("WebcamService: stream stopped by remote")
+                teardown()
             }
-            teardown()
         }
         
         return true
@@ -239,7 +254,9 @@ public class WebcamService: IncomingService {
             let packet = DataPacket.webcamRequestStreamPacket(
                 addresses: self.localIPv4Addresses(),
                 port: port,
-                width: 1280, height: 720, fps: 30
+                width: 1280, height: 720,
+                fps: self.preferredFPS,
+                bitrate: self.preferredBitrateBps
             )
             device.send(packet)
             Logger.services.info("WebcamService: sent request_stream udp port=\(port)")
@@ -258,7 +275,7 @@ public class WebcamService: IncomingService {
             DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
         }
     }
-
+    
     /// Schedules a keyframe request 800 ms from now. Call after every successfully
     /// reassembled video frame to keep resetting the timer. If 800 ms elapse with no
     /// complete frame, Android is asked for an immediate IDR; the work then re-schedules
@@ -268,6 +285,7 @@ public class WebcamService: IncomingService {
         let work = DispatchWorkItem { [weak self] in
             guard let self, case .streaming(let device, _) = self.streamState else { return }
             Logger.services.warning("WebcamService: video stall, requesting keyframe")
+            self.previewWindowController?.beginRestart()
             device.send(DataPacket.webcamCameraControlPacket(requestKeyframe: true))
             self.rescheduleKeyframeCheck()
         }
@@ -755,6 +773,7 @@ public class WebcamService: IncomingService {
             vc.onCameraSwitch = { [weak self] cameraId in
                 guard let self = self,
                       case .streaming(let d, _) = self.streamState else { return }
+                self.previewWindowController?.beginRestart()
                 self.sendCameraControl(camera: cameraId, for: d)
             }
             vc.onZoomChange = { [weak self] zoom in
@@ -767,6 +786,22 @@ public class WebcamService: IncomingService {
                       case .streaming(let d, _) = self.streamState else { return }
                 self.sendCameraControl(flash: active, for: d)
             }
+            vc.onFPSChange = { [weak self] fps in
+                guard let self else { return }
+                self.preferredFPS = fps
+                if case .streaming(let d, _) = self.streamState {
+                    self.previewWindowController?.beginRestart()
+                    d.send(DataPacket.webcamCameraControlPacket(fps: fps))
+                }
+            }
+            vc.onBitrateChange = { [weak self] bps in
+                guard let self else { return }
+                self.preferredBitrateBps = bps
+                if case .streaming(let d, _) = self.streamState {
+                    d.send(DataPacket.webcamCameraControlPacket(bitrate: bps))
+                }
+            }
+            vc.setStreamPreferences(fps: preferredFPS, bitrateBps: preferredBitrateBps)
             previewWindowController = vc
         }
         previewWindowController?.applyRotation(rotation)
@@ -783,7 +818,7 @@ public class WebcamService: IncomingService {
         streamRequestTimeoutWork = nil
         keyframeRequestWork?.cancel()
         keyframeRequestWork = nil
-
+        
         udpSource?.cancel()   // cancel handler calls Darwin.close(sock)
         udpSource = nil
         udpSocket = -1
@@ -881,14 +916,14 @@ fileprivate extension DataPacket {
     static let webcamStreamStatusPacketType  = "kdeconnect.webcam.stream_status"
     static let webcamCameraControlPacketType  = "kdeconnect.webcam.camera_control"
     
-    static func webcamRequestStreamPacket(addresses: [String], port: UInt16, width: Int, height: Int, fps: Int, camera: String? = nil) -> DataPacket {
+    static func webcamRequestStreamPacket(addresses: [String], port: UInt16, width: Int, height: Int, fps: Int, bitrate: Int = -1, camera: String? = nil) -> DataPacket {
         var body: [String: AnyObject] = [
             "addresses": addresses as AnyObject,
             "port":      NSNumber(value: port),
             "width":     NSNumber(value: width),
             "height":    NSNumber(value: height),
             "fps":       NSNumber(value: fps),
-            "bitrate":   NSNumber(value: -1),
+            "bitrate":   NSNumber(value: bitrate),
             "codec":     "h265" as AnyObject
         ]
         if let camera { body["camera"] = camera as AnyObject }
@@ -901,12 +936,14 @@ fileprivate extension DataPacket {
         ])
     }
     
-    static func webcamCameraControlPacket(camera: String? = nil, zoom: Float? = nil, flash: Bool? = nil, requestKeyframe: Bool? = nil) -> DataPacket {
+    static func webcamCameraControlPacket(camera: String? = nil, zoom: Float? = nil, flash: Bool? = nil, requestKeyframe: Bool? = nil, bitrate: Int? = nil, fps: Int? = nil) -> DataPacket {
         var body: [String: AnyObject] = [:]
         if let camera = camera { body["camera"] = camera as AnyObject }
         if let zoom = zoom { body["zoom"] = NSNumber(value: zoom) }
         if let flash = flash { body["flash"] = NSNumber(value: flash) }
         if let requestKeyframe = requestKeyframe { body["requestKeyframe"] = NSNumber(value: requestKeyframe) }
+        if let bitrate = bitrate { body["bitrate"] = NSNumber(value: bitrate) }
+        if let fps = fps { body["fps"] = NSNumber(value: fps) }
         return DataPacket(type: webcamCameraControlPacketType, body: body)
     }
 }
@@ -924,6 +961,8 @@ final class WebcamPreviewWindowController: NSWindowController, NSWindowDelegate 
     var onCameraSwitch: ((String) -> Void)?
     var onZoomChange: ((Float) -> Void)?
     var onFlashToggle: ((Bool) -> Void)?
+    var onFPSChange: ((Int) -> Void)?
+    var onBitrateChange: ((Int) -> Void)?
     
     private let model: WebcamPreviewModel
     private let audioEngine = AVAudioEngine()
@@ -945,9 +984,11 @@ final class WebcamPreviewWindowController: NSWindowController, NSWindowDelegate 
         
         super.init(window: window)
         
-        model.onCameraSwitch = { [weak self] id     in self?.onCameraSwitch?(id) }
-        model.onZoomChange   = { [weak self] zoom   in self?.onZoomChange?(zoom) }
-        model.onFlashToggle  = { [weak self] active in self?.onFlashToggle?(active) }
+        model.onCameraSwitch  = { [weak self] id     in self?.onCameraSwitch?(id) }
+        model.onZoomChange    = { [weak self] zoom   in self?.onZoomChange?(zoom) }
+        model.onFlashToggle   = { [weak self] active in self?.onFlashToggle?(active) }
+        model.onFPSChange     = { [weak self] fps    in self?.onFPSChange?(fps) }
+        model.onBitrateChange = { [weak self] bps    in self?.onBitrateChange?(bps) }
         
         let hosting = NSHostingController(rootView: WebcamPreviewContentView(model: model))
         window.contentViewController = hosting
@@ -980,6 +1021,15 @@ final class WebcamPreviewWindowController: NSWindowController, NSWindowDelegate 
     }
     
     // MARK: Public API
+    
+    func setStreamPreferences(fps: Int, bitrateBps: Int) {
+        model.streamFPS = fps
+        model.streamBitrateBps = bitrateBps
+    }
+    
+    func beginRestart() {
+        model.isRestarting = true
+    }
     
     func applyRotation(_ degrees: Int) {
         model.lastReportedRotation = degrees

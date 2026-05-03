@@ -30,11 +30,18 @@ final class WebcamPreviewModel: ObservableObject {
     }
     var lastReportedRotation: Int = 0
     
+    @Published var streamFPS: Int = 30
+    @Published var streamBitrateBps: Int = -1
+    @Published var isRestarting: Bool = false
+    var lastPixelBuffer: CVPixelBuffer?
+    
     let displayLayer = AVSampleBufferDisplayLayer()
     
     var onCameraSwitch: ((String) -> Void)?
     var onZoomChange: ((Float) -> Void)?
     var onFlashToggle: ((Bool) -> Void)?
+    var onFPSChange: ((Int) -> Void)?
+    var onBitrateChange: ((Int) -> Void)?
     
     init() {
         displayLayer.videoGravity = .resizeAspect
@@ -49,6 +56,8 @@ final class WebcamPreviewModel: ObservableObject {
         var sampleBuffer: CMSampleBuffer?
         CMSampleBufferCreateReadyWithImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: pixelBuffer, formatDescription: fd, sampleTiming: &timing, sampleBufferOut: &sampleBuffer)
         if let sb = sampleBuffer { displayLayer.enqueue(sb) }
+        lastPixelBuffer = pixelBuffer
+        if isRestarting { isRestarting = false }
     }
     
     func flipCamera() {
@@ -332,29 +341,62 @@ private struct ZoomControl: View {
 struct WebcamPreviewContentView: View {
     @ObservedObject var model: WebcamPreviewModel
     @State private var zoomActive = false
+    @State private var showingSettings = false
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            GeometryReader { geo in
-                let isPortrait = abs(model.rotation % 180) == 90
-                let scale: CGFloat = isPortrait
-                ? min(geo.size.width, geo.size.height) / max(geo.size.width, geo.size.height)
-                : 1.0
-                
-                SampleBufferLayerView(displayLayer: model.displayLayer)
-                    .frame(width: geo.size.width, height: geo.size.height)
-                    .rotationEffect(.degrees(Double(model.rotation)))
-                    .scaleEffect(x: model.isMirrored ? -scale : scale, y: scale)
-                    .animation(.spring(response: 0.35, dampingFraction: 0.75), value: model.isMirrored)
-                    .frame(width: geo.size.width, height: geo.size.height)
-            }
-            .ignoresSafeArea()
+        GeometryReader { geo in
+            let isPortrait = abs(model.rotation % 180) == 90
+            let scale: CGFloat = isPortrait ? min(geo.size.width, geo.size.height) / max(geo.size.width, geo.size.height) : 1.0
             
+            SampleBufferLayerView(displayLayer: model.displayLayer)
+                .frame(width: geo.size.width, height: geo.size.height)
+                .rotationEffect(.degrees(Double(model.rotation)))
+                .scaleEffect(x: model.isMirrored ? -scale : scale, y: scale)
+                .animation(.spring(response: 0.35, dampingFraction: 0.75), value: model.isMirrored)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .ignoresSafeArea()
+        .background(Color.black)
+        .frame(minWidth: 640, minHeight: 360)
+        .overlay {
+            if model.isRestarting {
+                restartOverlay
+                    .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .bottom) {
             controlBar
                 .padding(.bottom, 20)
         }
-        .background(Color.black)
-        .frame(minWidth: 640, minHeight: 360)
+        .animation(.easeInOut(duration: 0.2), value: model.isRestarting)
+    }
+    
+    @ViewBuilder
+    private var restartOverlay: some View {
+        ZStack {
+            if let pb = model.lastPixelBuffer {
+                let ci = CIImage(cvPixelBuffer: pb)
+                let rep = NSCIImageRep(ciImage: ci)
+                let img = { () -> NSImage in
+                    let i = NSImage(size: rep.size)
+                    i.addRepresentation(rep)
+                    return i
+                }()
+                Image(nsImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 24)
+                    .clipped()
+            } else {
+                Color.black
+            }
+            Color.black.opacity(0.35)
+            ProgressView()
+                .progressViewStyle(.circular)
+                .scaleEffect(1.4)
+                .tint(.white)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     @ViewBuilder
@@ -409,11 +451,89 @@ struct WebcamPreviewContentView: View {
                     .frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
+            
+            Button { showingSettings.toggle() } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(showingSettings ? Color.yellow : Color.white)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showingSettings, arrowEdge: .bottom) {
+                StreamSettingsView(
+                    fps: $model.streamFPS,
+                    bitrateBps: $model.streamBitrateBps,
+                    onFPSChange: model.onFPSChange,
+                    onBitrateChange: model.onBitrateChange
+                )
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, zoomActive ? 6 : 4)
         .background(Capsule().fill(.ultraThinMaterial))
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: zoomActive)
+    }
+}
+
+
+// MARK: - StreamSettingsView
+
+private struct StreamSettingsView: View {
+    @Binding var fps: Int
+    @Binding var bitrateBps: Int
+    var onFPSChange: ((Int) -> Void)?
+    var onBitrateChange: ((Int) -> Void)?
+    
+    private let fpsOptions = [15, 30, 60]
+    private let bitrateOptions: [(label: String, bps: Int)] = [
+        ("Auto", -1),
+        ("2 Mbps", 2_000_000),
+        ("4 Mbps", 4_000_000),
+        ("8 Mbps", 8_000_000),
+        ("12 Mbps", 12_000_000),
+        ("16 Mbps", 16_000_000),
+        ("20 Mbps", 20_000_000),
+        ("32 Mbps", 32_000_000)
+    ]
+    
+    private var currentBitrateLabel: String {
+        bitrateOptions.first(where: { $0.bps == bitrateBps })?.label ?? "Auto"
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Stream Settings")
+                .font(.headline)
+            Text("Currently: \(fps) fps · \(currentBitrateLabel)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Frame Rate").font(.subheadline).foregroundStyle(.secondary)
+                Picker("FPS", selection: $fps) {
+                    ForEach(fpsOptions, id: \.self) { Text("\($0) fps") }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: fps) { _, new in onFPSChange?(new) }
+                Text("Stream restarts automatically")
+                    .font(.caption).foregroundStyle(.tertiary)
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Bitrate").font(.subheadline).foregroundStyle(.secondary)
+                Picker("Bitrate", selection: $bitrateBps) {
+                    ForEach(bitrateOptions, id: \.bps) { opt in
+                        Text(opt.label).tag(opt.bps)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: bitrateBps) { _, new in onBitrateChange?(new) }
+                Text("Applied immediately")
+                    .font(.caption).foregroundStyle(.tertiary)
+            }
+        }
+        .padding()
+        .frame(minWidth: 260)
     }
 }
 
