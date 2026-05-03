@@ -70,6 +70,7 @@ public class WebcamService: IncomingService {
     
     private var streamState: StreamState = .idle
     private var streamRequestTimeoutWork: DispatchWorkItem?
+    private var keyframeRequestWork: DispatchWorkItem?
     
     /// Incremented every time a new stream is started. Captured in each window's
     /// `onClose` closure so that a deferred close of a *previous* window's
@@ -150,6 +151,7 @@ public class WebcamService: IncomingService {
                 availableCameras = cameras
                 setupAudioConverter()
                 openDecoder(codec: codec)
+                rescheduleKeyframeCheck()
                 DispatchQueue.main.async {
                     self.showPreviewWindow(deviceName: d.name, rotation: rotation, cameras: cameras)
                     self.previewWindowController?.updateZoomRange(zoomMin, zoomMax, opticalZooms, activeZoom: activeZoom)
@@ -255,6 +257,22 @@ public class WebcamService: IncomingService {
             self.streamRequestTimeoutWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
         }
+    }
+
+    /// Schedules a keyframe request 800 ms from now. Call after every successfully
+    /// reassembled video frame to keep resetting the timer. If 800 ms elapse with no
+    /// complete frame, Android is asked for an immediate IDR; the work then re-schedules
+    /// itself so requests continue until frames resume.
+    private func rescheduleKeyframeCheck() {
+        keyframeRequestWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, case .streaming(let device, _) = self.streamState else { return }
+            Logger.services.warning("WebcamService: video stall, requesting keyframe")
+            device.send(DataPacket.webcamCameraControlPacket(requestKeyframe: true))
+            self.rescheduleKeyframeCheck()
+        }
+        keyframeRequestWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
     
     /// Sends a switch_camera packet while the stream is active.
@@ -416,6 +434,7 @@ public class WebcamService: IncomingService {
         } else if hdr.streamType == 0 {
             handleFragment(hdr: hdr, payload: payload, reassembly: &videoReassembly, currentKey: &currentVideoFrameKey) { [weak self] buf in
                 self?.decodeVideo(buf.data, ptsMs: buf.ptsMs, isKeyframe: buf.isKeyframe)
+                self?.rescheduleKeyframeCheck()
             }
         }
     }
@@ -762,7 +781,9 @@ public class WebcamService: IncomingService {
     private func teardown() {
         streamRequestTimeoutWork?.cancel()
         streamRequestTimeoutWork = nil
-        
+        keyframeRequestWork?.cancel()
+        keyframeRequestWork = nil
+
         udpSource?.cancel()   // cancel handler calls Darwin.close(sock)
         udpSource = nil
         udpSocket = -1
@@ -880,11 +901,12 @@ fileprivate extension DataPacket {
         ])
     }
     
-    static func webcamCameraControlPacket(camera: String? = nil, zoom: Float? = nil, flash: Bool? = nil) -> DataPacket {
+    static func webcamCameraControlPacket(camera: String? = nil, zoom: Float? = nil, flash: Bool? = nil, requestKeyframe: Bool? = nil) -> DataPacket {
         var body: [String: AnyObject] = [:]
         if let camera = camera { body["camera"] = camera as AnyObject }
         if let zoom = zoom { body["zoom"] = NSNumber(value: zoom) }
         if let flash = flash { body["flash"] = NSNumber(value: flash) }
+        if let requestKeyframe = requestKeyframe { body["requestKeyframe"] = NSNumber(value: requestKeyframe) }
         return DataPacket(type: webcamCameraControlPacketType, body: body)
     }
 }
