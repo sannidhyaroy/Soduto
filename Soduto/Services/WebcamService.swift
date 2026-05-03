@@ -142,6 +142,7 @@ public class WebcamService: IncomingService {
             
             if case .requestSent(let d, _) = streamState, d.id == device.id {
                 // Initial stream start
+                if let active =  dataPacket.body["activeCamera"] as? String { streamCamera = active }
                 streamState = .streaming(device: d, codec: codec)
                 availableCameras = cameras
                 setupAudioConverter()
@@ -223,9 +224,8 @@ public class WebcamService: IncomingService {
     
     // MARK: Stream start / stop
     
-    private func startStream(for device: Device, camera: String = "back") {
+    private func startStream(for device: Device) {
         guard case .idle = streamState else { return }
-        streamCamera = camera
         streamGeneration += 1
         
         openUDPSocket { [weak self] port in
@@ -234,11 +234,10 @@ public class WebcamService: IncomingService {
             let packet = DataPacket.webcamRequestStreamPacket(
                 addresses: self.localIPv4Addresses(),
                 port: port,
-                width: 1280, height: 720, fps: 30,
-                camera: self.streamCamera
+                width: 1280, height: 720, fps: 30
             )
             device.send(packet)
-            Logger.services.info("WebcamService: sent request_stream camera=\(self.streamCamera) udp port=\(port)")
+            Logger.services.info("WebcamService: sent request_stream udp port=\(port)")
         }
     }
     
@@ -842,17 +841,18 @@ fileprivate extension DataPacket {
     static let webcamStreamStatusPacketType  = "kdeconnect.webcam.stream_status"
     static let webcamCameraControlPacketType  = "kdeconnect.webcam.camera_control"
     
-    static func webcamRequestStreamPacket(addresses: [String], port: UInt16, width: Int, height: Int, fps: Int, camera: String) -> DataPacket {
-        DataPacket(type: webcamRequestStreamPacketType, body: [
+    static func webcamRequestStreamPacket(addresses: [String], port: UInt16, width: Int, height: Int, fps: Int, camera: String? = nil) -> DataPacket {
+        var body: [String: AnyObject] = [
             "addresses": addresses as AnyObject,
             "port":      NSNumber(value: port),
             "width":     NSNumber(value: width),
             "height":    NSNumber(value: height),
             "fps":       NSNumber(value: fps),
             "bitrate":   NSNumber(value: -1),
-            "codec":     "h265" as AnyObject,
-            "camera":    camera as AnyObject
-        ])
+            "codec":     "h265" as AnyObject
+        ]
+        if let camera { body["camera"] = camera as AnyObject }
+        return DataPacket(type: webcamRequestStreamPacketType, body: body)
     }
     
     static func webcamStopPacket() -> DataPacket {
