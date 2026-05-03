@@ -932,7 +932,7 @@ final class WebcamPreviewWindowController: NSWindowController, NSWindowDelegate 
         window.setContentSize(NSSize(width: 1280, height: 720))
         window.center()
         window.delegate = self
-
+        
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.window else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -947,19 +947,21 @@ final class WebcamPreviewWindowController: NSWindowController, NSWindowDelegate 
             }
             return event
         }
-
+        
         setupAudioEngine()
     }
-
+    
     required init?(coder: NSCoder) { fatalError("not used") }
-
+    
     deinit {
         if let monitor = localKeyMonitor { NSEvent.removeMonitor(monitor) }
     }
-
+    
     // MARK: Public API
     
     func applyRotation(_ degrees: Int) {
+        model.lastReportedRotation = degrees
+        guard !model.isRotationLocked else { return }
         model.rotation = degrees
     }
     

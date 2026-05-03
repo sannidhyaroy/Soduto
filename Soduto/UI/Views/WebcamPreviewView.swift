@@ -25,6 +25,10 @@ final class WebcamPreviewModel: ObservableObject {
     @Published var rotation: Int = 0
     @Published var currentCamera: String = "back"
     @Published var isMirrored: Bool = false
+    @Published var isRotationLocked: Bool = false {
+        didSet { if !isRotationLocked { rotation = lastReportedRotation } }
+    }
+    var lastReportedRotation: Int = 0
     
     let displayLayer = AVSampleBufferDisplayLayer()
     
@@ -356,6 +360,16 @@ struct WebcamPreviewContentView: View {
     @ViewBuilder
     private var controlBar: some View {
         HStack(spacing: 6) {
+            // Left — orientation controls
+            Button { model.isRotationLocked.toggle() } label: {
+                Image(systemName: model.isRotationLocked ? "lock.rotation" : "lock.open.rotation")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(model.isRotationLocked ? Color.yellow : Color.white)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .help(model.isRotationLocked ? "Unlock rotation" : "Lock rotation")
+            
             if model.cameras.count > 1 {
                 Button { model.flipCamera() } label: {
                     Image(systemName: "camera.rotate.fill")
@@ -366,6 +380,7 @@ struct WebcamPreviewContentView: View {
                 .buttonStyle(.plain)
             }
             
+            // Center — zoom
             if !model.zoomLevels.isEmpty {
                 ZoomControl(
                     levels: model.zoomLevels,
@@ -376,6 +391,7 @@ struct WebcamPreviewContentView: View {
                 )
             }
             
+            // Right — image controls
             if model.flashAvailable {
                 Button { model.toggleFlash() } label: {
                     Image(systemName: model.flashActive ? "bolt.fill" : "bolt.slash")
