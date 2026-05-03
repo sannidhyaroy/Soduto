@@ -69,6 +69,7 @@ public class WebcamService: IncomingService {
     // MARK: Stream state
     
     private var streamState: StreamState = .idle
+    private var streamRequestTimeoutWork: DispatchWorkItem?
     
     /// Incremented every time a new stream is started. Captured in each window's
     /// `onClose` closure so that a deferred close of a *previous* window's
@@ -142,7 +143,9 @@ public class WebcamService: IncomingService {
             
             if case .requestSent(let d, _) = streamState, d.id == device.id {
                 // Initial stream start
-                if let active =  dataPacket.body["activeCamera"] as? String { streamCamera = active }
+                streamRequestTimeoutWork?.cancel()
+                streamRequestTimeoutWork = nil
+                if let active = dataPacket.body["activeCamera"] as? String { streamCamera = active }
                 streamState = .streaming(device: d, codec: codec)
                 availableCameras = cameras
                 setupAudioConverter()
@@ -238,6 +241,19 @@ public class WebcamService: IncomingService {
             )
             device.send(packet)
             Logger.services.info("WebcamService: sent request_stream udp port=\(port)")
+            
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, case .requestSent = self.streamState else { return }
+                Logger.services.error("WebcamService: stream request timed out; no stream_status received")
+                self.teardown()
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "Webcam Stream Timed Out"
+                alert.informativeText = "The device didn't start the stream. Make sure that the Webcam plugin is enabled on the device, and is reachable, then try again."
+                alert.runModal()
+            }
+            self.streamRequestTimeoutWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
         }
     }
     
@@ -744,6 +760,9 @@ public class WebcamService: IncomingService {
     // MARK: Teardown
     
     private func teardown() {
+        streamRequestTimeoutWork?.cancel()
+        streamRequestTimeoutWork = nil
+        
         udpSource?.cancel()   // cancel handler calls Darwin.close(sock)
         udpSource = nil
         udpSocket = -1
