@@ -66,7 +66,9 @@ public class ClipboardService: BidirectionalService {
         case DataPacket.clipboardConnectPacketType:
             guard incomingEnabled else { return true }
             guard let contents = try? dataPacket.getContent() else { return true }
-            let remoteTimestamp = (try? dataPacket.getTimestamp()) ?? Date()
+            // Treat missing/zero timestamp as "unknown" — do not apply (matches Android behaviour).
+            let remoteTimestamp = (try? dataPacket.getTimestamp()) ?? Date(timeIntervalSince1970: 0)
+            guard remoteTimestamp.timeIntervalSince1970 > 0 else { return true }
             if remoteTimestamp > lastLocalChangeTimestamp {
                 applyExternalClipboard(contents, from: device)
             }
@@ -144,8 +146,11 @@ public class ClipboardService: BidirectionalService {
     
     private func applyExternalClipboard(_ content: String, from device: Device) {
         self.lastExternalChangeDevice = device
-        self.lastExternalChangeCount = NSPasteboard.general.clearContents()
+        NSPasteboard.general.clearContents()
         NSPasteboard.general.writeObjects([content as NSString])
+        // Capture changeCount AFTER the write so the dedup check in checkPasteboard fires
+        // correctly — clearContents() returns the post-clear count, not the post-write count.
+        self.lastExternalChangeCount = NSPasteboard.general.changeCount
         self.lastLocalChangeTimestamp = Date()
     }
 }
