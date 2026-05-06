@@ -61,16 +61,16 @@ public class ClipboardService: BidirectionalService {
         case DataPacket.clipboardPacketType:
             guard incomingEnabled else { return true }
             guard let contents = try? dataPacket.getContent() else { return true }
-            applyExternalClipboard(contents, from: device)
+            let senderTimestamp = (try? dataPacket.getTimestamp()) ?? Date()
+            applyExternalClipboard(contents, from: device, timestamp: senderTimestamp)
             return true
         case DataPacket.clipboardConnectPacketType:
             guard incomingEnabled else { return true }
             guard let contents = try? dataPacket.getContent() else { return true }
-            // Treat missing/zero timestamp as "unknown" — do not apply (matches Android behaviour).
             let remoteTimestamp = (try? dataPacket.getTimestamp()) ?? Date(timeIntervalSince1970: 0)
             guard remoteTimestamp.timeIntervalSince1970 > 0 else { return true }
             if remoteTimestamp > lastLocalChangeTimestamp {
-                applyExternalClipboard(contents, from: device)
+                applyExternalClipboard(contents, from: device, timestamp: remoteTimestamp)
             }
             return true
         default:
@@ -136,22 +136,27 @@ public class ClipboardService: BidirectionalService {
         guard let content = items[0] as? String else { return }
         
         self.lastChangeCount = NSPasteboard.general.changeCount
-        self.lastLocalChangeTimestamp = Date()
+        let isExternalChange = (self.lastChangeCount == self.lastExternalChangeCount)
+        if !isExternalChange {
+            self.lastLocalChangeTimestamp = Date()
+        }
         
         for device in self.devices {
             guard !(self.lastChangeCount == self.lastExternalChangeCount && self.lastExternalChangeDevice === device) else { continue }
-            send(DataPacket.clipboardPacket(withContent: content), to: device)
+            send(DataPacket.clipboardPacket(withContent: content, timestamp: self.lastLocalChangeTimestamp), to: device)
         }
     }
     
-    private func applyExternalClipboard(_ content: String, from device: Device) {
+    /// Apply content received from a remote device.
+    /// - Parameter timestamp: The sender's own copy timestamp. Stored as `lastLocalChangeTimestamp`
+    ///   so that future `clipboard.connect` packets carry the original creation time rather than
+    ///   our receive time, preventing the peer from seeing a "newer" timestamp on every reconnect.
+    private func applyExternalClipboard(_ content: String, from device: Device, timestamp: Date = Date()) {
         self.lastExternalChangeDevice = device
         NSPasteboard.general.clearContents()
         NSPasteboard.general.writeObjects([content as NSString])
-        // Capture changeCount AFTER the write so the dedup check in checkPasteboard fires
-        // correctly — clearContents() returns the post-clear count, not the post-write count.
         self.lastExternalChangeCount = NSPasteboard.general.changeCount
-        self.lastLocalChangeTimestamp = Date()
+        self.lastLocalChangeTimestamp = timestamp
     }
 }
 
@@ -186,10 +191,12 @@ fileprivate extension DataPacket {
     
     // MARK: Public static methods
     
-    static func clipboardPacket(withContent content: String) -> DataPacket {
-        return DataPacket(type: clipboardPacketType, body: [
-            ClipboardProperty.content.rawValue: content as AnyObject
-        ])
+    static func clipboardPacket(withContent content: String, timestamp: Date? = nil) -> DataPacket {
+        var body: [String: AnyObject] = [ClipboardProperty.content.rawValue: content as AnyObject]
+        if let ts = timestamp {
+            body[ClipboardProperty.timestamp.rawValue] = NSNumber(value: Int64(ts.timeIntervalSince1970 * 1000))
+        }
+        return DataPacket(type: clipboardPacketType, body: body)
     }
     
     static func clipboardConnectPacket(withContent content: String, timestamp: Date) -> DataPacket {
@@ -211,7 +218,7 @@ fileprivate extension DataPacket {
     }
     
     func getTimestamp() throws -> Date {
-        guard isClipboardConnectPacket else { throw ClipboardError.wrongType }
+        guard isClipboardPacket || isClipboardConnectPacket else { throw ClipboardError.wrongType }
         guard body.keys.contains(ClipboardProperty.timestamp.rawValue) else { throw ClipboardError.invalidTimestamp }
         guard let value = body[ClipboardProperty.timestamp.rawValue] as? NSNumber else { throw ClipboardError.invalidTimestamp }
         return Date(timeIntervalSince1970: value.doubleValue / 1000)
