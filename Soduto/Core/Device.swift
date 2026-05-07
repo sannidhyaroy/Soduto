@@ -74,6 +74,21 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
     public let outgoingCapabilities: Set<Service.Capability>
     public let config: DeviceConfiguration
     
+    /// Identity protocol extension fields (absent on standard KDE Connect clients).
+    public private(set) var clientName: String?
+    public private(set) var clientVersion: String?
+    public let platformName: String?
+    public private(set) var platformVersion: String?
+    
+    /// True only when the peer explicitly identifies as in our own clien family.
+    public var isSiblingClient: Bool { clientName == Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String }
+    
+    /// True when the peer is the sibling client running specifically on Android.
+    public var isAndroidCompanion: Bool { isSiblingClient && platformName == "Android" }
+    
+    /// True when the peer is the same client running specifically on macOS.
+    public var isMacOSCompanion: Bool { isSiblingClient && platformName == "macOS" }
+    
     public var peerCertificate: SecCertificate? {
         if let certificate = self.connections.first?.peerCertificate { return certificate }
         return self.config.certificate
@@ -130,6 +145,10 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         self.type = DeviceType(rawValue: try identity.getDeviceType()) ?? DeviceType.Unknown
         self.incomingCapabilities = try identity.getIncomingCapabilities()
         self.outgoingCapabilities = try identity.getOutgoingCapabilities()
+        self.clientName = identity.getClientName()
+        self.clientVersion = identity.getClientVersion()
+        self.platformName = identity.getPlatformName()
+        self.platformVersion = identity.getPlatformVersion()
         self.config = config
         self.pairingStatus = self.config.isPaired ? .Paired : .Unpaired
         
@@ -151,6 +170,10 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         self.type = config.type
         self.incomingCapabilities = Set<Service.Capability>()
         self.outgoingCapabilities = Set<Service.Capability>()
+        self.clientName = nil
+        self.clientVersion = nil
+        self.platformName = nil
+        self.platformVersion = nil
         self.config = config
         self.pairingStatus = self.config.isPaired ? .Paired : .Unpaired
     }
@@ -169,6 +192,13 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
     public func addConnection(_ connection: Connection) {
         connection.delegate = self
         connection.pairingDelegate = self
+        // Refresh identity extension fields unconditionally so they always reflect the
+        // peer's current build (e.g. after updating the peer app).
+        if let identity = connection.identity {
+            self.clientName    = identity.getClientName()
+            self.clientVersion = identity.getClientVersion()
+            self.platformVersion = identity.getPlatformVersion()
+        }
         self.connections.append(connection)
         
         // remove connection of the same type if present
