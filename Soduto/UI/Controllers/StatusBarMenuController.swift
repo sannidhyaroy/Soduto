@@ -36,6 +36,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     }()
     
     private var dashboardWindowController: DeviceDashboardWindowController?
+    private var remoteControlWindowController: RemoteControlWindowController?
     
     private var dragOperationPerformed: Bool = false
     
@@ -60,6 +61,15 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     private func setupServiceObservers() {
         cancellables.removeAll()
         guard let serviceManager = self.serviceManager else { return }
+        
+        if let rcService = serviceManager.service(ofType: RemoteControlService.self) {
+            if remoteControlWindowController == nil {
+                remoteControlWindowController = RemoteControlWindowController(service: rcService)
+            }
+            rcService.openPanel = { [weak self] device in
+                self?.remoteControlWindowController?.show(for: device)
+            }
+        }
         
         if let batteryService = serviceManager.service(ofType: BatteryService.self) {
             batteryService.$statuses
