@@ -79,28 +79,36 @@ enum AppDefaultsStore {
         enum Services {
             fileprivate static let base = "\(Preferences.base).services"
             
-            enum Clipboard: ServiceToggle {
-                static let base = "\(Services.base).clipboard"
-            }
-            
             enum Battery: ServiceToggle {
                 static let base = "\(Services.base).battery"
             }
             
-            enum SystemVolume: ServiceToggle {
-                static let base = "\(Services.base).systemvolume"
+            enum Clipboard: ServiceToggle {
+                static let base = "\(Services.base).clipboard"
+            }
+            
+            enum Digitizer: ServiceIncomingToggle {
+                static let base = "\(Services.base).digitizer"
             }
             
             enum Lock: ServiceToggle {
                 static let base = "\(Services.base).lock"
             }
             
+            enum MousePad: ServiceIncomingToggle {
+                static let base = "\(Services.base).mousepad"
+            }
+            
             enum Presenter: ServiceIncomingToggle {
                 static let base = "\(Services.base).presenter"
             }
             
-            enum Digitizer: ServiceIncomingToggle {
-                static let base = "\(Services.base).digitizer"
+            enum RemoteControl: ServiceOutgoingToggle {
+                static let base = "\(Services.base).remotecontrol"
+            }
+            
+            enum SystemVolume: ServiceToggle {
+                static let base = "\(Services.base).systemvolume"
             }
             
             enum Webcam: ServiceIncomingToggle {

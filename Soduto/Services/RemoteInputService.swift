@@ -29,7 +29,12 @@ import ApplicationServices
 ///
 /// Requires Accessibility permissions (System Settings › Privacy & Security › Accessibility)
 /// to synthesise CGEvents.
-public class RemoteInputService: Service {
+public class RemoteInputService: IncomingService {
+    
+    // MARK: ServiceBase
+    
+    public var userDefaults: UserDefaults = .standard
+    public let incomingPreferenceKey = AppDefaultsStore.Preferences.Services.MousePad.incomingKey
     
     // MARK: Properties
     
@@ -39,9 +44,9 @@ public class RemoteInputService: Service {
     
     public static let serviceId: Service.Id = "com.soduto.services.remoteinput"
     
-    public let incomingCapabilities = Set<Service.Capability>([
-        DataPacket.mousePadRequestPacketType
-    ])
+    public var incomingCapabilities: Set<Service.Capability> {
+        incomingEnabled ? [DataPacket.mousePadRequestPacketType] : []
+    }
     public let outgoingCapabilities = Set<Service.Capability>([
         DataPacket.mousePadEchoPacketType,
         DataPacket.mousePadKeyboardStatePacketType
@@ -49,6 +54,7 @@ public class RemoteInputService: Service {
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
         guard dataPacket.isMousePadRequestPacket else { return false }
+        guard incomingEnabled else { return true }
         
         if !hasCheckedAccessibility {
             checkAndRequestAccessibilityPermissions()
@@ -73,7 +79,6 @@ public class RemoteInputService: Service {
     }
     
     public func setup(for device: Device) {
-        // Announce keyboard input availability so the peer can update its UI.
         device.send(DataPacket.mousePadKeyboardStatePacket(state: true))
     }
     

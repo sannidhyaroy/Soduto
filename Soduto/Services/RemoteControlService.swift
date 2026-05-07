@@ -20,7 +20,12 @@ import os
 /// Press **Option+Escape** to toggle capture mode.
 ///
 /// Requires Accessibility permissions (System Settings › Privacy & Security › Accessibility).
-public class RemoteControlService: Service, ObservableObject {
+public class RemoteControlService: OutgoingService, ObservableObject {
+    
+    // MARK: ServiceBase
+    
+    public var userDefaults: UserDefaults = .standard
+    public let outgoingPreferenceKey = AppDefaultsStore.Preferences.Services.RemoteControl.outgoingKey
     
     // MARK: Properties
     
@@ -29,9 +34,9 @@ public class RemoteControlService: Service, ObservableObject {
     public let incomingCapabilities = Set<Service.Capability>([
         DataPacket.mousePadKeyboardStatePacketType
     ])
-    public let outgoingCapabilities = Set<Service.Capability>([
-        DataPacket.mousePadRequestPacketType
-    ])
+    public var outgoingCapabilities: Set<Service.Capability> {
+        outgoingEnabled ? [DataPacket.mousePadRequestPacketType] : []
+    }
     
     @Published public private(set) var isCapturing = false
     @Published public private(set) var remoteKeyboardEnabled = false
@@ -89,7 +94,7 @@ public class RemoteControlService: Service, ObservableObject {
     }
     
     public func actions(for device: Device) -> [ServiceAction] {
-        guard device.pairingStatus == .Paired, device.isReachable else { return [] }
+        guard outgoingEnabled, device.pairingStatus == .Paired, device.isReachable else { return [] }
         if isCapturing && targetDevice?.id == device.id {
             return [ServiceAction(id: ActionId.stopInputCapturing.rawValue,
                                   title: "Unlock Capture",
