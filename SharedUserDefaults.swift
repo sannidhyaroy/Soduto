@@ -91,6 +91,10 @@ enum AppDefaultsStore {
                 static let base = "\(Services.base).digitizer"
             }
             
+            enum FindMy: ServiceToggle {
+                static let base = "\(Services.base).findmy"
+            }
+            
             enum Lock: ServiceToggle {
                 static let base = "\(Services.base).lock"
             }

@@ -64,6 +64,8 @@
 		317F93052FABDBDE00CDC0EC /* RemoteControlWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317F93042FABDBDE00CDC0EC /* RemoteControlWindowController.swift */; };
 		317F93072FABDC0D00CDC0EC /* RemoteControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317F93062FABDC0D00CDC0EC /* RemoteControlView.swift */; };
 		317F93092FAD451300CDC0EC /* KeyboardUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317F93082FAD451300CDC0EC /* KeyboardUtils.swift */; };
+		317F930B2FAE0EB600CDC0EC /* FindMyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317F930A2FAE0EB600CDC0EC /* FindMyView.swift */; };
+		317F930D2FAE0F0600CDC0EC /* FindMyWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317F930C2FAE0F0600CDC0EC /* FindMyWindowController.swift */; };
 		31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		31864DD0293C3CE100334902 /* SharedUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31864DCE293C3CE100334902 /* SharedUserDefaults.swift */; };
 		31905C172F75F22900F259CE /* DigitizerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31905C162F75F22800F259CE /* DigitizerService.swift */; };
@@ -155,7 +157,7 @@
 		849237991DE06EBC00D95BBA /* ServiceAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 849237981DE06EBC00D95BBA /* ServiceAction.swift */; };
 		8492379D1DE1C55900D95BBA /* DeviceMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8492379C1DE1C55900D95BBA /* DeviceMenu.swift */; };
 		8492379F1DE1C87600D95BBA /* ServiceActionMenuItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8492379E1DE1C87600D95BBA /* ServiceActionMenuItem.swift */; };
-		849237A11DE224CF00D95BBA /* FindMyPhoneService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */; };
+		849237A11DE224CF00D95BBA /* FindMyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 849237A01DE224CF00D95BBA /* FindMyService.swift */; };
 		849237A31DE4E76E00D95BBA /* UserNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 849237A21DE4E76E00D95BBA /* UserNotificationManager.swift */; };
 		849237EC1DE5FC9600D95BBA /* PairingInterfaceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 849237EB1DE5FC9600D95BBA /* PairingInterfaceController.swift */; };
 		849927801E6C5CA600AF8CF4 /* IconItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8499277E1E6C5CA600AF8CF4 /* IconItem.swift */; };
@@ -316,6 +318,8 @@
 		317F93042FABDBDE00CDC0EC /* RemoteControlWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlWindowController.swift; sourceTree = "<group>"; };
 		317F93062FABDC0D00CDC0EC /* RemoteControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlView.swift; sourceTree = "<group>"; };
 		317F93082FAD451300CDC0EC /* KeyboardUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardUtils.swift; sourceTree = "<group>"; };
+		317F930A2FAE0EB600CDC0EC /* FindMyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindMyView.swift; sourceTree = "<group>"; };
+		317F930C2FAE0F0600CDC0EC /* FindMyWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindMyWindowController.swift; sourceTree = "<group>"; };
 		31864DCE293C3CE100334902 /* SharedUserDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUserDefaults.swift; sourceTree = SOURCE_ROOT; };
 		31905C162F75F22800F259CE /* DigitizerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitizerService.swift; sourceTree = "<group>"; };
 		31905C182F76443300F259CE /* LockService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockService.swift; sourceTree = "<group>"; };
@@ -410,7 +414,7 @@
 		849237981DE06EBC00D95BBA /* ServiceAction.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceAction.swift; sourceTree = "<group>"; };
 		8492379C1DE1C55900D95BBA /* DeviceMenu.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceMenu.swift; sourceTree = "<group>"; };
 		8492379E1DE1C87600D95BBA /* ServiceActionMenuItem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceActionMenuItem.swift; sourceTree = "<group>"; };
-		849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FindMyPhoneService.swift; sourceTree = "<group>"; };
+		849237A01DE224CF00D95BBA /* FindMyService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FindMyService.swift; sourceTree = "<group>"; };
 		849237A21DE4E76E00D95BBA /* UserNotificationManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UserNotificationManager.swift; sourceTree = "<group>"; };
 		849237EB1DE5FC9600D95BBA /* PairingInterfaceController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PairingInterfaceController.swift; sourceTree = "<group>"; };
 		8499277E1E6C5CA600AF8CF4 /* IconItem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IconItem.swift; sourceTree = "<group>"; };
@@ -635,6 +639,7 @@
 				84218DC71D789BAB00C7CEBE /* DeviceListItemView.swift */,
 				31F8A60A2F4A642E00CA5A61 /* DevicesListView.swift */,
 				8492379C1DE1C55900D95BBA /* DeviceMenu.swift */,
+				317F930A2FAE0EB600CDC0EC /* FindMyView.swift */,
 				31AB4B592F5975E000FE3DD4 /* HUDToast.swift */,
 				84651A731E59F9C900D17601 /* MenuView.swift */,
 				31F8A6032F4A53DC00CA5A61 /* PairingView.swift */,
@@ -654,6 +659,7 @@
 				026BFB571F194D7D00D888E2 /* DeviceInfoWindowController.swift */,
 				842506721ED4CEF800AEE25F /* DeviceListController.swift */,
 				0248E0FE1F23C4AF00C411F7 /* DevicePreferencesViewController.swift */,
+				317F930C2FAE0F0600CDC0EC /* FindMyWindowController.swift */,
 				849237EB1DE5FC9600D95BBA /* PairingInterfaceController.swift */,
 				31F8A6052F4A555D00CA5A61 /* PairingWindowController.swift */,
 				8421A8E61D761409008AC833 /* PreferencesWindowController.swift */,
@@ -901,7 +907,7 @@
 				840FC2F81DEF6AF400AC4824 /* ClipboardService.swift */,
 				F8B2BB232DAFC87B00FFA284 /* ConnectivityReportService.swift */,
 				31905C162F75F22800F259CE /* DigitizerService.swift */,
-				849237A01DE224CF00D95BBA /* FindMyPhoneService.swift */,
+				849237A01DE224CF00D95BBA /* FindMyService.swift */,
 				31905C182F76443300F259CE /* LockService.swift */,
 				31711BA72F17435000E3B9FE /* MediaPlayerService.swift */,
 				8468BDFA1DE8F10D003B9925 /* NotificationsService.swift */,
@@ -1224,7 +1230,8 @@
 				311BC28D2F2800D400E4A33F /* StableHashing.swift in Sources */,
 				02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */,
 				024F8B191F24FC7700D6E504 /* ServicePreferencesViewController.swift in Sources */,
-				849237A11DE224CF00D95BBA /* FindMyPhoneService.swift in Sources */,
+				849237A11DE224CF00D95BBA /* FindMyService.swift in Sources */,
+				317F930D2FAE0F0600CDC0EC /* FindMyWindowController.swift in Sources */,
 				31A421992F43B8C2003B97FC /* UploadTask.swift in Sources */,
 				31A4219A2F43B8C2003B97FC /* Connection.swift in Sources */,
 				31905C172F75F22900F259CE /* DigitizerService.swift in Sources */,
@@ -1269,6 +1276,7 @@
 				842505E91ED1BD3C00AEE25F /* RemoteInputService.swift in Sources */,
 				31366D362F412C4A0013911D /* PacketCodec.swift in Sources */,
 				026BFB581F194D7D00D888E2 /* DeviceInfoWindowController.swift in Sources */,
+				317F930B2FAE0EB600CDC0EC /* FindMyView.swift in Sources */,
 				84FA45D81DDDCB3D00EF3992 /* ConnectionProvider.swift in Sources */,
 				31332A382F6CCE690085A93A /* DeviceDashboardModel.swift in Sources */,
 				8436DEF81E956DA000529362 /* Timer.swift in Sources */,
