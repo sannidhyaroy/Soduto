@@ -61,7 +61,7 @@ public class FindMyService: NSObject, BidirectionalService {
         return [ServiceAction(id: ActionId.findMy.rawValue, title: "Find My Device", description: "Ring the device so you can find it", service: self, device: device)]
     }
 
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
         guard let actionId = ActionId(rawValue: id) else { return }
         switch actionId {
         case .findMy:

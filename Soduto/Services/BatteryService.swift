@@ -140,7 +140,7 @@ public class BatteryService: BidirectionalService, ObservableObject {
         return []
     }
     
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
         // No supported actions
     }
     

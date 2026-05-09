@@ -164,7 +164,7 @@ public class SystemVolumeService: BidirectionalService, ObservableObject {
         request(DataPacket.systemVolumeSetMutedPacket(name: sinkName, muted: muted), from: device)
     }
     
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {}
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {}
     
     
     // MARK: Incoming Packet Handlers

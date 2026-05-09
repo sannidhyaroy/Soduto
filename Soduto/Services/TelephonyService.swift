@@ -135,7 +135,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         ]
     }
     
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
         guard let actionId = ActionId(rawValue: id) else { return }
         guard device.pairingStatus == .Paired else { return }
         

@@ -159,7 +159,7 @@ public class RunCommandService: Service {
         return actions
     }
     
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
         // No supported actions
     }
     

@@ -107,7 +107,7 @@ public class RemoteControlService: OutgoingService, ObservableObject {
                               service: self, device: device)]
     }
     
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
         switch id {
         case ActionId.startInputCapturing.rawValue:
             if let panel = openPanel {

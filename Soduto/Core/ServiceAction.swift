@@ -57,8 +57,7 @@ public struct ServiceAction {
     /// Keyboard equivalent (e.g. "r", "n", space)
     public let keyEquivalent: String
     
-    /// Opaque payload carried with the action. Passed back to the service via
-    /// `performAction(_:forDevice:userInfo:)` so the action is self-contained
+    /// Opaque payload carried with the action
     public let userInfo: [String: Any]?
     
     /// SF Symbol name for the menu item icon (e.g. "bell", "lock", "folder")
