@@ -23,6 +23,7 @@ public protocol Service: DeviceDataPacketHandler {
     
     func actions(for device: Device) -> [ServiceAction]
     func performAction(_ id: ServiceAction.Id, forDevice device: Device)
+    func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?)
     
     /// Called by `ServiceManager` immediately after the service is registered,
     /// providing the `UserDefaults` instance the service should use for reading
@@ -36,6 +37,7 @@ public protocol Service: DeviceDataPacketHandler {
 extension Service {
     var id: Id { return type(of: self).serviceId }
     public func configure(with userDefaults: UserDefaults) {}
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) { performAction(id, forDevice: device) }
 }
 
 

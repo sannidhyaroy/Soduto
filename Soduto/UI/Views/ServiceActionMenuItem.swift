@@ -21,9 +21,15 @@ public class ServiceActionMenuItem: NSMenuItem {
     public init(serviceAction: ServiceAction) {
         self.serviceAction = serviceAction
         
-        super.init(title: serviceAction.title, action: #selector(performServiceAction), keyEquivalent: "")
-        
-        self.target = self
+        if let children = serviceAction.children {
+            let submenu = NSMenu(title: serviceAction.title)
+            for child in children { submenu.addItem(ServiceActionMenuItem(serviceAction: child)) }
+            super.init(title: serviceAction.title, action: nil, keyEquivalent: serviceAction.keyEquivalent)
+            self.submenu = submenu
+        } else {
+            super.init(title: serviceAction.title, action: #selector(performServiceAction), keyEquivalent: serviceAction.keyEquivalent)
+            self.target = self
+        }
     }
     
     required public init(coder decoder: NSCoder) {
