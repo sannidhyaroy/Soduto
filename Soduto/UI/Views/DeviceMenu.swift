@@ -46,12 +46,6 @@ public class DeviceMenu: NSMenu {
                     let item = NSMenuItem(title: action.title, action: nil, keyEquivalent: "")
                     item.submenu = runCommandService.createRunCommandMenu(for: device)
                     self.addItem(item)
-                } else if let mediaPlayerService = action.service as? MediaPlayerService,
-                          action.id == MediaPlayerService.ActionId.selectPlayer.rawValue {
-                    // Special handling for Now Playing player selection - replace with submenu
-                    let item = NSMenuItem(title: action.title, action: nil, keyEquivalent: "")
-                    item.submenu = mediaPlayerService.createPlayerSelectionMenu(for: device)
-                    self.addItem(item)
                 } else {
                     // Normal handling for other actions
                     let item = ServiceActionMenuItem(serviceAction: action)

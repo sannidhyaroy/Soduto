@@ -322,7 +322,24 @@ extension MediaPlayerService {
         ]
         
         if let devicePlayers = players[device.id], !devicePlayers.isEmpty {
-            actions.append(ServiceAction(id: ActionId.selectPlayer.rawValue, group: "media", title: "Now Playing", description: "Select which media player is shown in Now Playing", service: self, device: device))
+            var playerActions: [ServiceAction] = []
+            for player in devicePlayers {
+                playerActions.append(ServiceAction(
+                    id: ActionId.selectPlayer.rawValue,
+                    group: "media",
+                    title: player.identity,
+                    description: "Select \(player.identity) as active player",
+                    service: self,
+                    device: device,
+                    userInfo: [
+                        UserInfoProperty.playerIdentity.rawValue: player.identity,
+                        UserInfoProperty.deviceId.rawValue: device.id
+                    ],
+                    state: (player === lastActivePlayer) ? .on : .off
+                ))
+            }
+            
+            actions.append(ServiceAction(id: ActionId.selectPlayer.rawValue, group: "media", title: "Now Playing", description: "Select which media player is shown in Now Playing", service: self, device: device, children: playerActions))
         }
         
         return actions
@@ -336,34 +353,14 @@ extension MediaPlayerService {
         case .refresh:
             requestPlayerList(from: device)
         case .selectPlayer:
-            break // handled via createPlayerSelectionMenu / playerMenuItemClicked
+            guard let userInfo = userInfo,
+                  let playerIdentity = userInfo[UserInfoProperty.playerIdentity.rawValue] as? String,
+                  let deviceId = userInfo[UserInfoProperty.deviceId.rawValue] as? String,
+                  let player = players[deviceId]?.first(where: { $0.identity == playerIdentity })
+            else { return }
+            Logger.services.debug("MPRIS::performAction(userInfo:) - manually selecting player \(player.identity, privacy: .public)")
+            setActivePlayer(player)
         }
-    }
-    
-    func createPlayerSelectionMenu(for device: Device) -> NSMenu {
-        let menu = NSMenu()
-        guard let devicePlayers = players[device.id], !devicePlayers.isEmpty else {
-            let empty = NSMenuItem(title: "No players", action: nil, keyEquivalent: "")
-            empty.isEnabled = false
-            menu.addItem(empty)
-            return menu
-        }
-        for player in devicePlayers {
-            let item = NSMenuItem(title: player.identity, action: #selector(playerMenuItemClicked(_:)), keyEquivalent: "")
-            item.target = self
-            item.state = (player === lastActivePlayer) ? .on : .off
-            item.representedObject = (playerIdentity: player.identity, deviceId: device.id)
-            menu.addItem(item)
-        }
-        return menu
-    }
-    
-    @objc private func playerMenuItemClicked(_ sender: NSMenuItem) {
-        guard let info = sender.representedObject as? (playerIdentity: String, deviceId: String),
-              let player = players[info.deviceId]?.first(where: { $0.identity == info.playerIdentity })
-        else { return }
-        Logger.services.debug("MPRIS::playerMenuItemClicked - manually selecting player \(player.identity, privacy: .public)")
-        setActivePlayer(player)
     }
 }
 
