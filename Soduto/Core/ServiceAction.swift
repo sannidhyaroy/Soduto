@@ -21,6 +21,13 @@ public struct ServiceAction {
     public typealias Id = Int
     public typealias Group = String
     
+    /// Menu item visual state for toggles and checkmarks
+    public enum ActionState: Int {
+        case off = 0
+        case on = 1
+        case mixed = -1
+    }
+    
     
     // MARK: Public properties
     
@@ -38,7 +45,7 @@ public struct ServiceAction {
     public let title: String
     
     /// Possibly slightly longer than title action description suitable to display in UI
-    public let decription: String
+    public let description: String
     
     public let service: Service
     public let device: Device
@@ -54,19 +61,31 @@ public struct ServiceAction {
     /// `performAction(_:forDevice:userInfo:)` so the action is self-contained
     public let userInfo: [String: Any]?
     
+    /// SF Symbol name for the menu item icon (e.g. "bell", "lock", "folder")
+    public let imageName: String?
+    
+    /// Whether the action is currently enabled
+    public let isEnabled: Bool
+    
+    /// Visual state for toggle/checkmark menu items
+    public let state: ActionState?
+    
     
     // MARK: Init / Deinit
     
-    init(id: Id, group: Group = defaultGroup, title: String, description: String, service: Service, device: Device, children: [ServiceAction]? = nil, keyEquivalent: String = "", userInfo: [String: Any]? = nil) {
+    init(id: Id, group: Group = defaultGroup, title: String, description: String, service: Service, device: Device, children: [ServiceAction]? = nil, keyEquivalent: String = "", userInfo: [String: Any]? = nil, imageName: String? = nil, isEnabled: Bool = true, state: ActionState? = nil) {
         self.id = id
         self.group = group
         self.title = title
-        self.decription = description
+        self.description = description
         self.service = service
         self.device = device
         self.children = children
         self.keyEquivalent = keyEquivalent
         self.userInfo = userInfo
+        self.imageName = imageName
+        self.isEnabled = isEnabled
+        self.state = state
     }
     
     

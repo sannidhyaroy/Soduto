@@ -30,6 +30,16 @@ public class ServiceActionMenuItem: NSMenuItem {
             super.init(title: serviceAction.title, action: #selector(performServiceAction), keyEquivalent: serviceAction.keyEquivalent)
             self.target = self
         }
+        
+        if let name = serviceAction.imageName {
+            self.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        }
+        
+        self.isEnabled = serviceAction.isEnabled
+        
+        if let actionState = serviceAction.state {
+            self.state = NSControl.StateValue(rawValue: actionState.rawValue)
+        }
     }
     
     required public init(coder decoder: NSCoder) {
