@@ -2,7 +2,7 @@
 //  RunCommandService.swift
 //  Soduto
 //
-//  Created on 2025-04-19.
+//  Created by Swapnil Devesh on 2025-04-19.
 //  Copyright © 2025 Soduto. All rights reserved.
 //
 
@@ -148,55 +148,43 @@ public class RunCommandService: Service {
         
         guard device.incomingCapabilities.contains(DataPacket.runCommandRequestPacketType) else { return actions }
         
-        actions.append(ServiceAction(
-            id: ActionId.runCommand.rawValue,
-            title: "Run Command",
-            description: "Run a command on the remote device",
-            service: self,
-            device: device
-        ))
+        if let deviceCommands = remoteCommands[device.id], !deviceCommands.isEmpty {
+            var commandActions: [ServiceAction] = []
+            for (uuid, commandInfo) in deviceCommands {
+                guard let name = commandInfo["name"] else { continue }
+                commandActions.append(ServiceAction(
+                    id: ActionId.runCommand.rawValue,
+                    title: name,
+                    description: "Run command on remote device",
+                    service: self,
+                    device: device,
+                    userInfo: ["uuid": uuid]
+                ))
+            }
+            actions.append(ServiceAction(
+                id: ActionId.runCommand.rawValue,
+                title: "Run Command",
+                description: "Run a command on the remote device",
+                service: self,
+                device: device,
+                children: commandActions
+            ))
+        }
         
         return actions
     }
     
     public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
-        // No supported actions
-    }
-    
-    public func createRunCommandMenu(for device: Device) -> NSMenu {
-        let menu = NSMenu(title: "Run Commands")
+        guard let actionId = ActionId(rawValue: id) else { return }
         
-        var hasCommands = false
-        if let deviceCommands = self.remoteCommands[device.id] {
-            if !deviceCommands.isEmpty {
-                hasCommands = true
-                for (uuid, commandInfo) in deviceCommands {
-                    guard let name = commandInfo["name"] else { continue }
-                    
-                    let item = NSMenuItem(title: name, action: #selector(runCommandMenuItemClicked(_:)), keyEquivalent: "")
-                    item.target = self
-                    item.representedObject = (uuid: uuid, device: device)
-                    menu.addItem(item)
-                }
-            }
+        switch actionId {
+        case .runCommand:
+            guard let userInfo = userInfo, let uuid = userInfo["uuid"] as? String else { return }
+            device.send(DataPacket.runCommandRequestPacket(key: uuid))
         }
-        
-        if !hasCommands {
-            let item = NSMenuItem(title: "No commands configured", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            menu.addItem(item)
-        }
-        
-        return menu
     }
     
     // MARK: Private methods
-    
-    @objc private func runCommandMenuItemClicked(_ sender: NSMenuItem) {
-        guard let (uuid, device) = sender.representedObject as? (uuid: String, device: Device) else { return }
-        
-        device.send(DataPacket.runCommandRequestPacket(key: uuid))
-    }
     
     private func executeLocalCommand(_ key: String, device: Device) {
         guard let commands = getLocalCommands() else { return }
