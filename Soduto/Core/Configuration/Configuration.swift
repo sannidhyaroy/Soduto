@@ -248,7 +248,6 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
         case hostDeviceId = "hostDeviceId"
         case hostCertificateName = "hostCertificateName"
         case launchOnLogin = "launchOnLogin"
-        case runCommands = "runCommands"
     }
     
     public weak var capabilitiesDataSource: CapabilitiesDataSource? = nil
@@ -373,29 +372,6 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
             }
         }
     }
-    
-    public var runCommands: [RunCommandService.Command] {
-        get {
-            if let data = self.userDefaults.data(forKey: Property.runCommands.rawValue) {
-                do {
-                    return try JSONDecoder().decode([RunCommandService.Command].self, from: data)
-                } catch {
-                    Logger.config.error("Failed to decode run commands: \(error, privacy: .public)")
-                    return []
-                }
-            }
-            return []
-        }
-        set {
-            do {
-                let data = try JSONEncoder().encode(newValue)
-                self.userDefaults.set(data, forKey: Property.runCommands.rawValue)
-            } catch {
-                Logger.config.error("Failed to encode run commands: \(error, privacy: .public)")
-            }
-        }
-    }
-    
     
     class func generateDeviceId() -> Device.Id {
         let uuid = UUID().uuidString

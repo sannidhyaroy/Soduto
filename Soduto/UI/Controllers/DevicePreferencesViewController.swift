@@ -47,7 +47,7 @@ class DevicePreferencesViewController: NSViewController {
             label.addAttributes([
                 NSAttributedString.Key.foregroundColor: NSColor.disabledControlTextColor,
                 NSAttributedString.Key.font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-                ], range: NSMakeRange(0, label.length))
+            ], range: NSMakeRange(0, label.length))
             label.append(NSAttributedString(string: "\n\(hostName)"))
             label.setAlignment(.center, range: NSMakeRange(0, label.length))
             self.hostNameLabel.attributedStringValue = label
@@ -110,8 +110,11 @@ class DevicePreferencesViewController: NSViewController {
             runCommandsWindowController?.delegate = self
         }
         
-        runCommandsWindowController?.showWindow(sender)
-        NSApp.activate(ignoringOtherApps: true)
+        if let parentWindow = view.window {
+            runCommandsWindowController?.presentAsSheet(in: parentWindow)
+        } else {
+            runCommandsWindowController?.showWindow(sender)
+        }
     }
 }
 
@@ -119,10 +122,14 @@ class DevicePreferencesViewController: NSViewController {
 
 extension DevicePreferencesViewController: RunCommandsWindowControllerDelegate {
     func getLocalCommands() -> [RunCommandService.Command]? {
-        return AppDelegate.shared().config.runCommands
+        return runCommandService?.localCommands
     }
     
     func saveLocalCommands(_ commands: [RunCommandService.Command]) {
-        AppDelegate.shared().config.runCommands = commands
+        runCommandService?.localCommands = commands
+    }
+    
+    private var runCommandService: RunCommandService? {
+        return AppDelegate.shared().serviceManager.service(ofType: RunCommandService.self)
     }
 }

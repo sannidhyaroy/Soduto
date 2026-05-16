@@ -56,6 +56,7 @@
 		3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F22F353AFA005152CB /* Logger+Categories.swift */; };
 		3152C3F52F353B1E005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F42F353B1E005152CB /* Logger+Categories.swift */; };
 		3152C3F82F368F7B005152CB /* Logger+Categories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3152C3F72F368F7B005152CB /* Logger+Categories.swift */; };
+		3160AB8D2FB14C1100DE1870 /* RunCommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3160AB8C2FB14C1100DE1870 /* RunCommandsView.swift */; };
 		3170649A2F8E30BC00BC6593 /* WebcamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317064992F8E30BC00BC6593 /* WebcamService.swift */; };
 		31711BA82F17435000E3B9FE /* MediaPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BA72F17435000E3B9FE /* MediaPlayerService.swift */; };
 		31711BAC2F17638000E3B9FE /* ImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31711BAB2F17638000E3B9FE /* ImageLoader.swift */; };
@@ -310,6 +311,7 @@
 		3152C3F22F353AFA005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F42F353B1E005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
 		3152C3F72F368F7B005152CB /* Logger+Categories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Logger+Categories.swift"; sourceTree = "<group>"; };
+		3160AB8C2FB14C1100DE1870 /* RunCommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunCommandsView.swift; sourceTree = "<group>"; };
 		317064992F8E30BC00BC6593 /* WebcamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebcamService.swift; sourceTree = "<group>"; };
 		31711BA72F17435000E3B9FE /* MediaPlayerService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MediaPlayerService.swift; sourceTree = "<group>"; };
 		31711BAB2F17638000E3B9FE /* ImageLoader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImageLoader.swift; sourceTree = "<group>"; };
@@ -644,6 +646,7 @@
 				84651A731E59F9C900D17601 /* MenuView.swift */,
 				31F8A6032F4A53DC00CA5A61 /* PairingView.swift */,
 				317F93062FABDC0D00CDC0EC /* RemoteControlView.swift */,
+				3160AB8C2FB14C1100DE1870 /* RunCommandsView.swift */,
 				8492379E1DE1C87600D95BBA /* ServiceActionMenuItem.swift */,
 				31AB4B632F5C4BA700FE3DD4 /* TransferProgressHUD.swift */,
 				842B50561E4295D200969AA7 /* UnifiedTitlebarWindow.swift */,
@@ -1232,6 +1235,7 @@
 				024F8B191F24FC7700D6E504 /* ServicePreferencesViewController.swift in Sources */,
 				849237A11DE224CF00D95BBA /* FindMyService.swift in Sources */,
 				317F930D2FAE0F0600CDC0EC /* FindMyWindowController.swift in Sources */,
+				3160AB8D2FB14C1100DE1870 /* RunCommandsView.swift in Sources */,
 				31A421992F43B8C2003B97FC /* UploadTask.swift in Sources */,
 				31A4219A2F43B8C2003B97FC /* Connection.swift in Sources */,
 				31905C172F75F22900F259CE /* DigitizerService.swift in Sources */,

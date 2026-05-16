@@ -111,6 +111,11 @@ enum AppDefaultsStore {
                 static let base = "\(Services.base).remotecontrol"
             }
             
+            enum RunCommand: ServiceToggle {
+                static let base = "\(Services.base).runcommand"
+                static let commandsKey = "\(base).commands"
+            }
+            
             enum SystemVolume: ServiceToggle {
                 static let base = "\(Services.base).systemvolume"
             }
