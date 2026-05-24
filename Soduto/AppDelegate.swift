@@ -26,13 +26,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
     let deviceManager: DeviceManager
     let serviceManager = ServiceManager()
     private(set) var userNotificationManager: UserNotificationManager!
-    let updaterController: SPUStandardUpdaterController
+    let updateManager: UpdateManager
     private var heartbeatTimer: Timer?
     
     override init() {
         self.connectionProvider = ConnectionProvider(config: config)
         self.deviceManager = DeviceManager(config: config, serviceManager: self.serviceManager)
-        self.updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        self.updateManager = UpdateManager()
         
         super.init()
         
@@ -51,7 +51,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         self.statusBarMenuController.config = self.config
         self.deviceManager.delegate = self
         
-        self.checkForUpdatesMenuItem.target = updaterController
+        self.checkForUpdatesMenuItem.target = updateManager.updaterController
         self.checkForUpdatesMenuItem.action = #selector(SPUStandardUpdaterController.checkForUpdates(_:))
         
         self.serviceManager.add(service: NotificationsService())

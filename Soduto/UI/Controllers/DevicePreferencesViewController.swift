@@ -8,9 +8,6 @@
 
 import Foundation
 import Cocoa
-import Sparkle
-
-let updater = AppDelegate.shared().updaterController.updater
 
 class DevicePreferencesViewController: NSViewController {
     
@@ -83,7 +80,7 @@ class DevicePreferencesViewController: NSViewController {
             self.deviceTypeButton.selectItem(withTag: AppDefaultsStore.Preferences.deviceType)
         }
         if self.automaticCheckForUpdates != nil {
-            self.automaticCheckForUpdates.state = updater.automaticallyChecksForUpdates ? NSButton.StateValue.on : NSButton.StateValue.off
+            self.automaticCheckForUpdates.state = AppDelegate.shared().updateManager.automaticallyChecksForUpdates ? .on : .off
         }
     }
     
@@ -98,10 +95,8 @@ class DevicePreferencesViewController: NSViewController {
         }
     }
     
-    @IBAction func autoCheckForUpdates (_ sender: Any?) {
-        let checkBoxState = automaticCheckForUpdates.state
-        let state: Bool = (checkBoxState == .on) ? true : false
-        updater.automaticallyChecksForUpdates = state
+    @IBAction func autoCheckForUpdates(_ sender: Any?) {
+        AppDelegate.shared().updateManager.automaticallyChecksForUpdates = (automaticCheckForUpdates.state == .on)
     }
     
     @IBAction func openRunCommandsWindow(_ sender: Any?) {

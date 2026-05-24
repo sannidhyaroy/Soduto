@@ -26,6 +26,7 @@
 		02EC48B51F229CCE00C9370F /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B41F229CCE00C9370F /* Configuration.swift */; };
 		02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */; };
 		3105288B2F49274400488ED4 /* MDNSDiscoveryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3105288A2F49274400488ED4 /* MDNSDiscoveryProvider.swift */; };
+		3116837A2FB9269A00B1AEF8 /* UpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311683792FB9269A00B1AEF8 /* UpdateManager.swift */; };
 		311BC28D2F2800D400E4A33F /* StableHashing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC28C2F2800D400E4A33F /* StableHashing.swift */; };
 		311BC28F2F2865A200E4A33F /* UserNotificationHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC28E2F2865A200E4A33F /* UserNotificationHelper.swift */; };
 		311BC2912F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311BC2902F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift */; };
@@ -289,6 +290,7 @@
 		02EC48B41F229CCE00C9370F /* Configuration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Configuration.swift; path = Configuration/Configuration.swift; sourceTree = "<group>"; };
 		02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceConfiguration.swift; sourceTree = "<group>"; };
 		3105288A2F49274400488ED4 /* MDNSDiscoveryProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDNSDiscoveryProvider.swift; sourceTree = "<group>"; };
+		311683792FB9269A00B1AEF8 /* UpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateManager.swift; sourceTree = "<group>"; };
 		311BC28C2F2800D400E4A33F /* StableHashing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StableHashing.swift; sourceTree = "<group>"; };
 		311BC28E2F2865A200E4A33F /* UserNotificationHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserNotificationHelper.swift; sourceTree = "<group>"; };
 		311BC2902F28697500E4A33F /* UNMutableNotificationContent+Urgency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UNMutableNotificationContent+Urgency.swift"; sourceTree = "<group>"; };
@@ -714,6 +716,7 @@
 				84FA45E51DDDE87F00EF3992 /* AppDelegate.swift */,
 				8438A9251E45145F00922155 /* StatusBarApplication.swift */,
 				31864DCE293C3CE100334902 /* SharedUserDefaults.swift */,
+				311683792FB9269A00B1AEF8 /* UpdateManager.swift */,
 				843301651D2D8CB8008934BB /* Assets.xcassets */,
 				312E770B2938AB7400F29BFA /* App Icons */,
 				8456F4A41D7DE31A006EFE19 /* Core */,
@@ -1210,6 +1213,7 @@
 				84FA45DB1DDDCB3D00EF3992 /* DeviceManager.swift in Sources */,
 				31332A332F6CCE190085A93A /* PlayerRowView.swift in Sources */,
 				02EC48B51F229CCE00C9370F /* Configuration.swift in Sources */,
+				3116837A2FB9269A00B1AEF8 /* UpdateManager.swift in Sources */,
 				840FC2F91DEF6AF400AC4824 /* ClipboardService.swift in Sources */,
 				849962131D572B1F002B893A /* Logging.m in Sources */,
 				843107731E3D32A300AE96AB /* SendMessageWindowController.swift in Sources */,
