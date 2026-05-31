@@ -86,7 +86,11 @@ enum AppDefaultsStore {
             enum Clipboard: ServiceToggle {
                 static let base = "\(Services.base).clipboard"
             }
-            
+
+            enum Contacts: ServiceIncomingToggle {
+                static let base = "\(Services.base).contacts"
+            }
+
             enum Digitizer: ServiceIncomingToggle {
                 static let base = "\(Services.base).digitizer"
             }
@@ -115,7 +119,11 @@ enum AppDefaultsStore {
                 static let base = "\(Services.base).runcommand"
                 static let commandsKey = "\(base).commands"
             }
-            
+
+            enum SMS: ServiceIncomingToggle {
+                static let base = "\(Services.base).sms"
+            }
+
             enum SystemVolume: ServiceToggle {
                 static let base = "\(Services.base).systemvolume"
             }

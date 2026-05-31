@@ -103,7 +103,10 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     Logger.services.debug("Telephony::talking, after media pause request (pausedByController=\(self.mediaController.pausedByController, privacy: .public))")
                     break
                 case DataPacket.TelephonyEvent.sms.rawValue:
-                    self.handleSMSPacket(dataPacket, from: device)
+                    // Drop the legacy `event:"sms"` path entirely that matches KDE Desktop (telephonyplugin.cpp:82 "ignore old style sms packet").
+                    // SMS notifications come through `NotificationsService` (mirroring the Android SMS app's system notification), and SMS reply / browsing is handled by `SMSService`.
+                    // Telephony stays as the path for call events (ringing, missedCall, talking) only.
+                    Logger.services.debug("Telephony::sms ignored (handled by NotificationsService + SMSService)")
                     break
                 default:
                     Logger.services.error("Unknown telephony event type: \(event, privacy: .public)")
@@ -129,6 +132,9 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     public func actions(for device: Device) -> [ServiceAction] {
         guard device.incomingCapabilities.contains(DataPacket.smsRequestPacketType) else { return [] }
         guard device.pairingStatus == .Paired else { return [] }
+        // SMS Protocol v2-capable phones get the proper "Messages" entry from `SMSService`
+        // Don't duplicate it with the legacy one-shot "Send SMS" compose window here
+        guard !SMSService.deviceSupportsV2SMS(device) else { return [] }
         
         return [
             ServiceAction(id: ActionId.sendSms.rawValue, title: "Send SMS", description: "Send text messages from the desktop", service: self, device: device)
@@ -141,6 +147,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         
         switch actionId {
         case .sendSms:
+            // Only reachable for non-v2 devices as SMS Protocol v2-capable phones are filtered out in `actions(for:)` and instead get `SMSService`'s "Messages" entry
+            // Keeps the legacy one-shot compose dialog alive for older Android KDE Connect clients
             sendMessageController.sendActionHandler = { controller in
                 controller.sendActionHandler = nil
                 controller.window?.close()
@@ -178,10 +186,9 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 device.send(DataPacket.mutePhonePacket())
             }
         case DataPacket.TelephonyEvent.sms.rawValue:
-            if let textResponse = response as? UNTextInputNotificationResponse {
-                guard let phoneNumber = userInfo[NotificationProperty.phoneNumber.rawValue] as? String else { break }
-                device.send(DataPacket.smsRequestPacket(phoneNumber: phoneNumber, message: textResponse.userText))
-            }
+            // Legacy SMS reply path, unreachable now that the `event:"sms"` notification is no longer created
+            // Kept as a defensive no-op in case an old delivered notification still triggers this codepath after an update
+            break
         default:
             break
         }
