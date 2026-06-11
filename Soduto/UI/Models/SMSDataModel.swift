@@ -157,7 +157,30 @@ final class SMSDataModel: ObservableObject {
         composingNew = false
         draftRecipients = []
     }
-
+    
+    /// Tapping (or right-clicking → "Send Message") a phone number inside a bubble.
+    /// Looks for an existing 1-on-1 thread matching the normalized number; jumps to it if found, otherwise flips into compose mode pre-populated with the number.
+    /// Group threads are intentionally NOT matched here: a 1-on-1 tap shouldn't drop the user into a group conversation that happens to include the number.
+    func openOrStartThread(forPhoneNumber rawNumber: String) {
+        let trimmed = rawNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let normalized = VCardParser.normalize(phoneNumber: trimmed)
+        guard !normalized.isEmpty else { return }
+        
+        if let existingId = matchingThreadId(for: [normalized]) {
+            if composingNew {
+                composingNew = false
+                draftRecipients = []
+            }
+            selectedThreadId = existingId
+            return
+        }
+        
+        selectedThreadId = nil
+        draftRecipients = [trimmed]
+        composingNew = true
+    }
+    
     /// Triggered by the bottom sentinel's `.onAppear` for silent infinite scroll.
     func loadMoreConversations() {
         smsService.loadMoreConversations(for: device)

@@ -63,7 +63,10 @@ struct MessageBubbleView: View {
                         message.body,
                         isOutgoing: message.type.isFromMe
                     ),
-                    isOutgoing: message.type.isFromMe
+                    isOutgoing: message.type.isFromMe,
+                    onTelLinkClick: { [weak model] number in
+                        model?.openOrStartThread(forPhoneNumber: number)
+                    }
                 )
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
@@ -355,6 +358,10 @@ private struct AttachmentThumbnailView: View {
 private struct LinkifiedTextView: NSViewRepresentable {
     let attributedString: NSAttributedString
     let isOutgoing: Bool
+    /// Called when the user clicks (or selects "Send Message" from the right-click menu) on a `tel:` link inside the body.
+    /// The plain phone number is passed (no `tel:` prefix).
+    /// Non-`tel:` links fall through to NSTextView's default handling, which hands `http(s)://` and `mailto:` URLs to `NSWorkspace.open`.
+    let onTelLinkClick: (String) -> Void
 
     func makeNSView(context: Context) -> AutoSizingTextView {
         let textView = AutoSizingTextView()
@@ -368,8 +375,8 @@ private struct LinkifiedTextView: NSViewRepresentable {
         // being overwritten by the view's frame width.
         textView.textContainer?.widthTracksTextView = false
         textView.textContainer?.heightTracksTextView = false
-        // NSTextView already routes link clicks through NSWorkspace.open and shows the
-        // native right-click context menu for link ranges — no extra wiring needed.
+        textView.delegate = context.coordinator
+        textView.onTelLinkClick = onTelLinkClick
         return textView
     }
     
@@ -381,12 +388,81 @@ private struct LinkifiedTextView: NSViewRepresentable {
             .underlineStyle: NSUnderlineStyle.single.rawValue,
             .cursor: NSCursor.pointingHand
         ]
+        nsView.onTelLinkClick = onTelLinkClick
         // Cheap guard against re-replacing identical text (would clear any in-progress
         // mouse selection mid-drag).
         if nsView.textStorage?.string != attributedString.string {
             nsView.textStorage?.setAttributedString(attributedString)
         }
         nsView.invalidateIntrinsicContentSize()
+    }
+    
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        /// Intercept every link click so we can:
+        /// • Route `tel:` to the model (open thread in-app instead of FaceTime)
+        /// • Show a confirmation alert for `http(s)://` / `mailto:` before opening, so users get a chance to inspect the URL (phishing defence: a sender can make the visible text differ from the actual URL target)
+        ///
+        /// Returning `true` always suppresses `NSTextView`'s default `NSWorkspace.open`; we open ourselves when the user confirms.
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            guard let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:)) else {
+                return false
+            }
+            switch url.scheme?.lowercased() {
+            case "tel":
+                let raw = url.absoluteString
+                let prefixEnd = raw.range(of: ":")?.upperBound ?? raw.startIndex
+                let number = String(raw[prefixEnd...]).removingPercentEncoding ?? String(raw[prefixEnd...])
+                (textView as? AutoSizingTextView)?.onTelLinkClick?(number)
+                return true
+            case "http", "https", "mailto":
+                Self.confirmAndOpen(url, in: textView.window)
+                return true
+            default:
+                // Unknown / app-specific schemes; let the system handle it as before
+                return false
+            }
+        }
+        
+        /// Modal confirmation before launching the default app for a URL.
+        /// Shows the full URL so users can spot typo-squat / lookalike domains before they commit.
+        /// The alert is sheet-attached to the message window when possible so it doesn't steal focus from the rest of the app.
+        private static func confirmAndOpen(_ url: URL, in window: NSWindow?) {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "Open this link?"
+            // Show the URL, truncating in the middle for very long ones so both the scheme/host (left) and the path/query (right) stay visible; both are useful for spotting suspicious URLs
+            // An unbroken URL string has no spaces for NSAlert to wrap on, so a long one can force the alert very wide and push the security-relevant host out of the immediately visible area
+            let displayUrl = Self.truncatedMiddle(url.absoluteString, maxLength: 80)
+            alert.informativeText = "Soduto will open the following link in your default app:\n\n\(displayUrl)"
+            alert.addButton(withTitle: "Open Link")
+            alert.addButton(withTitle: "Cancel")
+            // Make Cancel the safe default; pressing Enter does NOT open the link
+            alert.buttons.first?.keyEquivalent = ""
+            alert.buttons.last?.keyEquivalent = "\r"
+            
+            let runAndHandle: (NSApplication.ModalResponse) -> Void = { response in
+                if response == .alertFirstButtonReturn {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            if let window {
+                alert.beginSheetModal(for: window, completionHandler: runAndHandle)
+            } else {
+                runAndHandle(alert.runModal())
+            }
+        }
+        
+        /// Middle-truncates `string` to `maxLength`, keeping a prefix and suffix around an ellipsis.
+        /// Used so long URLs keep both their scheme/host and path/query visible instead of being cut off at one end.
+        private static func truncatedMiddle(_ string: String, maxLength: Int) -> String {
+            guard string.count > maxLength else { return string }
+            let keep = (maxLength - 1) / 2
+            let prefix = string.prefix(keep)
+            let suffix = string.suffix(maxLength - keep - 1)
+            return "\(prefix)…\(suffix)"
+        }
     }
 
     /// Tell SwiftUI the bubble's actual text size given the proposed max width.
@@ -411,6 +487,9 @@ private struct LinkifiedTextView: NSViewRepresentable {
 /// height so SwiftUI's auto-sizing produces a bubble that hugs the text vertically.
 /// Width comes from SwiftUI's proposed size (the bubble's HStack constraint).
 private final class AutoSizingTextView: NSTextView {
+    /// Forwarded to `LinkifiedTextView.onTelLinkClick`.
+    /// Used by both the delegate's link-click interception and the right-click "Send Message" menu item.
+    var onTelLinkClick: ((String) -> Void)?
 
     override var intrinsicContentSize: NSSize {
         guard let layoutManager = layoutManager,
@@ -427,7 +506,90 @@ private final class AutoSizingTextView: NSTextView {
         // Width changed → text rewraps → height may change → tell AutoLayout
         invalidateIntrinsicContentSize()
     }
+    
+    /// Replace the default link menu entirely when right-clicking on a `tel:` link.
+    /// The stock "Open Link" / "Copy Link" items both route through `clickedOnLink:` (which we intercept), so they'd both end up sending a message, confusing.
+    /// We build a fresh menu with three explicit actions:
+    ///   • Send Message: open the thread in the Messages window (in-app)
+    ///   • Call Number: call via FaceTime (the old "Open Link" behaviour, but clear)
+    ///   • Copy Number: copy the bare number to the clipboard (no `tel:` prefix)
+    ///
+    /// The full text-selection menu (Look up, Translate, Services, etc.) is unaffected: that menu only appears outside link ranges.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let baseMenu = super.menu(for: event) else { return nil }
+        guard let number = telNumber(at: event) else { return baseMenu }
+        
+        let menu = NSMenu()
+        
+        let sendItem = NSMenuItem(
+            title: "Send Message",
+            action: #selector(sendMessageFromContextMenu(_:)),
+            keyEquivalent: ""
+        )
+        sendItem.target = self
+        sendItem.representedObject = number
+        menu.addItem(sendItem)
+        
+        let callItem = NSMenuItem(
+            title: "Call Number",
+            action: #selector(callNumberFromContextMenu(_:)),
+            keyEquivalent: ""
+        )
+        callItem.target = self
+        callItem.representedObject = number
+        menu.addItem(callItem)
+        
+        let copyItem = NSMenuItem(
+            title: "Copy Number",
+            action: #selector(copyNumberFromContextMenu(_:)),
+            keyEquivalent: ""
+        )
+        copyItem.target = self
+        copyItem.representedObject = number
+        menu.addItem(copyItem)
+        
+        return menu
+    }
+    
+    @objc private func sendMessageFromContextMenu(_ sender: NSMenuItem) {
+        guard let number = sender.representedObject as? String else { return }
+        onTelLinkClick?(number)
+    }
+    
+    @objc private func callNumberFromContextMenu(_ sender: NSMenuItem) {
+        guard let number = sender.representedObject as? String,
+              let url = URL(string: "tel:\(number)") else { return }
+        NSWorkspace.shared.open(url)
+    }
+    
+    @objc private func copyNumberFromContextMenu(_ sender: NSMenuItem) {
+        guard let number = sender.representedObject as? String else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(number, forType: .string)
+    }
 
+    /// Returns the bare phone number string if `event` lands on a `tel:` link, else nil.
+    private func telNumber(at event: NSEvent) -> String? {
+        guard let lm = layoutManager,
+              let tc = textContainer,
+              let storage = textStorage,
+              storage.length > 0 else { return nil }
+        let pt = convert(event.locationInWindow, from: nil)
+        let adjusted = NSPoint(x: pt.x - textContainerOrigin.x,
+                               y: pt.y - textContainerOrigin.y)
+        let glyphIdx = lm.glyphIndex(for: adjusted, in: tc, fractionOfDistanceThroughGlyph: nil)
+        guard glyphIdx < lm.numberOfGlyphs else { return nil }
+        let charIdx = lm.characterIndexForGlyph(at: glyphIdx)
+        guard charIdx < storage.length else { return nil }
+        guard let url = storage.attribute(.link, at: charIdx, effectiveRange: nil) as? URL,
+              url.scheme?.lowercased() == "tel" else { return nil }
+        let raw = url.absoluteString
+        let prefixEnd = raw.range(of: ":")?.upperBound ?? raw.startIndex
+        let bare = String(raw[prefixEnd...]).removingPercentEncoding ?? String(raw[prefixEnd...])
+        return bare.isEmpty ? nil : bare
+    }
+    
     /// Keep the bubble from stealing keyboard focus when the user clicks it for selection.
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { false }
