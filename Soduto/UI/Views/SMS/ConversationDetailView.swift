@@ -42,9 +42,13 @@ struct ConversationDetailView: View {
                     systemImage: "exclamationmark.bubble"
                 )
             }
-            MessageComposeView(model: model) { body, subId in
-                model.sendReply(in: threadId, body: body, subId: subId)
-            }
+            MessageComposeView(
+                model: model,
+                onSend: { body, subId in
+                    model.sendReply(in: threadId, body: body, subId: subId)
+                },
+                threadId: threadId
+            )
         }
     }
     
@@ -54,6 +58,8 @@ struct ConversationDetailView: View {
         // `clusterMessages` preserves that order, producing clusters newest-first
         // After the Y-flip, index-0 of the LazyVStack (newest cluster's newest message) appears at the visual bottom
         let clusters = Self.clusterMessages(thread.messages)
+        let simTransitions = Self.simTransitionMessageIds(thread.messages)
+        let unreadBoundaryId = Self.unreadBoundaryMessageId(thread.messages)
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -72,6 +78,20 @@ struct ConversationDetailView: View {
                         .id(message.id)
                         .padding(.horizontal, 16)
                         .scaleEffect(x: 1, y: -1)
+
+                        // Render the "Sending with X" marker AFTER the transition bubble
+                        // in logical order — after the Y-flip this puts it visually ABOVE
+                        // the new SIM region's first message, delimiting the boundary
+                        // between the old and new SIM. Matches Google Messages.
+                        if simTransitions.contains(message.id) {
+                            sendingWithMarker(subId: message.subId)
+                        }
+                        // Unread divider: rendered after the OLDEST unread incoming
+                        // message in logical order → visually ABOVE that message,
+                        // marking the read↔unread boundary in the thread.
+                        if message.id == unreadBoundaryId {
+                            unreadDivider()
+                        }
                     }
                     clusterHeader(for: cluster)
                 }
@@ -98,6 +118,73 @@ struct ConversationDetailView: View {
         .scaleEffect(x: 1, y: -1)
         // Fresh ScrollView per thread resets offset to 0 (= visual bottom = newest messages)
         .id(threadId)
+    }
+
+    /// Centered "Sending with X" inline marker with light hairlines on either side and
+    /// the SIM name styled as an accent-colored underlined link — matches Google Messages.
+    /// Sits between two outgoing bubbles where the SIM changed. Y-flip is undone via
+    /// `.scaleEffect` like every other row inside the inverted ScrollView.
+    @ViewBuilder
+    private func sendingWithMarker(subId: Int64?) -> some View {
+        HStack(spacing: 12) {
+            Rectangle()
+                .fill(.secondary)
+                .frame(height: 1)
+                .opacity(0.25)
+            Text(Self.sendingWithAttributed(subId: subId))
+                .font(.caption2.weight(.semibold))
+                .fixedSize()
+            Rectangle()
+                .fill(.secondary)
+                .frame(height: 1)
+                .opacity(0.25)
+        }
+        .padding(.horizontal, 16)
+        // Padding swapped vs. visual intent because of the parent Y-flip.
+        // Visual result: 8 pt above marker, 4 pt below.
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .scaleEffect(x: 1, y: -1)
+    }
+    
+    /// Builds an AttributedString for "Sending with [SIM N]" with the prefix in secondary and the SIM name styled as a link (accent + underline).
+    /// Used by both the inline thread marker and the pre-send label in the compose bar so the two look identical.
+    static func sendingWithAttributed(subId: Int64?) -> AttributedString {
+        var prefix = AttributedString("Sending with ")
+        prefix.foregroundColor = .secondary
+        
+        var simName = AttributedString(MessageComposeView.simLabelText(for: subId))
+        simName.foregroundColor = .accentColor
+        simName.underlineStyle = .single
+        
+        return prefix + simName
+    }
+
+    /// Horizontal "Unread" hairline divider. Accent-colored hairlines (more prominent
+    /// than the gray ones used for SIM-transition markers) so the read/unread boundary
+    /// pops out — that's the divider's whole job. Rendered after the oldest unread
+    /// incoming message in logical order so it lands visually ABOVE that message after
+    /// the Y-flip.
+    @ViewBuilder
+    private func unreadDivider() -> some View {
+        HStack(spacing: 12) {
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 1)
+                .opacity(0.55)
+            Text("Unread")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .fixedSize()
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 1)
+                .opacity(0.55)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .scaleEffect(x: 1, y: -1)
     }
 
     @ViewBuilder
@@ -138,16 +225,15 @@ struct ConversationDetailView: View {
     /// clusters. 15 min balances "tight back-and-forth stays together" against "an hour
     /// later is a different conversation."
     private static let clusterGapThreshold: TimeInterval = 15 * 60
-
-    /// Group `messages` (newest-first) into time-based clusters. Output preserves the
-    /// newest-first order. A cluster boundary is inserted whenever the gap between two
-    /// consecutive messages exceeds `clusterGapThreshold`; sender identity is NOT a
-    /// boundary (those clusters often span a back-and-forth in a single sitting).
+    
+    /// Group `messages` (newest-first) into time-based clusters.
+    /// Output preserves the newest-first order.
+    /// A cluster boundary is inserted whenever the gap between two consecutive messages exceeds `clusterGapThreshold`; sender identity is NOT a boundary (those clusters often span a back-and-forth in a single sitting).
     private static func clusterMessages(_ messages: [SMSService.Message]) -> [MessageCluster] {
         guard !messages.isEmpty else { return [] }
         let cal = Calendar.current
-
-        // First pass: split into raw clusters by time gap.
+        
+        // First pass: split into raw clusters by time gap
         var rawClusters: [[SMSService.Message]] = []
         var current: [SMSService.Message] = [messages[0]]
         for i in 1..<messages.count {
@@ -192,6 +278,36 @@ struct ConversationDetailView: View {
         guard cluster.isFirstOfDay else { return timeStr }
         let dayStr = Self.dayPrefixFormatter.string(from: cluster.representativeDate)
         return "\(dayStr) · \(timeStr)"
+    }
+    
+    /// Returns the ID of the message that should have the "Unread" divider rendered directly after it (which lands visually ABOVE that message after the Y-flip).
+    /// The boundary message is the OLDEST unread incoming message, provided there's at least one older read message in the loaded history.
+    /// If everything in the loaded slice is unread, there's no read↔unread boundary to mark, so return nil.
+    private static func unreadBoundaryMessageId(_ messages: [SMSService.Message]) -> Int64? {
+        let lastUnreadIdx = messages.lastIndex { !$0.isRead && !$0.type.isFromMe }
+        guard let idx = lastUnreadIdx, idx + 1 < messages.count else { return nil }
+        return messages[idx].id
+    }
+    
+    /// Returns the set of message IDs that mark a SIM-transition boundary: each is an outgoing message whose `sub_id` differs from the previous (older) outgoing message's `sub_id`.
+    /// Incoming messages aren't transition points; they're "received via X" which is a different concept.
+    /// The OLDEST outgoing in the loaded history is intentionally excluded (no older outgoing to compare against, adding a marker there would be misleading if the thread continues off-screen).
+    private static func simTransitionMessageIds(_ messages: [SMSService.Message]) -> Set<Int64> {
+        var result: Set<Int64> = []
+        for (i, msg) in messages.enumerated() where msg.type.isFromMe {
+            // Walk to the next older outgoing message (newest-first array → higher index)
+            var olderOutgoingSubId: Int64??
+            for j in (i + 1)..<messages.count where messages[j].type.isFromMe {
+                olderOutgoingSubId = messages[j].subId
+                break
+            }
+            // Only flag if we found an older outgoing AND its sub_id differs
+            // `Int64??` distinguishes "no older outgoing" (nil) from "older outgoing on default/nil sub_id" (.some(nil))
+            if case .some(let prev) = olderOutgoingSubId, prev != msg.subId {
+                result.insert(msg.id)
+            }
+        }
+        return result
     }
 
     /// Within a cluster, a message is a "continuation" of the previous one if it's
