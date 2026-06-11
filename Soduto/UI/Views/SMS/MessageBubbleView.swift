@@ -21,7 +21,25 @@ struct MessageBubbleView: View {
     /// Whether the previous message in the visual order is from the same sender (within the same minute).
     /// When true, the bubble is rendered tighter: no sender name, no extra spacing.
     let isContinuation: Bool
-
+    /// Whether this is the most recent message in the thread.
+    /// Drives the initial `showTimestamp` state so the latest message always shows its time by default (Google Messages pattern: anchors the user in time).
+    /// Still toggleable.
+    let isLatestMessage: Bool
+    
+    /// Per-message timestamp visibility.
+    /// Initial state mirrors `isLatestMessage`: visible by default for the most recent message, hidden for everything else.
+    /// Tap on the bubble's row toggles it either way.
+    @State private var showTimestamp: Bool
+    
+    init(message: SMSService.Message, model: SMSDataModel, isGroupThread: Bool, isContinuation: Bool, isLatestMessage: Bool) {
+        self.message = message
+        self.model = model
+        self.isGroupThread = isGroupThread
+        self.isContinuation = isContinuation
+        self.isLatestMessage = isLatestMessage
+        self._showTimestamp = State(initialValue: isLatestMessage)
+    }
+    
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             if message.type.isFromMe {
@@ -33,6 +51,12 @@ struct MessageBubbleView: View {
             }
         }
         .padding(.top, isContinuation ? 1 : 6)
+        // Whole-row tap target: tapping anywhere alongside the bubble (in the spacer or the bubble's padding) toggles the timestamp
+        // Text-area taps are handled inside `AutoSizingTextView` at the AppKit layer because `NSTextView` captures those clicks before SwiftUI sees them; both paths converge on `toggleTimestamp()`
+        .contentShape(Rectangle())
+        .onTapGesture {
+            toggleTimestamp()
+        }
     }
     
     @ViewBuilder
@@ -68,6 +92,9 @@ struct MessageBubbleView: View {
                         model?.openOrStartThread(forPhoneNumber: number)
                     }
                 )
+                // `fixedSize(horizontal:)` makes SwiftUI use the `NSTextView`'s intrinsic width (capped at maxBubbleWidth via the layout manager) instead of proposing a width itself
+                // Without this, the bubble fills its parent
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .background(
@@ -75,14 +102,17 @@ struct MessageBubbleView: View {
                         .fill(bubbleFill)
                 )
             }
-
-            // Inline timestamp under the bubble on the bubble's side. Subtle so it
-            // doesn't compete with the message content; chat-app standard.
-            Text(Self.timeFormatter.string(from: message.date))
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 14)
-
+            
+            // Inline timestamp under the bubble; hidden by default, revealed by tapping anywhere on the bubble.
+            // Cluster headers cover the "where am I in time" case; the per-message timestamp is exact-time-on-demand
+            if showTimestamp {
+                Text(Self.timeFormatter.string(from: message.date))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 14)
+                    .transition(.opacity)
+            }
+            
             if message.type == .failed {
                 Text("Not delivered")
                     .font(.caption2)
@@ -91,7 +121,15 @@ struct MessageBubbleView: View {
             }
         }
     }
-
+    
+    /// Toggle the per-message timestamp with the standard fade animation.
+    /// Invoked from both AppKit (`AutoSizingTextView`'s mouseUp) and SwiftUI (`.onTapGesture` on padding).
+    private func toggleTimestamp() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            showTimestamp.toggle()
+        }
+    }
+    
     private var bubbleFill: AnyShapeStyle {
         if message.type.isFromMe {
             return AnyShapeStyle(Color.accentColor)
@@ -362,7 +400,10 @@ private struct LinkifiedTextView: NSViewRepresentable {
     /// The plain phone number is passed (no `tel:` prefix).
     /// Non-`tel:` links fall through to NSTextView's default handling, which hands `http(s)://` and `mailto:` URLs to `NSWorkspace.open`.
     let onTelLinkClick: (String) -> Void
-
+    /// Hard cap on the bubble's text width.
+    /// The text container is sized to this in `intrinsicContentSize` so short text reports a hugging width and long text wraps at the cap, both reliably, without depending on SwiftUI's flaky `sizeThatFits`.
+    var maxBubbleWidth: CGFloat = 360
+    
     func makeNSView(context: Context) -> AutoSizingTextView {
         let textView = AutoSizingTextView()
         textView.isEditable = false
@@ -370,13 +411,15 @@ private struct LinkifiedTextView: NSViewRepresentable {
         textView.drawsBackground = false
         textView.textContainerInset = .zero
         textView.textContainer?.lineFragmentPadding = 0
-        // `widthTracksTextView = false` so the container size we set inside `sizeThatFits`
-        // (based on SwiftUI's proposed width) actually sticks during layout instead of
-        // being overwritten by the view's frame width.
+        // `widthTracksTextView = false` so the cap we set inside `intrinsicContentSize` sticks during layout instead of being overwritten by the view's frame width
         textView.textContainer?.widthTracksTextView = false
         textView.textContainer?.heightTracksTextView = false
         textView.delegate = context.coordinator
         textView.onTelLinkClick = onTelLinkClick
+        textView.maxBubbleWidth = maxBubbleWidth
+        // Seed text storage here so SwiftUI's first `intrinsicContentSize` query has real content to measure
+        // Without this, the initial layout pass measures empty text → 0 width → bubble settles at the parent's proposed width (full row) before `updateNSView` fills the storage
+        textView.textStorage?.setAttributedString(attributedString)
         return textView
     }
     
@@ -389,8 +432,8 @@ private struct LinkifiedTextView: NSViewRepresentable {
             .cursor: NSCursor.pointingHand
         ]
         nsView.onTelLinkClick = onTelLinkClick
-        // Cheap guard against re-replacing identical text (would clear any in-progress
-        // mouse selection mid-drag).
+        nsView.maxBubbleWidth = maxBubbleWidth
+        // Cheap guard against re-replacing identical text (would clear any in-progress mouse selection mid-drag)
         if nsView.textStorage?.string != attributedString.string {
             nsView.textStorage?.setAttributedString(attributedString)
         }
@@ -464,41 +507,37 @@ private struct LinkifiedTextView: NSViewRepresentable {
             return "\(prefix)…\(suffix)"
         }
     }
-
-    /// Tell SwiftUI the bubble's actual text size given the proposed max width.
-    /// Without this, NSTextView greedily fills the proposed width — so even a single
-    /// "Hello" produces a full-width bubble. With this, the bubble hugs short text
-    /// and only wraps when content actually exceeds the proposed width.
-    func sizeThatFits(_ proposal: ProposedViewSize,
-                      nsView: AutoSizingTextView,
-                      context: Context) -> CGSize? {
-        let maxWidth = proposal.width ?? .greatestFiniteMagnitude
-        nsView.textContainer?.containerSize = NSSize(width: maxWidth,
-                                                     height: .greatestFiniteMagnitude)
-        guard let container = nsView.textContainer,
-              let layoutManager = nsView.layoutManager else { return nil }
-        _ = layoutManager.glyphRange(for: container)
-        let used = layoutManager.usedRect(for: container)
-        return CGSize(width: ceil(used.width), height: ceil(used.height))
-    }
+    
+    // Note: deliberately no `sizeThatFits` override
+    // SwiftUI's lazy layout in `LazyVStack` skips `sizeThatFits` calls unpredictably, which caused the recurring "bubble fills full width" bug
+    // We now drive sizing entirely through AppKit's `intrinsicContentSize` (see AutoSizingTextView), combined with `fixedSize` on the SwiftUI side; both are documented, deterministic, and respected in lazy contexts
 }
 
-/// NSTextView subclass that reports the laid-out text bounds as its intrinsic content
-/// height so SwiftUI's auto-sizing produces a bubble that hugs the text vertically.
-/// Width comes from SwiftUI's proposed size (the bubble's HStack constraint).
+/// NSTextView subclass that reports its laid-out text bounds (both width AND height) as its intrinsic content size.
+/// Combined with `.fixedSize(horizontal: true, vertical: false)` on the SwiftUI side, this makes the bubble hug short text and wrap long text at `maxBubbleWidth` reliably, across lazy SwiftUI layout passes.
+///
+/// Tap-to-toggle the per-message timestamp is handled by SwiftUI on the bubble's outer HStack (catches taps on the row's spacer + the bubble's padding).
+/// Clicks that land on the text itself are eaten by NSTextView for text-selection / first-responder / link handling; we accept that trade-off for v1 in exchange for keeping the native right-click menu (Look up / Translate / Services / Share / Speech) intact.
 private final class AutoSizingTextView: NSTextView {
     /// Forwarded to `LinkifiedTextView.onTelLinkClick`.
     /// Used by both the delegate's link-click interception and the right-click "Send Message" menu item.
     var onTelLinkClick: ((String) -> Void)?
-
+    
+    /// Hard cap on the text container width.
+    /// `intrinsicContentSize` writes this into the layout manager before measuring so the reported width reflects the actually-used space (with wrapping kicking in at the cap).
+    var maxBubbleWidth: CGFloat = 360
+    
     override var intrinsicContentSize: NSSize {
         guard let layoutManager = layoutManager,
               let textContainer = textContainer else {
             return super.intrinsicContentSize
         }
+        // Pin the container to the cap so the layout manager wraps long text at `maxBubbleWidth`, but reports the actual occupied width for short text via `usedRect`
+        // Single pass; adding a second pass that snapped the container to `used.width` caused the bubble to lock at `maxBubbleWidth` on subsequent layout queries (layout manager + SwiftUI's `fixedSize` re-entry produced a feedback loop where used.width converged on `container.width`)
+        textContainer.containerSize = NSSize(width: maxBubbleWidth, height: .greatestFiniteMagnitude)
         layoutManager.ensureLayout(for: textContainer)
         let used = layoutManager.usedRect(for: textContainer)
-        return NSSize(width: NSView.noIntrinsicMetric, height: ceil(used.height))
+        return NSSize(width: ceil(used.width), height: ceil(used.height))
     }
     
     override func setFrameSize(_ newSize: NSSize) {
