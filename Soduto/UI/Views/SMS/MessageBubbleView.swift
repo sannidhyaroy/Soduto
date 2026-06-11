@@ -607,8 +607,11 @@ private final class AutoSizingTextView: NSTextView {
         pb.clearContents()
         pb.setString(number, forType: .string)
     }
-
-    /// Returns the bare phone number string if `event` lands on a `tel:` link, else nil.
+    
+    /// Returns the bare phone number string if `event` lands on a `tel:` link, else `nil`.
+    /// Note: triggers a benign QoS-inversion runtime warning ("user-interactive thread waiting on default-QoS thread") because `NSLayoutManager` / `NSTextStorage` take internal locks held by lower-priority redraw work.
+    /// Attempted to pre-compute link rects in `makeNSView` / `updateNSView` to avoid this, but layout isn't valid yet in those callbacks (intrinsicContentSize is what installs the correct container width), so the pre-computation broke both link hit-testing and bubble width.
+    /// Accepted as noise for now as the menu still appears in <1 ms.
     private func telNumber(at event: NSEvent) -> String? {
         guard let lm = layoutManager,
               let tc = textContainer,

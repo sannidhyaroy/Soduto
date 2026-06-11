@@ -60,56 +60,25 @@ struct ConversationDetailView: View {
         let clusters = Self.clusterMessages(thread.messages)
         let simTransitions = Self.simTransitionMessageIds(thread.messages)
         let unreadBoundaryId = Self.unreadBoundaryMessageId(thread.messages)
-
+        let latestMessageId = thread.messages.first?.id
+        let isGroupThread = thread.addresses.count > 1
+        
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                let latestMessageId = thread.messages.first?.id
                 ForEach(clusters) { cluster in
-                    // Messages first in logical order so the header lands visually ABOVE
-                    // the cluster's messages after the Y-flip.
-                    ForEach(Array(cluster.messages.enumerated()), id: \.element.id) { idx, message in
-                        MessageBubbleView(
-                            message: message,
-                            model: model,
-                            isGroupThread: thread.addresses.count > 1,
-                            isContinuation: Self.isContinuation(messages: cluster.messages, at: idx),
-                            isLatestMessage: message.id == latestMessageId
-                        )
-                        .id(message.id)
-                        .padding(.horizontal, 16)
-                        .scaleEffect(x: 1, y: -1)
-
-                        // Render the "Sending with X" marker AFTER the transition bubble
-                        // in logical order — after the Y-flip this puts it visually ABOVE
-                        // the new SIM region's first message, delimiting the boundary
-                        // between the old and new SIM. Matches Google Messages.
-                        if simTransitions.contains(message.id) {
-                            sendingWithMarker(subId: message.subId)
-                        }
-                        // Unread divider: rendered after the OLDEST unread incoming
-                        // message in logical order → visually ABOVE that message,
-                        // marking the read↔unread boundary in the thread.
-                        if message.id == unreadBoundaryId {
-                            unreadDivider()
-                        }
-                    }
-                    clusterHeader(for: cluster)
+                    ClusterView(
+                        cluster: cluster,
+                        model: model,
+                        isGroupThread: isGroupThread,
+                        latestMessageId: latestMessageId,
+                        simTransitions: simTransitions,
+                        unreadBoundaryId: unreadBoundaryId
+                    )
                 }
                 
                 // Load-older sentinel at the logical END = visual TOP after flip, where the user scrolls to reach older messages
                 if !model.hasReachedStartOfThread(threadId) {
-                    HStack {
-                        Spacer()
-                        LoadMoreBubble(
-                            isLoading: model.isLoadingThread(threadId),
-                            action: { model.loadMoreInThread(threadId) },
-                            iconName: "chevron.down",  // flipped → appears as ∧ (up)
-                            tooltip: "Load older messages"
-                        )
-                        Spacer()
-                    }
-                    .padding(.vertical, 12)
-                    .scaleEffect(x: 1, y: -1)
+                    loadOlderSentinel
                 }
             }
             // Logical .top = visual bottom after flip: gap between newest msg and compose bar
@@ -119,31 +88,21 @@ struct ConversationDetailView: View {
         // Fresh ScrollView per thread resets offset to 0 (= visual bottom = newest messages)
         .id(threadId)
     }
-
-    /// Centered "Sending with X" inline marker with light hairlines on either side and
-    /// the SIM name styled as an accent-colored underlined link — matches Google Messages.
-    /// Sits between two outgoing bubbles where the SIM changed. Y-flip is undone via
-    /// `.scaleEffect` like every other row inside the inverted ScrollView.
+    
+    /// "Load older messages" button at the visual top of the thread.
     @ViewBuilder
-    private func sendingWithMarker(subId: Int64?) -> some View {
-        HStack(spacing: 12) {
-            Rectangle()
-                .fill(.secondary)
-                .frame(height: 1)
-                .opacity(0.25)
-            Text(Self.sendingWithAttributed(subId: subId))
-                .font(.caption2.weight(.semibold))
-                .fixedSize()
-            Rectangle()
-                .fill(.secondary)
-                .frame(height: 1)
-                .opacity(0.25)
+    private var loadOlderSentinel: some View {
+        HStack {
+            Spacer()
+            LoadMoreBubble(
+                isLoading: model.isLoadingThread(threadId),
+                action: { model.loadMoreInThread(threadId) },
+                iconName: "chevron.down",  // flipped → appears as ∧ (up)
+                tooltip: "Load older messages"
+            )
+            Spacer()
         }
-        .padding(.horizontal, 16)
-        // Padding swapped vs. visual intent because of the parent Y-flip.
-        // Visual result: 8 pt above marker, 4 pt below.
-        .padding(.top, 4)
-        .padding(.bottom, 8)
+        .padding(.vertical, 12)
         .scaleEffect(x: 1, y: -1)
     }
     
@@ -159,71 +118,11 @@ struct ConversationDetailView: View {
         
         return prefix + simName
     }
-
-    /// Horizontal "Unread" hairline divider. Accent-colored hairlines (more prominent
-    /// than the gray ones used for SIM-transition markers) so the read/unread boundary
-    /// pops out — that's the divider's whole job. Rendered after the oldest unread
-    /// incoming message in logical order so it lands visually ABOVE that message after
-    /// the Y-flip.
-    @ViewBuilder
-    private func unreadDivider() -> some View {
-        HStack(spacing: 12) {
-            Rectangle()
-                .fill(Color.accentColor)
-                .frame(height: 1)
-                .opacity(0.55)
-            Text("Unread")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .fixedSize()
-            Rectangle()
-                .fill(Color.accentColor)
-                .frame(height: 1)
-                .opacity(0.55)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 8)
-        .scaleEffect(x: 1, y: -1)
-    }
-
-    @ViewBuilder
-    private func clusterHeader(for cluster: MessageCluster) -> some View {
-        HStack {
-            Spacer()
-            Text(Self.headerText(for: cluster))
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-            Spacer()
-        }
-        // Padding values are swapped vs. their visual intent because this row lives inside
-        // the Y-flipped ScrollView: logical .bottom → visual top, logical .top → visual bottom.
-        // Visual result: 14 pt above header (from previous cluster's last message), 4 pt below.
-        .padding(.top, 4)
-        .padding(.bottom, 14)
-        .scaleEffect(x: 1, y: -1)
-    }
-
+    
     // MARK: - Clustering
-
-    private struct MessageCluster: Identifiable {
-        /// Newest message's id within the cluster — stable across renders for `ForEach`.
-        let id: Int64
-        /// Chronological start of the cluster (oldest message's date). Drives the header
-        /// time and the "first cluster of day" decision.
-        let representativeDate: Date
-        /// Messages within this cluster, in newest-first order (matching `thread.messages`).
-        let messages: [SMSService.Message]
-        /// `true` when this cluster is the chronologically earliest within its calendar
-        /// day. Used to decide whether the header shows "Day · Time" or just "Time".
-        let isFirstOfDay: Bool
-    }
-
-    /// Maximum gap between two consecutive messages before they get split into separate
-    /// clusters. 15 min balances "tight back-and-forth stays together" against "an hour
-    /// later is a different conversation."
+    
+    /// Maximum gap between two consecutive messages before they get split into separate clusters.
+    /// 15 min balances "tight back-and-forth stays together" against "an hour later is a different conversation."
     private static let clusterGapThreshold: TimeInterval = 15 * 60
     
     /// Group `messages` (newest-first) into time-based clusters.
@@ -273,7 +172,7 @@ struct ConversationDetailView: View {
     }
     
     /// Combined "Day · Time" for first-of-day clusters, time-only otherwise.
-    private static func headerText(for cluster: MessageCluster) -> String {
+    fileprivate static func headerText(for cluster: MessageCluster) -> String {
         let timeStr = Self.timeOnlyFormatter.string(from: cluster.representativeDate)
         guard cluster.isFirstOfDay else { return timeStr }
         let dayStr = Self.dayPrefixFormatter.string(from: cluster.representativeDate)
@@ -309,11 +208,10 @@ struct ConversationDetailView: View {
         }
         return result
     }
-
-    /// Within a cluster, a message is a "continuation" of the previous one if it's
-    /// from the same sender within the same minute — used to tighten the spacing and
-    /// suppress the sender label for cluster appearance.
-    private static func isContinuation(messages: [SMSService.Message], at idx: Int) -> Bool {
+    
+    /// Within a cluster, a message is a "continuation" of the previous one if it's from the same sender within the same minute.
+    /// Used to tighten the spacing and suppress the sender label for cluster appearance.
+    fileprivate static func isContinuation(messages: [SMSService.Message], at idx: Int) -> Bool {
         let nextIdx = idx + 1
         guard nextIdx < messages.count else { return false }
         let above = messages[nextIdx]   // older; appears directly above curr after flip
@@ -362,5 +260,158 @@ private final class ContextualSeparatorFormatter {
             return monthDay.string(from: date)
         }
         return monthDayYear.string(from: date)
+    }
+}
+
+// MARK: - Row Views
+
+// Kept as separate `View` structs, not `@ViewBuilder` funcs inside the parent, because SwiftUI's type-checker chokes on `content(for:)` past the 500ms compiler-warning threshold when they're inlined
+
+/// File-scope so `ClusterView` can take it as a stored property.
+fileprivate struct MessageCluster: Identifiable {
+    /// Newest message's id within the cluster; stable across renders for `ForEach`.
+    let id: Int64
+    /// Chronological start of the cluster (oldest message's date).
+    /// Drives the header time and the "first cluster of day" decision.
+    let representativeDate: Date
+    /// Messages within this cluster, in newest-first order (matching `thread.messages`).
+    let messages: [SMSService.Message]
+    /// `true` when this cluster is the chronologically earliest within its calendar day.
+    /// Used to decide whether the header shows "Day · Time" or just "Time".
+    let isFirstOfDay: Bool
+}
+
+/// Renders one time cluster: the inner ForEach over its messages plus the cluster's header.
+private struct ClusterView: View {
+    let cluster: MessageCluster
+    let model: SMSDataModel
+    let isGroupThread: Bool
+    let latestMessageId: Int64?
+    let simTransitions: Set<Int64>
+    let unreadBoundaryId: Int64?
+    
+    var body: some View {
+        ForEach(Array(cluster.messages.enumerated()), id: \.element.id) { idx, message in
+            MessageRow(
+                message: message,
+                model: model,
+                isGroupThread: isGroupThread,
+                isContinuation: ConversationDetailView.isContinuation(messages: cluster.messages, at: idx),
+                isLatestMessage: message.id == latestMessageId,
+                showSimTransition: simTransitions.contains(message.id),
+                showUnreadDivider: message.id == unreadBoundaryId
+            )
+        }
+        ClusterHeader(text: ConversationDetailView.headerText(for: cluster))
+    }
+}
+
+/// One row of the thread: the message bubble itself, plus any conditional SIM-transition or unread-divider sibling that lives in the same logical slot.
+private struct MessageRow: View {
+    let message: SMSService.Message
+    let model: SMSDataModel
+    let isGroupThread: Bool
+    let isContinuation: Bool
+    let isLatestMessage: Bool
+    let showSimTransition: Bool
+    let showUnreadDivider: Bool
+    
+    var body: some View {
+        MessageBubbleView(
+            message: message,
+            model: model,
+            isGroupThread: isGroupThread,
+            isContinuation: isContinuation,
+            isLatestMessage: isLatestMessage
+        )
+        .id(message.id)
+        .padding(.horizontal, 16)
+        .scaleEffect(x: 1, y: -1)
+        
+        // SIM-transition marker rendered AFTER the bubble in logical order
+        // After the Y-flip this puts it visually ABOVE the new SIM region's first message (matches Google Messages)
+        if showSimTransition {
+            SendingWithMarker(subId: message.subId)
+        }
+        // Unread divider: same logical-after / visual-above placement, marking the read↔unread boundary inside the thread
+        if showUnreadDivider {
+            UnreadDivider()
+        }
+    }
+}
+
+/// Centered "Sending with X" inline marker with light hairlines on either side and the SIM name styled as an accent-tinted underlined link.
+/// Sits between two outgoing bubbles where the SIM changed.
+/// Y-flip is undone via `.scaleEffect` like every other row inside the inverted ScrollView.
+private struct SendingWithMarker: View {
+    let subId: Int64?
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Rectangle()
+                .fill(.secondary)
+                .frame(height: 1)
+                .opacity(0.25)
+            Text(ConversationDetailView.sendingWithAttributed(subId: subId))
+                .font(.caption2.weight(.semibold))
+                .fixedSize()
+            Rectangle()
+                .fill(.secondary)
+                .frame(height: 1)
+                .opacity(0.25)
+        }
+        .padding(.horizontal, 16)
+        // Padding swapped vs. visual intent because of the parent Y-flip (visual result: 8 pt above marker, 4 pt below)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .scaleEffect(x: 1, y: -1)
+    }
+}
+
+/// Horizontal "Unread" hairline divider.
+/// Accent-colored hairlines (more prominent than the gray ones used for SIM-transition markers) so the read/unread boundary pops out; that's the divider's whole job.
+/// Rendered after the oldest unread incoming message in logical order so it lands visually ABOVE that message after the Y-flip.
+private struct UnreadDivider: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 1)
+                .opacity(0.55)
+            Text("Unread")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .fixedSize()
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 1)
+                .opacity(0.55)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .scaleEffect(x: 1, y: -1)
+    }
+}
+
+/// Cluster time header (see `ConversationDetailView.headerText(for:)` for the text format).
+/// The parent computes the formatted text and hands it in so this struct stays trivial.
+private struct ClusterHeader: View {
+    let text: String
+    
+    var body: some View {
+        HStack {
+            Spacer()
+            Text(text)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+            Spacer()
+        }
+        // Padding values are swapped vs. their visual intent because this row lives inside the Y-flipped ScrollView: logical .bottom → visual top, logical .top → visual bottom (visual result: 14 pt above header, 4 pt below)
+        .padding(.top, 4)
+        .padding(.bottom, 14)
+        .scaleEffect(x: 1, y: -1)
     }
 }

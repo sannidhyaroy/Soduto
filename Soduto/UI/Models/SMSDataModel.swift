@@ -128,20 +128,22 @@ final class SMSDataModel: ObservableObject {
     // MARK: Commands
     
     func selectThread(_ id: Int64?) {
-        // Picking a real thread cancels any in-progress new-conversation compose so the
-        // sidebar's transient "New Message" row drops away and the detail pane swaps to
-        // the thread view.
-        if id != nil && composingNew {
-            composingNew = false
-            draftRecipients = []
-        }
-        selectedThreadId = id
-        // Lazily fetch the first page of older messages for this thread if all we have
-        // is the summary message from `request_conversations`. If the user previously
-        // opened it (more messages already loaded), the in-flight/reached-start guards
-        // in `SMSService.requestMore` make this a no-op.
-        if let id, let thread = conversations[id], thread.messages.count <= 1 {
-            smsService.requestMore(threadId: id, device: device)
+        // This method is invoked from SwiftUI's List selection binding (see `composeAwareSelection` in ConversationListView), which fires DURING the view update phase
+        // Mutating `@Published` state mid-update triggers SwiftUI's "Publishing changes from within view updates is not allowed" runtime warning
+        // Wrapping in a `Task` defers mutations to the next runloop tick; the task inherits the enclosing class's `@MainActor` isolation, so we land back on the main actor before touching `@Published` state
+        Task { [weak self] in
+            guard let self else { return }
+            // Picking a real thread cancels any in-progress new-conversation compose so the sidebar's transient "New Message" row drops away and the detail pane swaps to the thread view
+            if id != nil && self.composingNew {
+                self.composingNew = false
+                self.draftRecipients = []
+            }
+            self.selectedThreadId = id
+            // Lazily fetch the first page of older messages for this thread if all we have is the summary message from `request_conversations`
+            // If the user previously opened it (more messages already loaded), the in-flight / reached-start guards in `SMSService.requestMore` make this a no-op
+            if let id, let thread = self.conversations[id], thread.messages.count <= 1 {
+                self.smsService.requestMore(threadId: id, device: self.device)
+            }
         }
     }
     

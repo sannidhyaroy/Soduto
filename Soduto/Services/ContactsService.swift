@@ -391,7 +391,7 @@ public class ContactsService: IncomingService, ObservableObject {
     private func ensureMacIndexLoaded() {
         guard !macIndexLoaded else { return }
         macIndexLoaded = true  // claim immediately so concurrent lookups don't all kick off a load
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        DispatchQueue.global(qos: .utility).async { [weak self] in
             self?.loadMacIndex()
         }
     }
