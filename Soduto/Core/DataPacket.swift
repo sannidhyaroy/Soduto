@@ -187,19 +187,19 @@ extension DataPacket {
         let osVersion = ProcessInfo.processInfo.operatingSystemVersion
         let platformVersion = "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
         #if os(macOS)
-        let platformName = "macOS"
+            let platformName = "macOS"
         #elseif os(iOS)
-        let platformName = "iOS"
+            let platformName = "iOS"
         #elseif os(tvOS)
-        let platformName = "tvOS"
+            let platformName = "tvOS"
         #elseif os(watchOS)
-        let platformName = "watchOS"
+            let platformName = "watchOS"
         #elseif os(Linux)
-        let platformName = "Linux"
+            let platformName = "Linux"
         #elseif os(Windows)
-        let platformName = "Windows"
+            let platformName = "Windows"
         #else
-        let platformName = "Unknown"
+            let platformName = "Unknown"
         #endif
         var body: Body = [
             IdentityProperty.deviceId.rawValue: config.hostDeviceId as AnyObject,

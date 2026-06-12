@@ -223,8 +223,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         let fileUrls = resolvedUrls.filter { url -> Bool in
             var isDirectory: ObjCBool = false
             return url.isFileURL
-            && FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
-            && !isDirectory.boolValue
+                && FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+                && !isDirectory.boolValue
         }
         let estimatedTotalBytes = fileUrls.reduce(Int64(0)) { sum, url in
             sum + ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0)
@@ -245,8 +245,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         
         if failedCount > 0 {
             let message = failedCount == bookmarks.count
-            ? "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!"
-            : "\(failedCount) of \(bookmarks.count) items could not be shared."
+                ? "Soduto Share doesn't have permissions to read files in this directory. Drag the file to the menu bar icon to share!"
+                : "\(failedCount) of \(bookmarks.count) items could not be shared."
             UserNotificationHelper.show(title: "Soduto Share", subtitle: "Oops! We got lost!", body: message, sound: true, id: "FileAccessDenied")
         }
         

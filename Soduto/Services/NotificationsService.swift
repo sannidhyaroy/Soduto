@@ -941,9 +941,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             
             for fileName in tempContents {
                 // Only clean up files that look like our notification icons
-                let isNotificationIcon = fileName.hasSuffix(".png") ||
-                                          fileName.hasSuffix(".png.cache") ||
-                                          fileName.hasSuffix(".part")
+                let isNotificationIcon = fileName.hasSuffix(".png") || fileName.hasSuffix(".png.cache") || fileName.hasSuffix(".part")
                 
                 // Skip files that don't match our patterns
                 guard isNotificationIcon else { continue }

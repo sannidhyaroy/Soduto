@@ -775,11 +775,11 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
     }
     
     private func handle(packet: DataPacket) {
-#if DEBUG
-        Logger.network.debug("handle(packet: <\(packet, privacy: .public)>) [\(self, privacy: .public)]")
-#else
-        Logger.network.debug("handle(packet type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(self, privacy: .public)]")
-#endif
+        #if DEBUG
+            Logger.network.debug("handle(packet: <\(packet, privacy: .public)>) [\(self, privacy: .public)]")
+        #else
+            Logger.network.debug("handle(packet type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(self, privacy: .public)]")
+        #endif
         
         // For protocol v8: intercept the peer's post-TLS identity packet.
         // After TLS, v8 connections stay in .Initializing until this arrives.
@@ -1012,11 +1012,11 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
             return true
         }
         
-#if DEBUG
-        Logger.network.debug("send(:\(String(describing: packet), privacy: .public) whenCompleted:\(String(describing: whenCompleted), privacy: .public)) [\(String(describing: self), privacy: .public)]")
-#else
-        Logger.network.debug("send(type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(String(describing: self), privacy: .public)]")
-#endif
+        #if DEBUG
+            Logger.network.debug("send(:\(String(describing: packet), privacy: .public) whenCompleted:\(String(describing: whenCompleted), privacy: .public)) [\(String(describing: self), privacy: .public)]")
+        #else
+            Logger.network.debug("send(type: \(packet.type, privacy: .public), id: \(packet.id, privacy: .public)) [\(String(describing: self), privacy: .public)]")
+        #endif
         
         guard let bytes = try? packet.serialize() else {
             Logger.network.error("Failed to serialize packet type: \(packet.type, privacy: .public)")

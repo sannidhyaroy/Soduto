@@ -418,11 +418,11 @@ enum OTPExtractor {
             pasteboard.setString(otp, forType: .string)
             
             let sender = title.flatMap { $0.isEmpty ? nil : $0 } ?? "unknown sender"
-#if DEBUG
-            Logger.services.info("OTP auto-copied: \(otp, privacy: .public) — app: \(appName, privacy: .public) [\(packageId, privacy: .public)], sender: \(sender, privacy: .public), body: \(body, privacy: .public)")
-#else
-            Logger.services.info("OTP auto-copied: \(otp.prefix(2), privacy: .public)**** — app: \(appName, privacy: .public) [\(packageId, privacy: .public)], sender: \(sender, privacy: .public)")
-#endif
+            #if DEBUG
+                Logger.services.info("OTP auto-copied: \(otp, privacy: .public) — app: \(appName, privacy: .public) [\(packageId, privacy: .public)], sender: \(sender, privacy: .public), body: \(body, privacy: .public)")
+            #else
+                Logger.services.info("OTP auto-copied: \(otp.prefix(2), privacy: .public)**** — app: \(appName, privacy: .public) [\(packageId, privacy: .public)], sender: \(sender, privacy: .public)")
+            #endif
             
             HUDToast.show("OTP Copied")
         }

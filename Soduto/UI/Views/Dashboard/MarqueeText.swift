@@ -53,7 +53,7 @@ struct MarqueeText: View {
                     .onAppear { containerWidth = geo.size.width }
                     .onChange(of: geo.size.width) { _, w in containerWidth = w }
             })
-        // Permanent hidden measurement for the text's natural (unconstrained) width.
+            // Permanent hidden measurement for the text's natural (unconstrained) width.
             .overlay {
                 Text(text)
                     .font(font)
@@ -66,7 +66,7 @@ struct MarqueeText: View {
                             .onChange(of: geo.size.width) { _, w in textWidth = w }
                     })
             }
-        // Visible content layer.
+            // Visible content layer.
             .overlay(alignment: .leading) {
                 if needsScrolling {
                     // Two copies of the text separated by `gap`. Both scroll together so as the

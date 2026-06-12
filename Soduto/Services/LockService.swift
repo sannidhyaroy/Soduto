@@ -288,9 +288,7 @@ public class LockService: NSObject, BidirectionalService, ObservableObject {
     private func showLockResultNotification(success: Bool, device: Device) {
         let notification = UNMutableNotificationContent()
         notification.title = device.name
-        notification.body = success
-        ? NSLocalizedString("Remote lock successful", comment: "lock result notification")
-        : NSLocalizedString("Remote lock failed", comment: "lock result notification")
+        notification.body = success ? NSLocalizedString("Remote lock successful", comment: "lock result notification") : NSLocalizedString("Remote lock failed", comment: "lock result notification")
         notification.sound = .default
         notification.threadIdentifier = "lock"
         notification.setUrgency(.active)

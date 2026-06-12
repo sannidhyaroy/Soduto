@@ -134,9 +134,9 @@ extension ConnectivityReportService: StatusBarImageProvider {
             guard sim.isActive else { return "" }  // Only show label for known network types
             let t = sim.networkType
             return t == "LTE" ? "4G" :
-            t == "5G"  ? "5G" :
-            (t == "UMTS" || t == "CDMA2000" || t == "HSPA") ? "3G" :
-            (t == "GSM"  || t == "CDMA"     || t == "iDEN"  || t == "EDGE") ? "2G" : ""
+                   t == "5G"  ? "5G" :
+                  (t == "UMTS" || t == "CDMA2000" || t == "HSPA") ? "3G" :
+                  (t == "GSM"  || t == "CDMA"     || t == "iDEN"  || t == "EDGE") ? "2G" : ""
         }
         
         // Check if we have dual SIMs with data

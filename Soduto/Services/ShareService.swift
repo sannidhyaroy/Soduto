@@ -242,11 +242,11 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         
         guard dataPacket.isSharePacket else { return false }
         
-#if DEBUG
-        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
-#else
-        Logger.services.debug("handleDataPacket(type: \(dataPacket.type, privacy: .public), id: \(dataPacket.id, privacy: .public)) from device: \(device.id, privacy: .public)")
-#endif
+        #if DEBUG
+            Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
+        #else
+            Logger.services.debug("handleDataPacket(type: \(dataPacket.type, privacy: .public), id: \(dataPacket.id, privacy: .public)) from device: \(device.id, privacy: .public)")
+        #endif
         
         do {
             if let downloadTask = dataPacket.downloadTask {
@@ -969,20 +969,20 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         if filePackets.count > 0 {
             packets = filePackets
             title = packets.count == 1 ?
-            String(format: NSLocalizedString("Upload file to:", comment: "Drag destinations menu title"), packets.count) :
-            String(format: NSLocalizedString("Upload %d file(s) to:", comment: "Drag destinations menu title"), packets.count)
+                String(format: NSLocalizedString("Upload file to:", comment: "Drag destinations menu title"), packets.count) :
+                String(format: NSLocalizedString("Upload %d file(s) to:", comment: "Drag destinations menu title"), packets.count)
         }
         else if urlPackets.count > 0 {
             packets = urlPackets
             title = packets.count == 1 ?
-            String(format: NSLocalizedString("Open link on:", comment: "Drag destinations menu title"), packets.count) :
-            String(format: NSLocalizedString("Open %d link(s) on:", comment: "Drag destinations menu title"), packets.count)
+                String(format: NSLocalizedString("Open link on:", comment: "Drag destinations menu title"), packets.count) :
+                String(format: NSLocalizedString("Open %d link(s) on:", comment: "Drag destinations menu title"), packets.count)
         }
         else if textPackets.count > 0 {
             packets = textPackets
             title = packets.count == 1 ?
-            String(format: NSLocalizedString("Send text snippet to:", comment: "Drag destinations menu title"), packets.count) :
-            String(format: NSLocalizedString("Send %d text snippet(s) to:", comment: "Drag destinations menu title"), packets.count)
+                String(format: NSLocalizedString("Send text snippet to:", comment: "Drag destinations menu title"), packets.count) :
+                String(format: NSLocalizedString("Send %d text snippet(s) to:", comment: "Drag destinations menu title"), packets.count)
         }
         else {
             return false

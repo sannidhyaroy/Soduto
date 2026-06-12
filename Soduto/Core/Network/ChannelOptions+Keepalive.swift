@@ -38,24 +38,24 @@ enum TCPKeepaliveConfiguration {
         
         // TCP_KEEPALIVE is macOS-specific (Darwin)
         // On Linux, you'd use TCP_KEEPIDLE, TCP_KEEPINTVL, TCP_KEEPCNT
-#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
-        let setInterval = enableKeepalive.flatMap {
-            channel.setOption(
-                ChannelOptions.Types.SocketOption(level: IPPROTO_TCP, name: TCP_KEEPALIVE),
-                value: SocketOptionValue(keepaliveInterval)
-            )
-        }
-        return setInterval
-#else
-        // On Linux, use TCP_KEEPIDLE (same purpose as TCP_KEEPALIVE on macOS)
-        let setInterval = enableKeepalive.flatMap {
-            channel.setOption(
-                ChannelOptions.Types.SocketOption(level: IPPROTO_TCP, name: TCP_KEEPIDLE),
-                value: SocketOptionValue(keepaliveInterval)
-            )
-        }
-        return setInterval
-#endif
+        #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
+            let setInterval = enableKeepalive.flatMap {
+                channel.setOption(
+                    ChannelOptions.Types.SocketOption(level: IPPROTO_TCP, name: TCP_KEEPALIVE),
+                    value: SocketOptionValue(keepaliveInterval)
+                )
+            }
+            return setInterval
+        #else
+            // On Linux, use TCP_KEEPIDLE (same purpose as TCP_KEEPALIVE on macOS)
+            let setInterval = enableKeepalive.flatMap {
+                channel.setOption(
+                    ChannelOptions.Types.SocketOption(level: IPPROTO_TCP, name: TCP_KEEPIDLE),
+                    value: SocketOptionValue(keepaliveInterval)
+                )
+            }
+            return setInterval
+        #endif
     }
     
     /// Creates channel options for TCP keepalive to be used with bootstrap.
@@ -67,11 +67,11 @@ enum TCPKeepaliveConfiguration {
     ///     .channelOption(TCPKeepaliveConfiguration.keepaliveOption, value: 10)
     /// ```
     static var keepaliveOption: ChannelOptions.Types.SocketOption {
-#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
-        return ChannelOptions.Types.SocketOption(level: IPPROTO_TCP, name: TCP_KEEPALIVE)
-#else
-        return ChannelOptions.Types.SocketOption(level: IPPROTO_TCP, name: TCP_KEEPIDLE)
-#endif
+        #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
+            return ChannelOptions.Types.SocketOption(level: IPPROTO_TCP, name: TCP_KEEPALIVE)
+        #else
+            return ChannelOptions.Types.SocketOption(level: IPPROTO_TCP, name: TCP_KEEPIDLE)
+        #endif
     }
 }
 

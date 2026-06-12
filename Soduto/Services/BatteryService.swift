@@ -297,9 +297,7 @@ extension BatteryService: StatusBarImageProvider {
             }
             
             let config = NSImage.SymbolConfiguration.preferringMulticolor()
-            let symbolName = status.isCharging
-            ? "battery.\(tier)percent.bolt"
-            : "battery.\(tier)percent"
+            let symbolName = status.isCharging ? "battery.\(tier)percent.bolt" : "battery.\(tier)percent"
             if let symbol = NSImage(symbolName: symbolName, variableValue: 1)?.withSymbolConfiguration(config) {
                 symbol.draw(in: NSRect(x: 0, y: (imageHeight - symbol.size.height) / 2,
                                        width: symbol.size.width, height: symbol.size.height))

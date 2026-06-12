@@ -312,8 +312,8 @@ private struct ZoomControl: View {
     
     private func zoomLabel(_ zoom: Float) -> String {
         zoom.truncatingRemainder(dividingBy: 1) == 0
-        ? "\(Int(zoom))×"
-        : String(format: "%.1f×", zoom)
+            ? "\(Int(zoom))×"
+            : String(format: "%.1f×", zoom)
     }
     
     /// Logarithmic mapping: zoom value → horizontal position in `width`.

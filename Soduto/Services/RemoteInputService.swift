@@ -199,7 +199,7 @@ public class RemoteInputService: IncomingService {
         case 14: return 53   // Escape
         case 15: return 0    // Sys Req (no direct macOS equivalent)
         case 16: return 0    // Scroll Lock (no direct macOS equivalent)
-            // 17–20 are unassigned in the KDE Connect protocol
+        // 17–20 are unassigned in the KDE Connect protocol
         case 21: return 122  // F1
         case 22: return 120  // F2
         case 23: return 99   // F3

@@ -209,7 +209,7 @@ public class WebcamService: IncomingService {
     public func cleanup(for device: Device) {
         switch streamState {
         case .requestSent(let d, _) where d.id == device.id,
-                .streaming(let d, _)  where d.id == device.id:
+             .streaming(let d, _)  where d.id == device.id:
             teardown()
         default:
             break

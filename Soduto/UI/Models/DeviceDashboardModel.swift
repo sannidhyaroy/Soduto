@@ -195,11 +195,11 @@ final class DeviceDashboardModel: ObservableObject {
                 // Use live service data when reachable; fall back to cache when offline
                 // so the UI shows a frozen but meaningful last-known state.
                 let players = isNowReachable
-                ? (self.mediaPlayerService?.players[device.id] ?? [])
-                : (self.cachedPlayers[device.id] ?? [])
+                    ? (self.mediaPlayerService?.players[device.id] ?? [])
+                    : (self.cachedPlayers[device.id] ?? [])
                 let sinks = isNowReachable
-                ? (self.systemVolumeService?.remoteSinks[device.id] ?? [:])
-                : (self.cachedSinks[device.id] ?? [:])
+                    ? (self.systemVolumeService?.remoteSinks[device.id] ?? [:])
+                    : (self.cachedSinks[device.id] ?? [:])
                 return DashboardDevice(
                     id: device.id,
                     device: device,

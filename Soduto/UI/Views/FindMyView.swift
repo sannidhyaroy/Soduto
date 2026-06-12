@@ -36,21 +36,21 @@ struct FindMyAlertView: View {
     // so porting to iOS/tvOS/watchOS requires no changes here.
     private var alertTitle: String {
         #if os(macOS)
-        return "Find My Mac"
+            return "Find My Mac"
         #elseif os(iOS)
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            return "Find My iPad"
-        } else {
-            return "Find My iPhone"
-        }
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                return "Find My iPad"
+            } else {
+                return "Find My iPhone"
+            }
         #elseif os(tvOS)
-        return "Find My TV"
+            return "Find My TV"
         #elseif os(watchOS)
-        return "Find My Watch"
+            return "Find My Watch"
         #elseif os(visionOS)
-        return "Find My Vision Pro"
+            return "Find My Vision Pro"
         #else
-        return "Find My Device"
+            return "Find My Device"
         #endif
     }
 

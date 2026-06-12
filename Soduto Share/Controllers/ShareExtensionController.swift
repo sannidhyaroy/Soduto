@@ -36,8 +36,8 @@ class ShareExtensionController: NSViewController {
         let columnsPerRow = 4
         let rowCount = Int(ceil(Double(validDeviceEntries.count) / Double(columnsPerRow)))
         let gridHeight = CGFloat(rowCount) * 75        // 56 circle + 6 spacing + 13 text
-        + CGFloat(max(0, rowCount - 1)) * 16       // inter-row spacing
-        + 32                                        // grid padding (16 top + 16 bottom)
+            + CGFloat(max(0, rowCount - 1)) * 16       // inter-row spacing
+            + 32                                       // grid padding (16 top + 16 bottom)
         
         return min(fixedHeight + gridHeight, 400)
     }
@@ -73,11 +73,11 @@ class ShareExtensionController: NSViewController {
         
         guard let item = self.extensionContext?.inputItems.first as? NSExtensionItem else { return }
         if let attachments = item.attachments {
-#if DEBUG
-            Logger.sharing.debug("Attachments = \(attachments, privacy: .public)")
-#else
-            Logger.sharing.debug("Attachments count: \(attachments.count, privacy: .public)")
-#endif
+            #if DEBUG
+                Logger.sharing.debug("Attachments = \(attachments, privacy: .public)")
+            #else
+                Logger.sharing.debug("Attachments count: \(attachments.count, privacy: .public)")
+            #endif
         } else {
             Logger.sharing.debug("No Attachments")
         }
@@ -278,11 +278,11 @@ class ShareExtensionController: NSViewController {
         do {
             return try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
         } catch {
-#if DEBUG
-            Logger.sharing.error("Failed to create bookmark for \(url, privacy: .public): \(error.localizedDescription, privacy: .public)")
-#else
-            Logger.sharing.error("Failed to create bookmark for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
-#endif
+            #if DEBUG
+                Logger.sharing.error("Failed to create bookmark for \(url, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            #else
+                Logger.sharing.error("Failed to create bookmark for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            #endif
             return nil
         }
     }

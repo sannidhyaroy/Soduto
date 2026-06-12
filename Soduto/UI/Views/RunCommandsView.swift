@@ -190,7 +190,7 @@ private struct CommandEditView: View {
     
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
     var body: some View {
