@@ -1,0 +1,20 @@
+//
+//  LocalConfig.xcconfig
+//  Soduto
+//
+//  Created by Sannidhya Roy on 13/06/26.
+//  Copyright © 2026 Soduto. All rights reserved.
+//
+
+// Configuration settings file format documentation can be found at:
+// https://developer.apple.com/documentation/xcode/adding-a-build-configuration-file-to-your-project
+
+// Copy this file to `LocalConfig.xcconfig` (same directory) and fill in your values.
+// `LocalConfig.xcconfig` is untracked by git, never commit it.
+//
+// BUNDLE_ID: the main app's bundle identifier. All other targets derive from it:
+//   Soduto Share   → $(BUNDLE_ID).Soduto-Share
+//   SodutoFiles    → $(BUNDLE_ID)Files
+
+DEVELOPMENT_TEAM = <YOUR DEVELOPMENT TEAM>
+BUNDLE_ID = com.soduto.Soduto

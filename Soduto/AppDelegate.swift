@@ -78,7 +78,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, DeviceManagerDelegate {
         
         self.updateValidDevices()
         self.startHeartbeat()
-        let notificationName = "com.soduto.share.handoff" as CFString
+        let notificationName = AppDefaultsStore.DarwinNotifications.shareHandoff as CFString
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
         registerShareExtensionObserver(notificationCenter, notificationName)
         

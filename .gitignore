@@ -66,3 +66,6 @@ fastlane/test_output
 
 # Environment Files
 *.env
+
+# Local Xcode build configuration (developer-specific)
+LocalConfig.xcconfig

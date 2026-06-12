@@ -138,11 +138,31 @@ For the complete list of KDE Connect features and documentation, visit the [offi
 
   </details>
 
-- Open project `Soduto.xcodeproj` with Xcode (select the Soduto Project menu in Xcode Project Navigator).
-  - Swift Package dependencies (`swift-certificates`, `SwiftNIO`, `NIOSSL`, `NIOSSH`, `Citadel`, `Sparkle`, etc.) will resolve automatically on first build.
-- Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `Signing` section, ensure your appropriate `Team` is selected.
-- Make sure you have the same `App Group key` for `Soduto Share` and also verify that the same `Team` is selected for each target.
-- Build target `Soduto`
+> [!NOTE]
+> Make sure you are signed in to Xcode with your Apple ID first (`Xcode → Settings → Apple Accounts`). This works for both free and paid Apple Developer accounts.
+
+- Set up your local build configuration:
+
+  - Create the local build configuration file from the template:
+
+    ```bash
+    cp -v LocalConfig.xcconfig.example LocalConfig.xcconfig
+    ```
+
+  - Open `LocalConfig.xcconfig` and fill in your `DEVELOPMENT_TEAM`. This is your Apple Developer Team ID, a 10-character alphanumeric string tied to your Apple ID. You can find it by running:
+
+    ```bash
+    security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject | grep -o 'OU=[A-Z0-9]*' | sed 's/OU=//'
+    ```
+
+- Open the `.xcodeproj` in Xcode.
+
+  - Swift Package dependencies (`swift-certificates`, `SwiftNIO`, `NIOSSL`, `NIOSSH`, `Citadel`, `Sparkle`, etc.) resolve automatically on first build.
+
+- Build target `Soduto` (`Cmd+B`).
+
+> [!IMPORTANT]
+> **Do not** set the Team in Signing & Capabilities, that would write your Team ID into `project.pbxproj`, dirtying the project file with personal development team identifiers. The `LocalConfig.xcconfig` approach keeps `project.pbxproj` clean for everyone.
 
 ---
 ## Debugging

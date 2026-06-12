@@ -9,14 +9,39 @@
 import Foundation
 
 enum AppDefaultsStore {
-    fileprivate static let base = "com.soduto"
+    // MARK: - Bundle Identity
+    
+    // Extension bundle identifiers must use the main app's bundle identifier as a prefix
+    // (e.g. "com.example.App.Share"). The last dot-component is stripped when running inside
+    // an extension (.appex) to recover the host app's identifier.
+    static let mainBundleId: String = {
+        var id = Bundle.main.bundleIdentifier!
+        if Bundle.main.bundleURL.pathExtension == "appex" {
+            id = id.components(separatedBy: ".").dropLast().joined(separator: ".")
+        }
+        return id
+    }()
+    
+    // Reverse-DNS domain prefix (everything before the final app-name component).
+    // e.g. "com.example.App" → "com.example". Used as the root namespace for all stored keys
+    // so that forks with different bundle IDs get their own isolated key space automatically.
+    fileprivate static let base: String = mainBundleId.components(separatedBy: ".").dropLast().joined(separator: ".")
     
     // MARK: - Suite Instances
     
     static let appGroupDefaults: UserDefaults? = {
-        let teamId = Bundle.main.object(forInfoDictionaryKey: "TeamIdentifierPrefix") as? String ?? ""
-        return UserDefaults(suiteName: teamId + "com.soduto.Soduto")
+        guard let teamId = Bundle.main.object(forInfoDictionaryKey: "TeamIdentifierPrefix") as? String else {
+            return nil
+        }
+        return UserDefaults(suiteName: teamId + mainBundleId)
     }()
+    
+    // MARK: - Darwin Notification Names (cross-process: main app ↔ Share Extension)
+    
+    enum DarwinNotifications {
+        static let shareHandoff = mainBundleId + ".share.handoff"
+        static let shareStatus  = mainBundleId + ".share.status"
+    }
     
     // MARK: - Share Extension Communication
     
@@ -86,11 +111,11 @@ enum AppDefaultsStore {
             enum Clipboard: ServiceToggle {
                 static let base = "\(Services.base).clipboard"
             }
-
+            
             enum Contacts: ServiceIncomingToggle {
                 static let base = "\(Services.base).contacts"
             }
-
+            
             enum Digitizer: ServiceIncomingToggle {
                 static let base = "\(Services.base).digitizer"
             }
@@ -119,11 +144,11 @@ enum AppDefaultsStore {
                 static let base = "\(Services.base).runcommand"
                 static let commandsKey = "\(base).commands"
             }
-
+            
             enum SMS: ServiceIncomingToggle {
                 static let base = "\(Services.base).sms"
             }
-
+            
             enum SystemVolume: ServiceToggle {
                 static let base = "\(Services.base).systemvolume"
             }

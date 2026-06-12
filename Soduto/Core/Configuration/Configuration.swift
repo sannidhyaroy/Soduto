@@ -366,7 +366,7 @@ public class Configuration: ConnectionConfiguration, DeviceManagerConfiguration,
                     }
                 }
             } else {
-                if SMLoginItemSetEnabled("com.soduto.SodutoLauncher" as CFString, newValue) {
+                if SMLoginItemSetEnabled((Bundle.main.bundleIdentifier! + "Launcher") as CFString, newValue) {
                     self.userDefaults.set(newValue, forKey: Property.launchOnLogin.rawValue)
                 }
             }

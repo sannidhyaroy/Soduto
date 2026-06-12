@@ -1,0 +1,16 @@
+//
+//  Config.xcconfig
+//  Soduto
+//
+//  Created by Sannidhya Roy on 13/06/26.
+//  Copyright © 2026 Soduto. All rights reserved.
+//
+
+// Configuration settings file format documentation can be found at:
+// https://developer.apple.com/documentation/xcode/adding-a-build-configuration-file-to-your-project
+
+// Pulls in local developer-specific settings when present.
+// Copy `LocalConfig.xcconfig.sample` → `LocalConfig.xcconfig` and fill in your values.
+// `LocalConfig.xcconfig` is untracked by git, never commit it.
+
+#include? "LocalConfig.xcconfig"

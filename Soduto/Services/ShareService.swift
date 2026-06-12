@@ -612,7 +612,7 @@ public class ShareService: NSObject, Service, DownloadTaskDelegate, ConnectionDe
         statuses[deviceId] = status
         AppDefaultsStore.ShareExtension.transferStatuses = statuses
         
-        let name = CFNotificationName("com.soduto.share.status" as CFString)
+        let name = CFNotificationName(AppDefaultsStore.DarwinNotifications.shareStatus as CFString)
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), name, nil, nil, false)
     }
     
