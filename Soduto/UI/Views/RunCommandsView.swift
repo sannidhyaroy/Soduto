@@ -39,6 +39,12 @@ final class RunCommandsViewModel: ObservableObject {
         save()
     }
     
+    func setEnabled(_ enabled: Bool, for command: RunCommandService.Command) {
+        guard let index = commands.firstIndex(where: { $0.uuid == command.uuid }) else { return }
+        commands[index].isEnabled = enabled
+        save()
+    }
+    
     func delete(_ command: RunCommandService.Command) {
         commands.removeAll { $0.uuid == command.uuid }
         save()
@@ -116,6 +122,8 @@ struct RunCommandsView: View {
                     editingCommand = command
                 } onDelete: {
                     viewModel.delete(command)
+                } onToggleEnabled: { enabled in
+                    viewModel.setEnabled(enabled, for: command)
                 }
             }
             .onDelete { viewModel.delete(at: $0) }
@@ -130,7 +138,12 @@ private struct CommandRow: View {
     let command: RunCommandService.Command
     let onEdit: () -> Void
     let onDelete: () -> Void
+    let onToggleEnabled: (Bool) -> Void
     @State private var isHovered = false
+    
+    private var enabledBinding: Binding<Bool> {
+        Binding(get: { command.isEnabled }, set: { onToggleEnabled($0) })
+    }
     
     var body: some View {
         HStack(spacing: 12) {
@@ -147,27 +160,37 @@ private struct CommandRow: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+            .opacity(command.isEnabled ? 1 : 0.55)
             
             Spacer()
             
-            HStack(spacing: 4) {
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    Button(action: onEdit) {
+                        Image(systemName: "pencil")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Edit")
+                    
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Delete")
                 }
-                .buttonStyle(.borderless)
-                .help("Edit")
+                .opacity(isHovered ? 1 : 0)
                 
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .foregroundStyle(.red)
-                }
-                .buttonStyle(.borderless)
-                .help("Delete")
+                Toggle("", isOn: enabledBinding)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .labelsHidden()
+                    .help(command.isEnabled ? "Disable command" : "Enable command")
             }
-            .opacity(isHovered ? 1 : 0)
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }
 }
@@ -246,7 +269,7 @@ private struct CommandEditView: View {
     let vm = RunCommandsViewModel()
     vm.commands = [
         .init(uuid: "1", name: "Update Homebrew", command: "brew update && brew upgrade"),
-        .init(uuid: "2", name: "Sleep", command: "pmset sleepnow"),
+        .init(uuid: "2", name: "Sleep", command: "pmset sleepnow", isEnabled: false),
         .init(uuid: "3", name: "Lock Screen", command: "/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend"),
     ]
     return RunCommandsView(viewModel: vm)
