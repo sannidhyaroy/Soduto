@@ -44,7 +44,7 @@ enum OTPExtractor {
         "com.google.android.gm",                // Gmail (Android)
         "net.thunderbird.android",              // Thunderbird (Android)
         "com.fsck.k9",                          // K-9 Mail
-        "ch.protonmail.android",                // Proton Mail
+        "ch.protonmail.android",                // Proton Mail (Android)
         "com.microsoft.office.outlook",         // Microsoft Outlook
         "com.easilydo.mail",                    // Email (Edison Software)
         "eu.faircode.email",                    // FairEmail
@@ -367,24 +367,7 @@ enum OTPExtractor {
         return minDistance
     }
     
-    // MARK: - Package Extraction
-    
-    /// Extracts the Android package name from a KDE Connect notification ID.
-    ///
-    /// The notification ID format from Android's NotificationListenerService is:
-    ///   `<number>|<package_name>|<id>|<tag>|<uid>`
-    /// e.g. `0|com.google.android.apps.messaging|2|...|10279`
-    ///
-    /// - Parameter notificationId: The raw notification ID string from the packet.
-    /// - Returns: The package name, or `nil` if the format is unexpected.
-    static func extractPackageId(from notificationId: String) -> String? {
-        let components = notificationId.split(separator: "|", omittingEmptySubsequences: false)
-        guard components.count >= 2 else { return nil }
-        let packageId = String(components[1])
-        // Sanity check: package IDs contain at least one dot
-        guard packageId.contains(".") else { return nil }
-        return packageId
-    }
+    // MARK: - OTP Handling
     
     /// Checks if the notification is from an allowed SMS app and contains an OTP.
     /// Returns the extracted code (or `nil`), and optionally copies it to the clipboard
@@ -394,20 +377,20 @@ enum OTPExtractor {
     /// populate a "Copy OTP" action button) to ignore it, and call sites that only want the
     /// side-effects to ignore the return value — all without changing the call signature.
     ///
-    /// Uses the Android package ID (from the notification ID) for app identification —
-    /// this is system-assigned and cannot be spoofed, unlike the user-facing `appName`.
+    /// Uses the Android package ID for app identification, that is system-assigned and unforgeable, unlike the `appName`.
     ///
     /// - Parameters:
     ///   - body: The notification body text (may be nil).
     ///   - title: The notification title (used for logging the sender).
     ///   - appName: The user-facing app name (used for logging context).
-    ///   - packetNotificationId: The raw Android notification ID (e.g. `0|com.google.android.apps.messaging|2|...|10279`).
+    ///   - packageId: The Android package ID (e.g. `com.google.android.apps.messaging`),
+    ///                parsed by the caller from the raw notification ID.
     ///   - autoCopy: When `true` (default), copies the OTP to the clipboard and shows the HUD toast.
     ///               Pass `false` during sync to detect the OTP for the action button without side-effects.
     @MainActor
     @discardableResult
-    static func handleIfOTP(body: String?, title: String?, appName: String, packetNotificationId: String, autoCopy: Bool = true) -> String? {
-        guard let packageId = extractPackageId(from: packetNotificationId),
+    static func handleIfOTP(body: String?, title: String?, appName: String, packageId: String?, autoCopy: Bool = true) -> String? {
+        guard let packageId,
               allowedPackages.contains(packageId),
               let body = body,
               let otp = extractOTP(from: body) else { return nil }

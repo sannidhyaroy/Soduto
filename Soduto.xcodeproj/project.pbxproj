@@ -87,6 +87,7 @@
 		3190DEAB2F9D44DD00F4DFA2 /* WebcamPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3190DEAA2F9D44DD00F4DFA2 /* WebcamPreviewView.swift */; };
 		319320BC2F66402700A46DD9 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 319320BB2F66402700A46DD9 /* MediaRemoteAdapter */; };
 		319320BD2F6640E700A46DD9 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 319320BB2F66402700A46DD9 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		31965FFF2FDF29B9003A3B77 /* NotificationThreadPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31965FFE2FDF29B9003A3B77 /* NotificationThreadPolicy.swift */; };
 		319CBA282939662400DAE301 /* Phone.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA272939662400DAE301 /* Phone.png */; };
 		319CBA2A2939F07D00DAE301 /* AirDrop.png in Resources */ = {isa = PBXBuildFile; fileRef = 319CBA292939F07D00DAE301 /* AirDrop.png */; };
 		31A0A3C02F2C118F00CDA243 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A0A3BF2F2C118F00CDA243 /* ShareSheetView.swift */; };
@@ -348,6 +349,7 @@
 		31905C182F76443300F259CE /* LockService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockService.swift; sourceTree = "<group>"; };
 		31905C1F2F78865B00F259CE /* Icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = Icon.icon; sourceTree = "<group>"; };
 		3190DEAA2F9D44DD00F4DFA2 /* WebcamPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebcamPreviewView.swift; sourceTree = "<group>"; };
+		31965FFE2FDF29B9003A3B77 /* NotificationThreadPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationThreadPolicy.swift; sourceTree = "<group>"; };
 		319CBA272939662400DAE301 /* Phone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Phone.png; sourceTree = "<group>"; };
 		319CBA292939F07D00DAE301 /* AirDrop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AirDrop.png; sourceTree = "<group>"; };
 		319F285C2FDD7BDF00D2B8CC /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
@@ -914,6 +916,7 @@
 				317F93082FAD451300CDC0EC /* KeyboardUtils.swift */,
 				3152C3F22F353AFA005152CB /* Logger+Categories.swift */,
 				8468BDFF1DEB7F97003B9925 /* NetworkUtils.swift */,
+				31965FFE2FDF29B9003A3B77 /* NotificationThreadPolicy.swift */,
 				31AB4B5B2F59761400FE3DD4 /* OTPExtractor.swift */,
 				84FFDA1F1E1D8D0D0069AC9A /* SimplePing.h */,
 				84FFDA291E1D8D370069AC9A /* SimplePing.m */,
@@ -1323,6 +1326,7 @@
 				8492379D1DE1C55900D95BBA /* DeviceMenu.swift in Sources */,
 				0223974F1F0908FB00B0C70A /* TextFieldWithLinks.swift in Sources */,
 				3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */,
+				31965FFF2FDF29B9003A3B77 /* NotificationThreadPolicy.swift in Sources */,
 				8499620E1D5728EE002B893A /* Test_Assertions.m in Sources */,
 				8421A8E71D761409008AC833 /* PreferencesWindowController.swift in Sources */,
 				317F93072FABDC0D00CDC0EC /* RemoteControlView.swift in Sources */,

@@ -899,6 +899,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         for dataPacket: DataPacket,
         from device: Device,
         of packetNotificationId: String,
+        package packageId: String?,
         conversation: [DataPacket.ConversationMessage]?,
         isSilent: Bool,
         title: String?,
@@ -968,7 +969,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             groupName: groupName,
             conversation: conversation
         )
-        notification.threadIdentifier = "\(device.id).\(appName)"
+        notification.threadIdentifier = NotificationThreadPolicy.threadIdentifier(
+            for: appName,
+            on: device.id,
+            package: packageId,
+            peer: device.type
+        )
         
         let hasReply = replyId != nil
         let actionTitles = Array(filteredActions.prefix(3))
@@ -1077,6 +1083,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             
             let title = try dataPacket.getTitle()
             let body = try dataPacket.getText()
+            let packageId = try? dataPacket.getPackageId()
             let groupName = try dataPacket.getGroupName()
             let conversation = try dataPacket.getConversation()
             let replyId = try dataPacket.getReplyRequestId()
@@ -1114,13 +1121,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             guard shouldShow else { return }
-
+            
             // Extract OTP if notification is from an allowed app
             // Show action button always but only auto-copy when in idle phase
             let otpCode: String? = await MainActor.run {
                 OTPExtractor.handleIfOTP(
                     body: body, title: title, appName: appName,
-                    packetNotificationId: packetNotificationId,
+                    packageId: packageId,
                     autoCopy: state.syncPhase[device.id] == nil
                 )
             }
@@ -1131,6 +1138,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 for: dataPacket,
                 from: device,
                 of: packetNotificationId,
+                package: packageId,
                 conversation: conversation,
                 isSilent: isSilent,
                 title: title,
@@ -1462,6 +1470,7 @@ fileprivate extension DataPacket {
         case invalidCancelRequest
         case invalidReplyIdRequest
         case invalidId
+        case invalidPackageId
         case invalidAppName
         case invalidGroupName
         case invalidTitle
@@ -1573,6 +1582,21 @@ fileprivate extension DataPacket {
         guard body.keys.contains(NotificationProperty.id.rawValue) else { return nil }
         guard let value = body[NotificationProperty.id.rawValue] as? String else { throw NotificationError.invalidId }
         return value
+    }
+    
+    /// Extracts the Android package name from this notification packet's `id`.
+    ///
+    /// Android `NotificationListenerService` ids have the form:
+    ///   `<number>|<package>|<id>|<tag>|<uid>`
+    /// e.g. `0|com.google.android.apps.messaging|2|...|10279`
+    func getPackageId() throws -> String? {
+        guard let id = try getId() else { return nil }
+        let components = id.split(separator: "|", omittingEmptySubsequences: false)
+        guard components.count >= 2 else { throw NotificationError.invalidPackageId }
+        let packageId = String(components[1])
+        // Sanity check: Android package IDs always contain at least one dot
+        guard packageId.contains(".") else { throw NotificationError.invalidPackageId }
+        return packageId
     }
     
     func getAppName() throws -> String? {
