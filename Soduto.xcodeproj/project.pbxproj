@@ -533,7 +533,6 @@
 			isa = PBXGroup;
 			children = (
 				0225F6101F06E2380021BFE2 /* NSAttributedString.swift */,
-				31AB4B5B2F59761400FE3DD4 /* OTPExtractor.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -915,6 +914,7 @@
 				317F93082FAD451300CDC0EC /* KeyboardUtils.swift */,
 				3152C3F22F353AFA005152CB /* Logger+Categories.swift */,
 				8468BDFF1DEB7F97003B9925 /* NetworkUtils.swift */,
+				31AB4B5B2F59761400FE3DD4 /* OTPExtractor.swift */,
 				84FFDA1F1E1D8D0D0069AC9A /* SimplePing.h */,
 				84FFDA291E1D8D370069AC9A /* SimplePing.m */,
 				311BC28C2F2800D400E4A33F /* StableHashing.swift */,
