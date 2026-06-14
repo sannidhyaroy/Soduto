@@ -20,9 +20,30 @@ public class RunCommandService: BidirectionalService {
     }
     
     public struct Command: Codable {
+        static let defaultShell = "/bin/zsh"
+        
         let uuid: String
         var name: String
         var command: String
+        var shell: String
+        var isEnabled: Bool
+        
+        init(uuid: String, name: String, command: String, shell: String = Command.defaultShell, isEnabled: Bool = true) {
+            self.uuid = uuid
+            self.name = name
+            self.command = command
+            self.shell = shell
+            self.isEnabled = isEnabled
+        }
+        
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.uuid = try container.decode(String.self, forKey: .uuid)
+            self.name = try container.decode(String.self, forKey: .name)
+            self.command = try container.decode(String.self, forKey: .command)
+            self.shell = try container.decodeIfPresent(String.self, forKey: .shell) ?? Command.defaultShell
+            self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        }
     }
     
     
@@ -160,12 +181,16 @@ public class RunCommandService: BidirectionalService {
             Logger.services.error("Command with key \(key, privacy: .public) not found")
             return
         }
+        guard commandData.isEnabled else {
+            Logger.services.notice("Refusing to execute disabled command: \(commandData.name, privacy: .public)")
+            return
+        }
         
         Logger.services.debug("Executing command: \(commandData.name, privacy: .public)")
         
         let task = Process()
-        task.launchPath = "/bin/sh"
-        task.arguments = ["-c", commandData.command]
+        task.launchPath = commandData.shell
+        task.arguments = ["-l", "-c", commandData.command]
         task.standardOutput = Pipe()
         task.standardError = Pipe()
         
@@ -183,7 +208,7 @@ public class RunCommandService: BidirectionalService {
     
     private func localCommandsToDict() -> [String: [String: String]] {
         var result: [String: [String: String]] = [:]
-        for command in localCommands {
+        for command in localCommands where command.isEnabled {
             result[command.uuid] = ["name": command.name, "command": command.command]
         }
         return result
