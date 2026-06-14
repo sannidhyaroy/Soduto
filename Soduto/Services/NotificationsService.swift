@@ -63,7 +63,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         case notificationId = "com.soduto.services.notifications.notificationId"
         case requestReplyId = "com.soduto.services.notifications.requestReplyId"
         case isCancelable = "com.soduto.services.notifications.isCancelable"
-        case appName = "com.soduto.services.notifications.appName"
     }
     
     enum ActionId: ServiceAction.Id {
@@ -305,16 +304,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     private class NotificationStateManager {
         nonisolated init() {}
         
-        /// A notification that arrived before its app hit the grouping threshold,
-        /// held so it can be re-posted into the app group when the threshold is crossed.
-        struct UngroupedEntry {
-            let notificationId: NotificationId
-            let payloadHash: String?   // nil if the notification had no icon
-        }
-        
-        /// Number of notifications from the same app required before we group them.
-        static let groupingThreshold = 3
-        
         /// Delivered notification ids grouped by device
         var notificationIds: [Device.Id: Set<NotificationId>] = [:]
         
@@ -332,14 +321,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         /// Tasks for device setup/sync
         var setupTasks: [Device.Id: Task<Void, Never>] = [:]
-        
-        /// Monotonically-increasing notification count per (deviceId, appName). Never decremented —
-        /// once an app crosses the grouping threshold it stays grouped for the session.
-        var appNotifCounts: [Device.Id: [String: Int]] = [:]
-        
-        /// Pre-threshold notifications waiting to be promoted into their app group
-        /// when the threshold is crossed. Cleared permanently at that point.
-        var ungroupedEntries: [Device.Id: [String: [UngroupedEntry]]] = [:]
         
         func addNotificationId(_ id: NotificationId, from device: Device) {
             if notificationIds[device.id] == nil {
@@ -361,39 +342,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             setupGenerationByDevice.removeAll()
             setupTasks.values.forEach { $0.cancel() }
             setupTasks.removeAll()
-            appNotifCounts.removeAll()
-            ungroupedEntries.removeAll()
-        }
-        
-        /// Returns the thread identifier to stamp on a new notification and whether the caller
-        /// should immediately trigger re-grouping of the pre-threshold notifications.
-        func threadIdentifier(for appName: String, deviceId: Device.Id, notificationId: NotificationId, payloadHash: String?) -> (threadId: String, needsRegroup: Bool) {
-            let count = (appNotifCounts[deviceId]?[appName] ?? 0) + 1
-            appNotifCounts[deviceId, default: [:]][appName] = count
-            if count < NotificationStateManager.groupingThreshold {
-                ungroupedEntries[deviceId, default: [:]][appName, default: []].append(
-                    UngroupedEntry(notificationId: notificationId, payloadHash: payloadHash)
-                )
-                return (deviceId, false)
-            } else if count == NotificationStateManager.groupingThreshold {
-                return ("\(deviceId).\(appName)", true)
-            } else {
-                return ("\(deviceId).\(appName)", false)
-            }
-        }
-        
-        /// Atomically reads and clears the ungrouped entries for an app.
-        /// Called exactly once per app per session, when the threshold is first crossed.
-        func takeUngroupedEntries(for appName: String, deviceId: Device.Id) -> [UngroupedEntry] {
-            let entries = ungroupedEntries[deviceId]?[appName] ?? []
-            ungroupedEntries[deviceId]?[appName] = nil
-            return entries
-        }
-        
-        /// Clears per-device grouping state. Called on device disconnect so reconnections start fresh.
-        func resetGroupingState(for deviceId: Device.Id) {
-            appNotifCounts[deviceId] = nil
-            ungroupedEntries[deviceId] = nil
         }
     }
     
@@ -585,9 +533,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// performed only in response to authoritative remote cancel packets or post-reconnection reconciliation.
     public func cleanup(for device: Device) {
         Logger.services.debug("Ignoring cleanup for \(device.name, privacy: .public); waiting for reconciliation and reconnection...")
-        Task { @MainActor in
-            state.resetGroupingState(for: device.id)
-        }
     }
     
     /// Defines service actions for notifications service (like: `Request Notifications`)
@@ -830,15 +775,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     // Also restore the content hash so we can detect reconnection duplicates
                     let body = notification.request.content.body
                     state.notificationContentHashes[identifier] = StableHashing.sha256(body)
-                    // Restore grouping threshold so existing app groups are immediately honoured
-                    // on the next notification
-                    if let storedAppName = notification.request.content.userInfo[UserInfoProperty.appName.rawValue] as? String,
-                       !storedAppName.isEmpty {
-                        let current = state.appNotifCounts[device.id]?[storedAppName] ?? 0
-                        if current < NotificationStateManager.groupingThreshold {
-                            state.appNotifCounts[device.id, default: [:]][storedAppName] = NotificationStateManager.groupingThreshold
-                        }
-                    }
                     matchCount += 1
                     if !alreadyTracked {
                         insertedCount += 1
@@ -973,8 +909,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         replyId: String?,
         isCancelable: Bool,
         actions: [String]?,
-        otpCode: String?,
-        threadIdentifier: String
+        otpCode: String?
     ) async -> UNMutableNotificationContent {
         let notification = UNMutableNotificationContent()
         
@@ -1002,7 +937,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Build userInfo with base properties
         var userInfo: [String: Any] = [
             UserInfoProperty.deviceId.rawValue: device.id,
-            UserInfoProperty.appName.rawValue: appName,
             UserInfoProperty.notificationId.rawValue: packetNotificationId,
             UserInfoProperty.requestReplyId.rawValue: replyId as Any,
             UserInfoProperty.isCancelable.rawValue: NSNumber(value: isCancelable),
@@ -1034,7 +968,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             groupName: groupName,
             conversation: conversation
         )
-        notification.threadIdentifier = threadIdentifier
+        notification.threadIdentifier = "\(device.id).\(appName)"
         
         let hasReply = replyId != nil
         let actionTitles = Array(filteredActions.prefix(3))
@@ -1180,14 +1114,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             }
             
             guard shouldShow else { return }
-            
-            // Determine the thread identifier for grouping.
-            let payloadHash = try? dataPacket.getPayloadHash()
-            let (threadId, needsRegroup): (String, Bool) = await MainActor.run {
-                guard !appName.isEmpty else { return (device.id, false) }
-                return state.threadIdentifier(for: appName, deviceId: device.id, notificationId: notificationId, payloadHash: payloadHash)
-            }
-            
+
             // Extract OTP if notification is from an allowed app
             // Show action button always but only auto-copy when in idle phase
             let otpCode: String? = await MainActor.run {
@@ -1214,8 +1141,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 replyId: replyId,
                 isCancelable: isCancelable,
                 actions: actions,
-                otpCode: otpCode,
-                threadIdentifier: threadId
+                otpCode: otpCode
             )
             
             /// Set Notification App Icon
@@ -1250,15 +1176,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             // Create notification request
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
             
-            // Regroup pre-threshold notifications first so the new notification lands last,
-            // giving it the most-recent position within the group in Notification Center.
-            if needsRegroup {
-                let entries = await MainActor.run { state.takeUngroupedEntries(for: appName, deviceId: device.id) }
-                if !entries.isEmpty {
-                    await regroupNotifications(threadId: threadId, entries: entries)
-                }
-            }
-            
             // Push Notification
             do {
                 try await un.add(request)
@@ -1269,40 +1186,6 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
         catch {
             Logger.services.error("Error while showing notification: \(error, privacy: .public)")
-        }
-    }
-    
-    /// Re-posts pre-threshold notifications into their app group when the threshold is crossed.
-    ///
-    /// Uses `getDeliveredNotifications` to fetch current content (so attachments are read from
-    /// macOS's own store), then rebuilds the attachment from the icon cache before re-adding.
-    /// Re-posted notifications use passive urgency as the user already saw the original alert.
-    private func regroupNotifications(threadId: String, entries: [NotificationStateManager.UngroupedEntry]) async {
-        let delivered = await un.deliveredNotifications()
-        for entry in entries {
-            guard let notification = delivered.first(where: { $0.request.identifier == entry.notificationId }) else { continue }
-            let content = notification.request.content.mutableCopy() as! UNMutableNotificationContent
-            content.threadIdentifier = threadId
-            content.sound = nil
-            content.setUrgency(.passive)
-            if let hash = entry.payloadHash,
-               let cachedURL = await iconState.getCachedIconURL(for: hash) {
-                let originalAttachments = content.attachments
-                content.attachments = []
-                let tempURL = cachedURL.deletingLastPathComponent().appendingPathComponent(UUID().uuidString + ".png")
-                do {
-                    try FileManager.default.copyItem(at: cachedURL, to: tempURL)
-                    let attachmentId = sanitizeForFilename(entry.notificationId)
-                    let attachment = try UNNotificationAttachment(identifier: attachmentId, url: tempURL, options: nil)
-                    content.attachments = [attachment]
-                } catch {
-                    Logger.services.error("Failed to rebuild attachment during regroup for \(entry.notificationId, privacy: .public): \(error, privacy: .public)")
-                    try? FileManager.default.removeItem(at: tempURL)
-                    content.attachments = originalAttachments
-                }
-            }
-            let request = UNNotificationRequest(identifier: entry.notificationId, content: content, trigger: nil)
-            try? await un.add(request)
         }
     }
     
