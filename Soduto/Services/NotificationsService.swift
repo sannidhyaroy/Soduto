@@ -1139,7 +1139,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 OTPExtractor.handleIfOTP(
                     body: body, title: title, appName: appName,
                     packageId: packageId,
-                    autoCopy: state.syncPhase[device.id] == nil
+                    autoCopy: !isSilent
                 )
             }
             
