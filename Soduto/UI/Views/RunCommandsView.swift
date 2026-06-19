@@ -7,11 +7,83 @@
 //
 
 import SwiftUI
+import os
 
 // MARK: - Identifiable
 
 extension RunCommandService.Command: Identifiable {
     public var id: String { uuid }
+}
+
+// MARK: - ShellRegistry
+
+/// Discovers shells available on the system from three merged sources:
+///   1. Hard-coded macOS-bundled shells — always shipped with macOS, robust
+///      against any App Sandbox restriction on the `/etc/shells` read
+///   2. `/etc/shells` — picks up shells the user has registered via `chsh`
+///   3. Probes of common third-party install paths — catches Homebrew/MacPorts
+///      shells (notably fish) that the user installed but never `chsh`'d into
+///      `/etc/shells`
+///
+/// Duplicate paths are deduplicated; multiple distinct paths for the same
+/// shell name (e.g. fish installed by both Homebrew and MacPorts) appear
+/// as separate picker entries so the user can choose the exact binary
+private enum ShellRegistry {
+    
+    /// Shells macOS always ships in `/bin`
+    private static let bundled = [
+        "/bin/sh",
+        "/bin/bash",
+        "/bin/zsh"
+    ]
+    
+    /// Install-prefix directories where third-party package managers place shells
+    private static let thirdPartyPrefixes = [
+        "/opt/homebrew/bin",  // Homebrew on Apple Silicon
+        "/usr/local/bin",     // Homebrew on Intel, also common manual installs
+        "/opt/local/bin"      // MacPorts
+    ]
+    
+    /// Popular third-party shells to probe inside `thirdPartyPrefixes`
+    private static let thirdPartyShells = ["fish", "nu", "elvish", "xonsh"]
+    
+    static func discover() -> [String] {
+        var paths = Set<String>()
+        
+        for path in bundled where FileManager.default.fileExists(atPath: path) {
+            paths.insert(path)
+        }
+        
+        do {
+            let contents = try String(contentsOfFile: "/etc/shells", encoding: .utf8)
+            var fromEtc: [String] = []
+            for line in contents.split(separator: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+                guard FileManager.default.fileExists(atPath: trimmed) else {
+                    Logger.ui.debug("ShellRegistry: /etc/shells lists \(trimmed, privacy: .public) but file does not exist")
+                    continue
+                }
+                fromEtc.append(trimmed)
+                paths.insert(trimmed)
+            }
+            Logger.ui.debug("ShellRegistry: /etc/shells read OK, added \(fromEtc.count, privacy: .public) entries: \(fromEtc, privacy: .public)")
+        } catch {
+            Logger.ui.error("ShellRegistry: failed to read /etc/shells: \(error, privacy: .public)")
+        }
+        
+        for prefix in thirdPartyPrefixes {
+            for shell in thirdPartyShells {
+                let path = "\(prefix)/\(shell)"
+                if FileManager.default.fileExists(atPath: path) {
+                    paths.insert(path)
+                }
+            }
+        }
+        
+        Logger.ui.debug("ShellRegistry: discovered \(paths.count, privacy: .public) total shells: \(paths.sorted(), privacy: .public)")
+        return paths.sorted()
+    }
 }
 
 // MARK: - RunCommandsViewModel
@@ -90,15 +162,26 @@ struct RunCommandsView: View {
             }
         }
         .sheet(isPresented: $showingAddSheet) {
-            CommandEditView(title: "New Command", name: "", command: "") { name, command in
-                viewModel.add(.init(uuid: UUID().uuidString, name: name, command: command))
+            CommandEditView(
+                title: "New Command",
+                name: "",
+                command: "",
+                shell: RunCommandService.Command.defaultShell
+            ) { name, command, shell in
+                viewModel.add(.init(uuid: UUID().uuidString, name: name, command: command, shell: shell))
             }
         }
         .sheet(item: $editingCommand) { command in
-            CommandEditView(title: "Edit Command", name: command.name, command: command.command) { name, cmd in
+            CommandEditView(
+                title: "Edit Command",
+                name: command.name,
+                command: command.command,
+                shell: command.shell
+            ) { name, cmd, shell in
                 var updated = command
                 updated.name = name
                 updated.command = cmd
+                updated.shell = shell
                 viewModel.update(updated)
             }
         }
@@ -201,41 +284,54 @@ private struct CommandEditView: View {
     let title: String
     @State private var name: String
     @State private var command: String
-    let onSave: (String, String) -> Void
+    @State private var shell: String
+    let onSave: (String, String, String) -> Void
     @Environment(\.dismiss) private var dismiss
     
-    init(title: String, name: String, command: String, onSave: @escaping (String, String) -> Void) {
+    private let availableShells: [String] = ShellRegistry.discover()
+    
+    init(title: String, name: String, command: String, shell: String, onSave: @escaping (String, String, String) -> Void) {
         self.title = title
         self._name = State(initialValue: name)
         self._command = State(initialValue: command)
+        self._shell = State(initialValue: shell)
         self.onSave = onSave
     }
     
     private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    /// Shells offered in the picker — ensure the command's current shell is always
+    /// selectable even if it disappears from /etc/shells (e.g. fish uninstalled)
+    private var shellOptions: [String] {
+        availableShells.contains(shell) ? availableShells : (availableShells + [shell]).sorted()
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Name")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                    TextField("e.g. Update packages", text: $name)
+                    fieldLabel("Name")
+                    TextField("e.g. Sleep", text: $name)
                         .textFieldStyle(.roundedBorder)
                 }
                 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Shell Command")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                    TextField("e.g. brew upgrade", text: $command)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
+                    fieldLabel("Shell")
+                    Picker("", selection: $shell) {
+                        ForEach(shellOptions, id: \.self) { path in
+                            Text(path).tag(path)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                }
+                
+                VStack(alignment: .leading, spacing: 5) {
+                    fieldLabel("Command")
+                    terminalField
                 }
             }
             .padding(24)
@@ -248,7 +344,8 @@ private struct CommandEditView: View {
                 Button("Save") {
                     onSave(
                         name.trimmingCharacters(in: .whitespacesAndNewlines),
-                        command.trimmingCharacters(in: .whitespacesAndNewlines)
+                        command.trimmingCharacters(in: .whitespacesAndNewlines),
+                        shell
                     )
                     dismiss()
                 }
@@ -259,7 +356,31 @@ private struct CommandEditView: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
         }
-        .frame(width: 420)
+        .frame(width: 460)
+    }
+    
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .fontWeight(.medium)
+            .foregroundStyle(.secondary)
+    }
+    
+    /// Dark terminal-style multiline editor. The `ShellEditorView` draws the
+    /// `$` prompt gutter and handles text editing; this wrapper supplies the
+    /// dark rounded background and border chrome
+    private var terminalField: some View {
+        ShellEditorView(text: $command, placeholder: "e.g. pmset sleepnow")
+            .frame(minHeight: 90, maxHeight: 140)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.black.opacity(0.85))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
     }
 }
 

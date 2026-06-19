@@ -112,6 +112,7 @@
 		31E059E12F70B4DD0019F4FE /* VolumeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31E059E02F70B4DD0019F4FE /* VolumeBar.swift */; };
 		31F3A15C293B5EA300550088 /* Soduto Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 31F3A14F293B5EA300550088 /* Soduto Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		31F3A1AF293BDAF400550088 /* ShareExtensionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F3A153293B5EA300550088 /* ShareExtensionController.swift */; };
+		31F8154F2FE55CB9008D30CF /* ShellEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8154E2FE55CB9008D30CF /* ShellEditorView.swift */; };
 		31F8A6042F4A53DC00CA5A61 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6032F4A53DC00CA5A61 /* PairingView.swift */; };
 		31F8A6062F4A555D00CA5A61 /* PairingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6052F4A555D00CA5A61 /* PairingWindowController.swift */; };
 		31F8A60B2F4A642E00CA5A61 /* DeviceInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F8A6092F4A642E00CA5A61 /* DeviceInfoView.swift */; };
@@ -376,6 +377,7 @@
 		31F3A153293B5EA300550088 /* ShareExtensionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionController.swift; sourceTree = "<group>"; };
 		31F3A158293B5EA300550088 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		31F3A159293B5EA300550088 /* Soduto_Share.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Soduto_Share.entitlements; sourceTree = "<group>"; };
+		31F8154E2FE55CB9008D30CF /* ShellEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellEditorView.swift; sourceTree = "<group>"; };
 		31F8A6032F4A53DC00CA5A61 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
 		31F8A6052F4A555D00CA5A61 /* PairingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingWindowController.swift; sourceTree = "<group>"; };
 		31F8A6092F4A642E00CA5A61 /* DeviceInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceInfoView.swift; sourceTree = "<group>"; };
@@ -691,6 +693,7 @@
 				317F93062FABDC0D00CDC0EC /* RemoteControlView.swift */,
 				3160AB8C2FB14C1100DE1870 /* RunCommandsView.swift */,
 				8492379E1DE1C87600D95BBA /* ServiceActionMenuItem.swift */,
+				31F8154E2FE55CB9008D30CF /* ShellEditorView.swift */,
 				31AB4B632F5C4BA700FE3DD4 /* TransferProgressHUD.swift */,
 				842B50561E4295D200969AA7 /* UnifiedTitlebarWindow.swift */,
 				3190DEAA2F9D44DD00F4DFA2 /* WebcamPreviewView.swift */,
@@ -1368,6 +1371,7 @@
 				84FA45ED1DDF525200EF3992 /* PingService.swift in Sources */,
 				31864DCF293C3CE100334902 /* SharedUserDefaults.swift in Sources */,
 				31D69A892FA7978E0086225A /* ContactsService.swift in Sources */,
+				31F8154F2FE55CB9008D30CF /* ShellEditorView.swift in Sources */,
 				31366D3A2F412C7E0013911D /* TLSTrustHandler.swift in Sources */,
 				31F8A60B2F4A642E00CA5A61 /* DeviceInfoView.swift in Sources */,
 				31F8A60C2F4A642E00CA5A61 /* DevicesListView.swift in Sources */,
