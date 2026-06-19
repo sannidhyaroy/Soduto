@@ -63,6 +63,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         case notificationId = "com.soduto.services.notifications.notificationId"
         case requestReplyId = "com.soduto.services.notifications.requestReplyId"
         case isCancelable = "com.soduto.services.notifications.isCancelable"
+        case contentHash = "com.soduto.services.notifications.contentHash"
     }
     
     enum ActionId: ServiceAction.Id {
@@ -772,9 +773,17 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 if identifier.hasPrefix(prefix) {
                     let alreadyTracked = state.notificationIds[device.id]?.contains(identifier) ?? false
                     state.addNotificationId(identifier, from: device)
-                    // Also restore the content hash so we can detect reconnection duplicates
-                    let body = notification.request.content.body
-                    state.notificationContentHashes[identifier] = StableHashing.sha256(body)
+                    // Restore the content hash so we can detect reconnection duplicates.
+                    // Prefer the hash we stamped into userInfo at delivery (byte-exact match
+                    // with what `showNotification` will compute next time). Fall back to hashing
+                    // the rendered body for notifications delivered before this field existed.
+                    // Those will re-deliver once, then have the proper hash stamped from then on.
+                    if let storedHash = notification.request.content.userInfo[UserInfoProperty.contentHash.rawValue] as? String {
+                        state.notificationContentHashes[identifier] = storedHash
+                    } else {
+                        let body = notification.request.content.body
+                        state.notificationContentHashes[identifier] = StableHashing.sha256(body)
+                    }
                     matchCount += 1
                     if !alreadyTracked {
                         insertedCount += 1
@@ -901,6 +910,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         of packetNotificationId: String,
         package packageId: String?,
         conversation: [DataPacket.ConversationMessage]?,
+        hash contentHash: String,
         isSilent: Bool,
         title: String?,
         body: String?,
@@ -941,6 +951,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             UserInfoProperty.notificationId.rawValue: packetNotificationId,
             UserInfoProperty.requestReplyId.rawValue: replyId as Any,
             UserInfoProperty.isCancelable.rawValue: NSNumber(value: isCancelable),
+            UserInfoProperty.contentHash.rawValue: contentHash,
             UserNotificationManager.Property.shouldMute.rawValue: NSNumber(value: shouldMute),
             UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(NotificationsService.self)
         ]
@@ -1091,23 +1102,23 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
             
+            // Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content).
+            // For conversations, hash includes sender + content so new messages in the thread trigger an update.
+            let contentForHash: String
+            if let conversation = conversation, !conversation.isEmpty {
+                contentForHash = conversation.map { "\($0.sender)\u{1F}\($0.content)" }.joined(separator: "\u{1E}")
+            } else {
+                contentForHash = body ?? ticker
+            }
+            let currentContentHash = StableHashing.sha256(contentForHash)
+            
             // Interact with MainActor state
             let shouldShow = await MainActor.run { () -> Bool in
                 let isAlreadyDisplayed = state.notificationIds[device.id]?.contains(notificationId) ?? false
-                
-                /// Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content).
-                /// For conversations, hash includes all message content so new messages in the thread trigger an update.
-                let contentForHash: String
-                if let conversation = conversation, !conversation.isEmpty {
-                    contentForHash = conversation.map { "\($0.sender)\u{1F}\($0.content)" }.joined(separator: "\u{1E}")
-                } else {
-                    contentForHash = body ?? ticker
-                }
-                let currentContentHash = StableHashing.sha256(contentForHash)
                 let previousContentHash = state.notificationContentHashes[notificationId]
                 let isContentChanged = previousContentHash == nil || previousContentHash != currentContentHash
                 
-                /// isReconnectionDuplicate: Same notification with same content arriving again
+                // Check if same notification with same content arrived again
                 let isReconnectionDuplicate = isAlreadyDisplayed && !isContentChanged
                 
                 guard !isReconnectionDuplicate else {
@@ -1140,6 +1151,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 of: packetNotificationId,
                 package: packageId,
                 conversation: conversation,
+                hash: currentContentHash,
                 isSilent: isSilent,
                 title: title,
                 body: body,
