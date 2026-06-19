@@ -377,11 +377,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     private static let cleanupManager = StartupCleanupManager()
     
     /// Time to wait for the first notification packet before assuming the device has no notifications.
-    private let initialSyncTimeout: TimeInterval = 3.5
+    /// Generous enough to absorb other plugins' heavy connect-time responses (notably uncached
+    /// contacts vCards with embedded photos) so notification sync responses can land within the window.
+    private let initialSyncTimeout: TimeInterval = 15.0
     
     /// Time to wait after the last received notification packet before reconciling.
     /// This acts as a debounce to ensure we received the full batch of notifications even on slow networks.
-    private let syncDebounceTimeout: TimeInterval = 2.0
+    private let syncDebounceTimeout: TimeInterval = 3.0
     
     // MARK: Service methods
     
