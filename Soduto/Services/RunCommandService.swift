@@ -191,14 +191,74 @@ public class RunCommandService: BidirectionalService {
         let task = Process()
         task.launchPath = commandData.shell
         task.arguments = ["-l", "-c", commandData.command]
-        task.standardOutput = Pipe()
-        task.standardError = Pipe()
+        
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        task.standardOutput = stdoutPipe
+        task.standardError = stderrPipe
+        
+        // Drain the pipes asynchronously. Without an active reader, the
+        // process would block forever once the pipe buffer fills (~64KB) on
+        // verbose commands like `brew update`. readabilityHandler fires on a
+        // private background queue, so draining proceeds even while the
+        // caller is blocked in waitUntilExit()
+        var stdoutData = Data()
+        var stderrData = Data()
+        let dataLock = NSLock()
+        
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            dataLock.lock()
+            stdoutData.append(chunk)
+            dataLock.unlock()
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            dataLock.lock()
+            stderrData.append(chunk)
+            dataLock.unlock()
+        }
         
         do {
             try task.run()
             task.waitUntilExit()
         } catch {
-            Logger.services.error("Error executing command: \(error, privacy: .public)")
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            Logger.services.error("Error launching command '\(commandData.name, privacy: .public)': \(error, privacy: .public)")
+            return
+        }
+        
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+        
+        dataLock.lock()
+        let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
+        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+        dataLock.unlock()
+        
+        let exitCode = task.terminationStatus
+        if exitCode == 0 {
+            Logger.services.info("Command '\(commandData.name, privacy: .public)' completed (exit 0)")
+            if !stdout.isEmpty {
+                Logger.services.debug("stdout: \(stdout, privacy: .public)")
+            }
+        } else {
+            Logger.services.error("Command '\(commandData.name, privacy: .public)' failed (exit \(exitCode, privacy: .public))")
+            if !stderr.isEmpty {
+                Logger.services.error("stderr: \(stderr, privacy: .public)")
+            }
+            if !stdout.isEmpty {
+                Logger.services.debug("stdout: \(stdout, privacy: .public)")
+            }
         }
     }
     
