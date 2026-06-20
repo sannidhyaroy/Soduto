@@ -111,6 +111,22 @@ final class RunCommandsViewModel: ObservableObject {
         save()
     }
     
+    func duplicate(_ command: RunCommandService.Command) {
+        let copy = RunCommandService.Command(
+            uuid: UUID().uuidString,
+            name: "Copy of " + command.name,
+            command: command.command,
+            shell: command.shell,
+            isEnabled: command.isEnabled
+        )
+        if let index = commands.firstIndex(where: { $0.uuid == command.uuid }) {
+            commands.insert(copy, at: index + 1)
+        } else {
+            commands.append(copy)
+        }
+        save()
+    }
+    
     func setEnabled(_ enabled: Bool, for command: RunCommandService.Command) {
         guard let index = commands.firstIndex(where: { $0.uuid == command.uuid }) else { return }
         commands[index].isEnabled = enabled
@@ -138,6 +154,7 @@ struct RunCommandsView: View {
     @ObservedObject var viewModel: RunCommandsViewModel
     @State private var showingAddSheet = false
     @State private var editingCommand: RunCommandService.Command?
+    @State private var commandPendingDelete: RunCommandService.Command?
     
     var body: some View {
         VStack(spacing: 0) {
@@ -163,24 +180,49 @@ struct RunCommandsView: View {
                 title: "New Command",
                 name: "",
                 command: "",
-                shell: RunCommandService.Command.defaultShell
-            ) { name, command, shell in
-                viewModel.add(.init(uuid: UUID().uuidString, name: name, command: command, shell: shell))
-            }
+                shell: RunCommandService.Command.defaultShell,
+                onSave: { name, command, shell in
+                    viewModel.add(.init(uuid: UUID().uuidString, name: name, command: command, shell: shell))
+                },
+                onDelete: nil
+            )
         }
         .sheet(item: $editingCommand) { command in
             CommandEditView(
                 title: "Edit Command",
                 name: command.name,
                 command: command.command,
-                shell: command.shell
-            ) { name, cmd, shell in
-                var updated = command
-                updated.name = name
-                updated.command = cmd
-                updated.shell = shell
-                viewModel.update(updated)
+                shell: command.shell,
+                onSave: { name, cmd, shell in
+                    var updated = command
+                    updated.name = name
+                    updated.command = cmd
+                    updated.shell = shell
+                    viewModel.update(updated)
+                },
+                onDelete: {
+                    viewModel.delete(command)
+                }
+            )
+        }
+        .confirmationDialog(
+            commandPendingDelete.map { "Delete '\($0.name)'?" } ?? "",
+            isPresented: Binding(
+                get: { commandPendingDelete != nil },
+                set: { if !$0 { commandPendingDelete = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: commandPendingDelete
+        ) { command in
+            Button("Delete", role: .destructive) {
+                viewModel.delete(command)
+                commandPendingDelete = nil
             }
+            Button("Cancel", role: .cancel) {
+                commandPendingDelete = nil
+            }
+        } message: { _ in
+            Text("This action cannot be undone.")
         }
     }
     
@@ -198,13 +240,15 @@ struct RunCommandsView: View {
     private var commandList: some View {
         List {
             ForEach(viewModel.commands) { command in
-                CommandRow(command: command) {
-                    editingCommand = command
-                } onDelete: {
-                    viewModel.delete(command)
-                } onToggleEnabled: { enabled in
-                    viewModel.setEnabled(enabled, for: command)
-                }
+                CommandRow(
+                    command: command,
+                    onEdit: { editingCommand = command },
+                    onDuplicate: { viewModel.duplicate(command) },
+                    onDelete: { commandPendingDelete = command },
+                    onToggleEnabled: { enabled in
+                        viewModel.setEnabled(enabled, for: command)
+                    }
+                )
             }
             .onDelete { viewModel.delete(at: $0) }
         }
@@ -250,9 +294,9 @@ struct RunCommandsView: View {
 private struct CommandRow: View {
     let command: RunCommandService.Command
     let onEdit: () -> Void
+    let onDuplicate: () -> Void
     let onDelete: () -> Void
     let onToggleEnabled: (Bool) -> Void
-    @State private var isHovered = false
     
     private var enabledBinding: Binding<Bool> {
         Binding(get: { command.isEnabled }, set: { onToggleEnabled($0) })
@@ -276,34 +320,23 @@ private struct CommandRow: View {
             
             Spacer()
             
-            HStack(spacing: 8) {
-                HStack(spacing: 4) {
-                    Button(action: onEdit) {
-                        Image(systemName: "pencil")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Edit")
-                    
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
-                            .foregroundStyle(.red)
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Delete")
-                }
-                .opacity(isHovered ? 1 : 0)
-                
-                Toggle("", isOn: enabledBinding)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .labelsHidden()
-                    .help(command.isEnabled ? "Disable command" : "Enable command")
-            }
+            Toggle("", isOn: enabledBinding)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+                .help(command.isEnabled ? "Disable command" : "Enable command")
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
+        .onTapGesture {
+            onEdit()
+        }
+        .contextMenu {
+            Button("Edit") { onEdit() }
+            Button("Duplicate") { onDuplicate() }
+            Divider()
+            Button("Delete", role: .destructive) { onDelete() }
+        }
     }
     
     /// macOS Settings-style icon: a small rounded square with a subtle vertical
@@ -332,17 +365,27 @@ private struct CommandEditView: View {
     @State private var name: String
     @State private var command: String
     @State private var shell: String
+    @State private var showingDeleteConfirmation = false
     let onSave: (String, String, String) -> Void
+    let onDelete: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     
     private let availableShells: [String] = ShellRegistry.discover()
     
-    init(title: String, name: String, command: String, shell: String, onSave: @escaping (String, String, String) -> Void) {
+    init(
+        title: String,
+        name: String,
+        command: String,
+        shell: String,
+        onSave: @escaping (String, String, String) -> Void,
+        onDelete: (() -> Void)? = nil
+    ) {
         self.title = title
         self._name = State(initialValue: name)
         self._command = State(initialValue: command)
         self._shell = State(initialValue: shell)
         self.onSave = onSave
+        self.onDelete = onDelete
     }
     
     private var isValid: Bool {
@@ -386,6 +429,11 @@ private struct CommandEditView: View {
             Divider()
             
             HStack {
+                if onDelete != nil {
+                    Button("Delete", role: .destructive) {
+                        showingDeleteConfirmation = true
+                    }
+                }
                 Spacer()
                 Button("Cancel") { dismiss() }
                 Button("Save") {
@@ -404,6 +452,19 @@ private struct CommandEditView: View {
             .padding(.vertical, 16)
         }
         .frame(width: 460)
+        .confirmationDialog(
+            "Delete '\(name)'?",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                onDelete?()
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This action cannot be undone.")
+        }
     }
     
     private func fieldLabel(_ text: String) -> some View {
