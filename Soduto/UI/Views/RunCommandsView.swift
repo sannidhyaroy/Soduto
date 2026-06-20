@@ -18,10 +18,10 @@ extension RunCommandService.Command: Identifiable {
 // MARK: - ShellRegistry
 
 /// Discovers shells available on the system from three merged sources:
-///   1. Hard-coded macOS-bundled shells — always shipped with macOS, robust
-///      against any App Sandbox restriction on the `/etc/shells` read
-///   2. `/etc/shells` — picks up shells the user has registered via `chsh`
-///   3. Probes of common third-party install paths — catches Homebrew/MacPorts
+///   1. Hard-coded important macOS-bundled shells: always shipped with macOS, robust
+///      against any App Sandbox restriction
+///   2. `/etc/shells`: picks up shells the user has registered via `chsh`
+///   3. Probes of common third-party install paths: catches Homebrew/MacPorts
 ///      shells (notably fish) that the user installed but never `chsh`'d into
 ///      `/etc/shells`
 ///
@@ -140,27 +140,24 @@ struct RunCommandsView: View {
     @State private var editingCommand: RunCommandService.Command?
     
     var body: some View {
-        Group {
-            if viewModel.commands.isEmpty {
-                emptyState
-            } else {
-                commandList
+        VStack(spacing: 0) {
+            headerBar
+            Divider()
+            
+            Group {
+                if viewModel.commands.isEmpty {
+                    emptyState
+                } else {
+                    commandList
+                }
+            }
+            
+            if viewModel.isSheet {
+                Divider()
+                footerBar
             }
         }
         .frame(minWidth: 480, minHeight: 320)
-        .toolbar {
-            if viewModel.isSheet {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { viewModel.dismissSheet?() }
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button { showingAddSheet = true } label: {
-                    Image(systemName: "plus")
-                }
-                .help("Add Command")
-            }
-        }
         .sheet(isPresented: $showingAddSheet) {
             CommandEditView(
                 title: "New Command",
@@ -213,6 +210,39 @@ struct RunCommandsView: View {
         }
         .listStyle(.inset)
     }
+    
+    private var headerBar: some View {
+        HStack {
+            Text("Run Commands")
+                .font(.title2)
+                .fontWeight(.semibold)
+            Spacer()
+            Button {
+                showingAddSheet = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.primary)
+            }
+            .buttonStyle(.plain)
+            .help("Add Command")
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+    }
+    
+    private var footerBar: some View {
+        HStack {
+            Spacer()
+            Button("Done") {
+                viewModel.dismissSheet?()
+            }
+            .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.defaultAction)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
 }
 
 // MARK: - CommandRow
@@ -230,18 +260,17 @@ private struct CommandRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "terminal")
-                .foregroundStyle(.tertiary)
-                .frame(width: 16)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(command.name)
-                    .fontWeight(.medium)
-                Text(command.command)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+            HStack(spacing: 12) {
+                iconBadge
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(command.name)
+                        .fontWeight(.medium)
+                    Text(command.command)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
             .opacity(command.isEnabled ? 1 : 0.55)
             
@@ -272,9 +301,27 @@ private struct CommandRow: View {
                     .help(command.isEnabled ? "Disable command" : "Enable command")
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+    }
+    
+    /// macOS Settings-style icon: a small rounded square with a subtle vertical
+    /// gradient and the SF Symbol in white. When per-command custom icons are
+    /// added later, the symbol name and tint will become Command properties
+    private var iconBadge: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(LinearGradient(
+                colors: [Color(white: 0.5), Color(white: 0.36)],
+                startPoint: .top,
+                endPoint: .bottom
+            ))
+            .frame(width: 28, height: 28)
+            .overlay {
+                Image(systemName: "terminal")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+            }
     }
 }
 
@@ -302,8 +349,8 @@ private struct CommandEditView: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
-    /// Shells offered in the picker — ensure the command's current shell is always
-    /// selectable even if it disappears from /etc/shells (e.g. fish uninstalled)
+    /// Shells offered in the picker
+    /// Ensure the command's current shell is always selectable even if it disappears from /etc/shells (e.g. fish uninstalled)
     private var shellOptions: [String] {
         availableShells.contains(shell) ? availableShells : (availableShells + [shell]).sorted()
     }
@@ -366,9 +413,8 @@ private struct CommandEditView: View {
             .foregroundStyle(.secondary)
     }
     
-    /// Dark terminal-style multiline editor. The `ShellEditorView` draws the
-    /// `$` prompt gutter and handles text editing; this wrapper supplies the
-    /// dark rounded background and border chrome
+    /// Dark terminal-style multiline editor.
+    /// The `ShellEditorView` draws the `$` prompt gutter and handles text editing; this wrapper supplies the dark rounded background and border chrome
     private var terminalField: some View {
         ShellEditorView(text: $command, placeholder: "e.g. pmset sleepnow")
             .frame(minHeight: 90, maxHeight: 140)

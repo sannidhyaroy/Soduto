@@ -16,7 +16,7 @@ import AppKit
 /// so users can visually distinguish a single logical line that wrapped from
 /// multiple statements typed across lines.
 ///
-/// The editor itself draws no background — wrap it in a styled container
+/// The editor itself draws no background,  wrap it in a styled container
 /// (dark fill + rounded border) to get the full terminal look.
 struct ShellEditorView: NSViewRepresentable {
     @Binding var text: String
@@ -46,6 +46,10 @@ struct ShellEditorView: NSViewRepresentable {
         textView.drawsBackground = false
         textView.isRichText = false
         textView.allowsUndo = true
+        textView.selectedTextAttributes = [
+            .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.45),
+            .foregroundColor: NSColor.white
+        ]
         textView.string = text
         
         scrollView.documentView = textView
@@ -100,8 +104,7 @@ struct ShellEditorView: NSViewRepresentable {
 
 // MARK: - ShellTextView
 
-/// NSTextView subclass that renders a placeholder string when empty,
-/// styled to read on the dark terminal background
+/// NSTextView subclass that renders a placeholder string when empty, styled to read on the dark terminal background
 private final class ShellTextView: NSTextView {
     
     var placeholder: String = "" {
@@ -133,15 +136,14 @@ private final class ShellTextView: NSTextView {
 
 // MARK: - ShellPromptRulerView
 
-/// Vertical gutter that draws a green `$` for each line fragment that starts
-/// a logical paragraph (hard newline). Soft-wrapped continuation fragments
-/// get no prompt — making it visually clear which lines the user typed
+/// Vertical gutter that draws a green `$` for each line fragment that starts a logical paragraph (hard newline).
+/// Soft-wrapped continuation fragments get no prompt, making it visually clear which lines the user typed.
 private final class ShellPromptRulerView: NSRulerView {
     
     override var isFlipped: Bool { true }
     
     override func draw(_ dirtyRect: NSRect) {
-        // Skip the default ruler chrome (tick marks, numerals) — we want a
+        // Skip the default ruler chrome (tick marks, numerals), we want a
         // clean transparent gutter that lets the parent's dark fill show through
         drawHashMarksAndLabels(in: dirtyRect)
     }
