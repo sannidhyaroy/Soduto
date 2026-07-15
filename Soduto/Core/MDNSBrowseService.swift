@@ -20,6 +20,11 @@ final class MDNSBrowseService {
     
     weak var delegate: MDNSBrowseServiceDelegate?
     
+    /// The browser's current result set. Read from the browse queue.
+    var currentResults: Set<NWBrowser.Result> {
+        return browser?.browseResults ?? []
+    }
+    
     init(queue: DispatchQueue) {
         self.queue = queue
     }

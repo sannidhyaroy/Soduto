@@ -703,6 +703,13 @@ extension ConnectionProvider: MDNSDiscoveryProviderDelegate {
         // This is the recommended approach per KDE Connect protocol spec
         sendDirectUdpPacket(to: address)
     }
+    
+    public func mdnsProvider(_ provider: MDNSDiscoveryProvider, needsConnectionTo deviceId: String) -> Bool {
+        guard let delegate = self.delegate else { return false }
+        guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else { return false }
+        // Only knock paired devices: unpaired ones connect via the normal one-shot discovery events while the user is actively pairing
+        return self.config.knownDeviceConfigs().first { $0.deviceId == deviceId }?.isPaired ?? false
+    }
 }
 
 // MARK: - UDP Handler

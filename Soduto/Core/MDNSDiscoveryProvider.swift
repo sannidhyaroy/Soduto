@@ -24,6 +24,11 @@ public protocol MDNSDiscoveryProviderDelegate: AnyObject {
                       discoveredDeviceAt address: String,
                       port: UInt16,
                       deviceId: String)
+    
+    /// Asks whether a connection to the given device is currently wanted.
+    /// Used by the periodic reconnect knock to skip devices that are already connected or that should not be dialed automatically.
+    func mdnsProvider(_ provider: MDNSDiscoveryProvider,
+                      needsConnectionTo deviceId: String) -> Bool
 }
 
 // MARK: - MDNSDiscoveryProvider
@@ -48,6 +53,9 @@ public class MDNSDiscoveryProvider {
     
     /// Delay before restarting browsing after a failure.
     private static let browseRestartDelay: TimeInterval = 5.0
+    
+    /// Interval between reconnect knocks for visible-but-unconnected devices.
+    private static let knockInterval: TimeInterval = 10.0
     
     // MARK: Properties
     
@@ -90,6 +98,9 @@ public class MDNSDiscoveryProvider {
     /// Whether the provider is currently running.
     private var isRunning = false
     
+    /// Timer driving the periodic reconnect knock.
+    private var knockTimer: DispatchSourceTimer?
+    
     /// Delegate for discovery events.
     public weak var delegate: MDNSDiscoveryProviderDelegate?
     
@@ -117,6 +128,7 @@ public class MDNSDiscoveryProvider {
         
         startAdvertising()
         startBrowsing()
+        startKnockTimer()
         
         Logger.network.info("mDNS provider started on port \(tcpPort, privacy: .public)")
     }
@@ -127,6 +139,8 @@ public class MDNSDiscoveryProvider {
         
         isRunning = false
         
+        knockTimer?.cancel()
+        knockTimer = nil
         browseService.stop()
         advertisementService.stop()
         
@@ -163,6 +177,37 @@ public class MDNSDiscoveryProvider {
         browserQueue.asyncAfter(deadline: .now() + type(of: self).browseRestartDelay) { [weak self] in
             guard let self = self, self.isRunning else { return }
             self.startBrowsing()
+        }
+    }
+    
+    private func startKnockTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: browserQueue)
+        timer.schedule(deadline: .now() + type(of: self).knockInterval,
+                       repeating: type(of: self).knockInterval)
+        timer.setEventHandler { [weak self] in
+            self?.knockUnconnectedDevices()
+        }
+        timer.resume()
+        self.knockTimer = timer
+    }
+    
+    /// Re-triggers connection attempts for devices that are visible in the browser's current results but not connected.
+    /// Browse events are one-shot: a device that leaves the network for less than its record TTL produces no `.removed`/`.added` when it returns, and an event that fired while a connection still existed is discarded by the delegate's gate.
+    /// Either way a visible device can end up unconnected with no future event to recover it, so we periodically re-drive the normal discovery flow for any result the delegate still wants a connection to.
+    private func knockUnconnectedDevices() {
+        guard isRunning else { return }
+        let results = browseService.currentResults
+        guard !results.isEmpty else { return }
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isRunning else { return }
+            for result in results {
+                guard case .service(let name, _, _, _) = result.endpoint else { continue }
+                guard name != self.config.hostDeviceId else { continue }
+                guard self.delegate?.mdnsProvider(self, needsConnectionTo: name) == true else { continue }
+                Logger.network.info("mDNS knock: \(name, privacy: .public) visible but not connected — re-triggering connection")
+                self.handleDeviceDiscovered(result)
+            }
         }
     }
     
