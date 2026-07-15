@@ -216,6 +216,7 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         
         let knownDeviceConfigs = self.config.knownDeviceConfigs()
         let accessibleAddresses = (try? NetworkUtils.accessibleIPv4Addresses()) ?? []
+        var directedCount = 0
         for accessibleAddress in accessibleAddresses {
             guard let accessibleHwAddress = accessibleAddress.hwAddressString else { continue }
             for deviceConfig in knownDeviceConfigs {
@@ -225,14 +226,23 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
                     var deviceBuffer = channel.allocator.buffer(capacity: bytes.count)
                     deviceBuffer.writeBytes(bytes)
                     let envelope = AddressedEnvelope(remoteAddress: deviceAddress, data: deviceBuffer)
-                    channel.writeAndFlush(envelope).whenFailure { error in
-                        Logger.network.debug("UDP send to known device \(accessibleAddress.ipAddressString, privacy: .public) failed: \(error, privacy: .public)")
+                    channel.writeAndFlush(envelope).whenComplete { result in
+                        switch result {
+                        case .success:
+                            Logger.network.debug("UDP directed announce sent to \(accessibleAddress.ipAddressString, privacy: .public)")
+                        case .failure(let error):
+                            Logger.network.debug("UDP directed announce to \(accessibleAddress.ipAddressString, privacy: .public) failed: \(error, privacy: .public)")
+                        }
                     }
+                    directedCount += 1
                 } catch {
                     Logger.network.error("Failed to create address for known device: \(error, privacy: .public)")
                 }
                 break
             }
+        }
+        if directedCount == 0 && !knownDeviceConfigs.isEmpty {
+            Logger.network.debug("UDP directed announce: no ARP entries matched \(knownDeviceConfigs.count, privacy: .public) known device(s)")
         }
     }
     
@@ -431,17 +441,33 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     
     /// Handles incoming UDP packet.
     fileprivate func handleUdpPacket(data: Data, remoteAddress: NIOCore.SocketAddress) {
-        guard let delegate = self.delegate else { return }
-        guard let packet = DataPacket(data: data) else { return }
-        guard let port = try? packet.getTCPPort() else { return }
-        guard let deviceId = try? packet.getDeviceId() else { return }
-        guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else { return }
+        guard let packet = DataPacket(data: data) else {
+            Logger.network.debug("UDP: discarding \(data.count, privacy: .public) byte datagram from \(String(describing: remoteAddress), privacy: .public): not a valid packet")
+            return
+        }
+        guard let deviceId = try? packet.getDeviceId() else {
+            Logger.network.notice("UDP: discarding packet from \(String(describing: remoteAddress), privacy: .public): missing deviceId")
+            return
+        }
         
         #if DEBUG
             Logger.network.debug("UDP received packet from \(String(describing: remoteAddress), privacy: .public): \(packet, privacy: .public)")
         #else
             Logger.network.debug("UDP received packet from \(String(describing: remoteAddress), privacy: .public) deviceId: \(deviceId, privacy: .public)")
         #endif
+        
+        guard let port = try? packet.getTCPPort() else {
+            Logger.network.notice("UDP: discarding identity from \(deviceId, privacy: .public): missing tcpPort")
+            return
+        }
+        guard let delegate = self.delegate else {
+            Logger.network.error("UDP: discarding identity from \(deviceId, privacy: .public): no delegate")
+            return
+        }
+        guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else {
+            Logger.network.debug("UDP: ignoring identity from \(deviceId, privacy: .public): connection not needed")
+            return
+        }
         
         // Create a socket address for the connection
         guard let connectionAddress = convertToSocketAddress(remoteAddress, port: UInt16(port)) else {
@@ -488,7 +514,7 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         }
     }
     
-    /// Converts a NIOCore.SocketAddress to SocketAddress.
+    /// Converts a `NIOCore.SocketAddress` to SocketAddress.
     private func convertToSocketAddress(_ address: NIOCore.SocketAddress, port: UInt16) -> SocketAddress? {
         switch address {
         case .v4(let addr):
