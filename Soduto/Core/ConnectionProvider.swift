@@ -368,10 +368,13 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             return
         }
         
-        // Main UDP socket - dual-stack for receiving and IPv6 sends
+        // Main UDP socket: dual-stack for receiving and IPv6 sends
+        // NIO's default datagram receive buffer is 2048 bytes; identity packets with full capability lists exceed that and would arrive truncated, failing to parse
+        // Size for the maximum UDP datagram instead
         let mainBootstrap = DatagramBootstrap(group: group)
             .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .channelOption(ChannelOptions.Types.SocketOption(level: SOL_SOCKET, name: SO_REUSEPORT), value: 1)
+            .channelOption(ChannelOptions.recvAllocator, value: FixedSizeRecvByteBufferAllocator(capacity: 65536))
             .channelInitializer { [weak self] channel in
                 guard let self = self else {
                     return channel.eventLoop.makeSucceededVoidFuture()
