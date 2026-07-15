@@ -373,14 +373,16 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         do {
             // Bind to IPv6 any address (::) which creates a dual-stack socket
             // This allows receiving both IPv4 and IPv6, including link-local IPv6
-            let channel = try mainBootstrap.bind(host: "::", port: Int(ConnectionProvider.udpPort)).wait()
+            let address = try NIOCore.SocketAddress(ipAddress: "::", port: Int(ConnectionProvider.udpPort))
+            let channel = try mainBootstrap.bind(to: address).wait()
             self.udpChannel = channel
             Logger.network.info("Main UDP socket ready on port \(ConnectionProvider.udpPort, privacy: .public)")
         } catch {
             // Fallback to IPv4-only if IPv6 dual-stack fails
             Logger.network.notice("IPv6 dual-stack UDP failed, falling back to IPv4: \(error, privacy: .public)")
             do {
-                let channel = try mainBootstrap.bind(host: "0.0.0.0", port: Int(ConnectionProvider.udpPort)).wait()
+                let address = try NIOCore.SocketAddress(ipAddress: "0.0.0.0", port: Int(ConnectionProvider.udpPort))
+                let channel = try mainBootstrap.bind(to: address).wait()
                 self.udpChannel = channel
                 Logger.network.info("Main UDP socket ready on port \(ConnectionProvider.udpPort, privacy: .public) (IPv4 only)")
             } catch {
@@ -396,7 +398,8 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         
         do {
             // Bind to any available port (port 0) - we only send from this socket
-            let channel = try broadcastBootstrap.bind(host: "0.0.0.0", port: 0).wait()
+            let address = try NIOCore.SocketAddress(ipAddress: "0.0.0.0", port: 0)
+            let channel = try broadcastBootstrap.bind(to: address).wait()
             self.broadcastChannel = channel
             Logger.network.debug("Broadcast UDP socket ready")
         } catch {
@@ -532,7 +535,8 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         // including link-local IPv6 (required when phone connects back to us)
         for port in ConnectionProvider.minTcpPort...ConnectionProvider.maxTcpPort {
             do {
-                let channel = try bootstrap.bind(host: "::", port: Int(port)).wait()
+                let address = try NIOCore.SocketAddress(ipAddress: "::", port: Int(port))
+                let channel = try bootstrap.bind(to: address).wait()
                 self.tcpServerChannel = channel
                 self.tcpListeningPort = port
                 Logger.network.info("Listening for TCP connections on port \(port, privacy: .public)")
@@ -540,7 +544,8 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             } catch let ipv6Error {
                 // IPv6 dual-stack failed, try IPv4-only fallback
                 do {
-                    let channel = try bootstrap.bind(host: "0.0.0.0", port: Int(port)).wait()
+                    let address = try NIOCore.SocketAddress(ipAddress: "0.0.0.0", port: Int(port))
+                    let channel = try bootstrap.bind(to: address).wait()
                     self.tcpServerChannel = channel
                     self.tcpListeningPort = port
                     Logger.network.notice("IPv6 TCP failed (\(ipv6Error, privacy: .public)), using IPv4 on port \(port, privacy: .public)")
