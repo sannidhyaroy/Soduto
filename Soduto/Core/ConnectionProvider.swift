@@ -20,6 +20,7 @@ enum ConnectionProviderError: Error {
 public protocol ConnectionProviderDelegate: AnyObject {
     func isNewConnectionNeeded(byProvider provider: ConnectionProvider, deviceId: String) -> Bool
     func connectionProvider(_ provider: ConnectionProvider, didCreateConnection: Connection)
+    func connectionProvider(_ provider: ConnectionProvider, probeConnectionsFor deviceId: String)
 }
 
 public class ConnectionProvider: NSObject, ConnectionDelegate {
@@ -44,6 +45,12 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     
     /// Minimum time between network restarts to avoid race conditions.
     private static let restartCooldown: TimeInterval = 3.0
+    
+    /// Minimum time between liveness probes of the same device's connections.
+    private static let probeMinInterval: TimeInterval = 5.0
+    
+    /// Last liveness probe time per device (main-thread confined).
+    private var lastProbeTimes: [String: Date] = [:]
     
     // MARK: Network Properties
     
@@ -453,6 +460,13 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             return
         }
         
+        // Our own subnet broadcasts are looped back to our listener
+        // Drop them before they reach the probe branch, which would misread the gate's refusal
+        guard deviceId != self.config.hostDeviceId else {
+            Logger.network.debug("UDP: ignoring own announcement echo")
+            return
+        }
+        
         #if DEBUG
             Logger.network.debug("UDP received packet from \(String(describing: remoteAddress), privacy: .public): \(packet, privacy: .public)")
         #else
@@ -468,7 +482,20 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             return
         }
         guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else {
-            Logger.network.debug("UDP: ignoring identity from \(deviceId, privacy: .public): connection not needed")
+            // The device announced itself as discoverable while we consider it connected
+            // One of the two states is wrong, probe the existing connections
+            // A write to a dead peer fails at kernel level and tears the stale connection down, reopening the gate for the device's next announcement (or the mDNS knock)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                if let lastProbe = self.lastProbeTimes[deviceId],
+                   Date().timeIntervalSince(lastProbe) < ConnectionProvider.probeMinInterval {
+                    Logger.network.debug("UDP: ignoring identity from \(deviceId, privacy: .public): connection not needed (recently probed)")
+                    return
+                }
+                self.lastProbeTimes[deviceId] = Date()
+                Logger.network.info("UDP: identity from \(deviceId, privacy: .public) while considered connected — probing existing connections")
+                self.delegate?.connectionProvider(self, probeConnectionsFor: deviceId)
+            }
             return
         }
         

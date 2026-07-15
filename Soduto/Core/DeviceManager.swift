@@ -90,6 +90,10 @@ public class DeviceManager: ConnectionProviderDelegate, DeviceDelegate, DeviceDa
         return true
     }
     
+    public func connectionProvider(_ provider: ConnectionProvider, probeConnectionsFor deviceId: Device.Id) {
+        self.devices[deviceId]?.probeConnections()
+    }
+    
     public func connectionProvider(_ provider: ConnectionProvider, didCreateConnection connection: Connection) {
         Logger.device.debug("connectionProvider(<\(provider, privacy: .public)> didCreateConnection:<\(connection, privacy: .public)>)")
         

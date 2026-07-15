@@ -266,6 +266,14 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         (connections + lingeringConnections).forEach { $0.cancelUpload(forPacketId: packetId) }
     }
     
+    /// Sends a keepalive on every active connection to test liveness.
+    /// A write to a dead peer fails at kernel level (RST or retransmission drop), closing the connection through the normal teardown path and making the device available for rediscovery.
+    public func probeConnections() {
+        for connection in self.connections {
+            connection.sendKeepAlivePacket()
+        }
+    }
+    
     /// Cleanup all pending to send packets, executing their completion handlers if any.
     public func discardPendingPackets() {
         for pendingPacket in self.pendingPackets {

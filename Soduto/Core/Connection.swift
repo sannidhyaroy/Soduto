@@ -1114,7 +1114,8 @@ public class Connection: NSObject, PairingHandlerDelegate, UploadTaskDelegate {
         }
     }
     
-    private func sendKeepAlivePacket() {
+    /// Sends a keepalive packet.
+    public func sendKeepAlivePacket() {
         let packet = DataPacket(type: "soduto.keepalive", body: [:])
         _ = send(packet)
     }
