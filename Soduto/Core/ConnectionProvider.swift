@@ -281,19 +281,26 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
     }
     
     public func connection(_ connection: Connection, didSendPacket packet: DataPacket, uploadedPayload: Bool) {
-        Logger.network.debug("connection(<\(connection, privacy: .public)> didSendPacket:<\(packet, privacy: .public)>)")
+        // Type and id only: `send(_:)` already dumps the full packet when it is queued
+        Logger.network.debug("connection(<\(connection, privacy: .public)> didSendPacket:<\(packet.type, privacy: .public), id: \(packet.id, privacy: .public)>)")
         
         // Only process during initialization phase
         guard connection.state == .Initializing else {
             return
         }
         
-        // This callback handles outgoing connections after sending our identity packet.
+        // For v8 the post-TLS identity is sent while the connection is still `.Initializing` (awaiting the peer's post-TLS identity)
+        // TLS and `finishInitialization` have already run for this connection, don't drive them again
+        guard !connection.waitingForV8PostTLSIdentity else {
+            return
+        }
+        
+        // This callback handles outgoing connections after sending our identity packet
         // Per KDE Connect protocol:
         // 1. We (TCP initiator) send identity
         // 2. We start TLS as SERVER
         // 3. Peer starts TLS as CLIENT
-        // Note: Incoming connections are handled in didReadPacket, not here.
+        // Note: Incoming connections are handled in `didReadPacket`, not here
         do {
             guard let identity = connection.identity else { throw ConnectionProviderError.IdentityAbsent }
             let protocolVersion = try identity.getProtocolVersion()
