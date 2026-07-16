@@ -184,38 +184,54 @@ extension DataPacket {
     public static func identityPacket(additionalProperties:DataPacket.Body?, config: HostConfiguration) -> DataPacket {
         assert(!config.incomingCapabilities.isEmpty || !config.outgoingCapabilities.isEmpty, "Empty capabilities for identity packet, probably something is wrong")
         
-        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
-        let platformVersion = "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
-        #if os(macOS)
-            let platformName = "macOS"
-        #elseif os(iOS)
-            let platformName = "iOS"
-        #elseif os(tvOS)
-            let platformName = "tvOS"
-        #elseif os(watchOS)
-            let platformName = "watchOS"
-        #elseif os(Linux)
-            let platformName = "Linux"
-        #elseif os(Windows)
-            let platformName = "Windows"
-        #else
-            let platformName = "Unknown"
-        #endif
+        return identityPacket(
+            additionalProperties: additionalProperties,
+            config: config,
+            incomingCapabilities: Array(config.incomingCapabilities),
+            outgoingCapabilities: Array(config.outgoingCapabilities),
+            includeExtensionFields: true
+        )
+    }
+    
+    /// Format-level identity assembly. The caller controls which capability arrays
+    /// and whether the Soduto identity extension fields (clientName/clientVersion/
+    /// platformName/platformVersion) are embedded. Policy for the size-constrained
+    /// broadcast form lives in `BroadcastIdentity`.
+    static func identityPacket(additionalProperties: DataPacket.Body?, config: HostConfiguration, incomingCapabilities: [Service.Capability], outgoingCapabilities: [Service.Capability], includeExtensionFields: Bool) -> DataPacket {
         var body: Body = [
             IdentityProperty.deviceId.rawValue: config.hostDeviceId as AnyObject,
             IdentityProperty.deviceName.rawValue: config.hostDeviceName as AnyObject,
             IdentityProperty.deviceType.rawValue: config.hostDeviceType.rawValue as AnyObject,
             IdentityProperty.protocolVersion.rawValue: NSNumber(value: DataPacket.protocolVersion),
-            IdentityProperty.outgoingCapabilities.rawValue: Array(config.outgoingCapabilities) as AnyObject,
-            IdentityProperty.incomingCapabilities.rawValue: Array(config.incomingCapabilities) as AnyObject,
-            IdentityProperty.platformName.rawValue: platformName as AnyObject,
-            IdentityProperty.platformVersion.rawValue: platformVersion as AnyObject
+            IdentityProperty.outgoingCapabilities.rawValue: outgoingCapabilities as AnyObject,
+            IdentityProperty.incomingCapabilities.rawValue: incomingCapabilities as AnyObject
         ]
-        if let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String {
-            body[IdentityProperty.clientName.rawValue] = name as AnyObject
-        }
-        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
-            body[IdentityProperty.clientVersion.rawValue] = version as AnyObject
+        if includeExtensionFields {
+            let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+            let platformVersion = "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
+            #if os(macOS)
+                let platformName = "macOS"
+            #elseif os(iOS)
+                let platformName = "iOS"
+            #elseif os(tvOS)
+                let platformName = "tvOS"
+            #elseif os(watchOS)
+                let platformName = "watchOS"
+            #elseif os(Linux)
+                let platformName = "Linux"
+            #elseif os(Windows)
+                let platformName = "Windows"
+            #else
+                let platformName = "Unknown"
+            #endif
+            body[IdentityProperty.platformName.rawValue] = platformName as AnyObject
+            body[IdentityProperty.platformVersion.rawValue] = platformVersion as AnyObject
+            if let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String {
+                body[IdentityProperty.clientName.rawValue] = name as AnyObject
+            }
+            if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+                body[IdentityProperty.clientVersion.rawValue] = version as AnyObject
+            }
         }
         if let properties = additionalProperties {
             for (key, value) in properties {
@@ -274,19 +290,19 @@ extension DataPacket {
     public func getClientName() -> String? {
         return body[IdentityProperty.clientName.rawValue] as? String
     }
-
+    
     public func getClientVersion() -> String? {
         return body[IdentityProperty.clientVersion.rawValue] as? String
     }
-
+    
     public func getPlatformName() -> String? {
         return body[IdentityProperty.platformName.rawValue] as? String
     }
-
+    
     public func getPlatformVersion() -> String? {
         return body[IdentityProperty.platformVersion.rawValue] as? String
     }
-
+    
     public func validateIdentityType() throws {
         guard type == DataPacket.identityPacketType else { throw IdentityError.wrongType }
     }

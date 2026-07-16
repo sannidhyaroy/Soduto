@@ -25,6 +25,7 @@
 		02968D0C204C4B9100FCE5E0 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 02968CFE204C4B9000FCE5E0 /* README.md */; };
 		02EC48B51F229CCE00C9370F /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B41F229CCE00C9370F /* Configuration.swift */; };
 		02EC48B71F229CEE00C9370F /* ServiceConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */; };
+		310154833008CF89002E4BB2 /* BroadcastIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 310154823008CF89002E4BB2 /* BroadcastIdentity.swift */; };
 		3105288B2F49274400488ED4 /* MDNSDiscoveryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3105288A2F49274400488ED4 /* MDNSDiscoveryProvider.swift */; };
 		3116837A2FB9269A00B1AEF8 /* UpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311683792FB9269A00B1AEF8 /* UpdateManager.swift */; };
 		3116837C2FB92CEC00B1AEF8 /* SMSWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3116837B2FB92CEC00B1AEF8 /* SMSWindowController.swift */; };
@@ -302,6 +303,7 @@
 		02968CFE204C4B9000FCE5E0 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		02EC48B41F229CCE00C9370F /* Configuration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Configuration.swift; path = Configuration/Configuration.swift; sourceTree = "<group>"; };
 		02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceConfiguration.swift; sourceTree = "<group>"; };
+		310154823008CF89002E4BB2 /* BroadcastIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BroadcastIdentity.swift; sourceTree = "<group>"; };
 		3105288A2F49274400488ED4 /* MDNSDiscoveryProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDNSDiscoveryProvider.swift; sourceTree = "<group>"; };
 		311683792FB9269A00B1AEF8 /* UpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateManager.swift; sourceTree = "<group>"; };
 		3116837B2FB92CEC00B1AEF8 /* SMSWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMSWindowController.swift; sourceTree = "<group>"; };
@@ -802,6 +804,7 @@
 				02EC48A91F2296C600C9370F /* Configuration */,
 				31A4219C2F45B3E9003B97FC /* Network */,
 				8468BDFE1DEB7F5F003B9925 /* Utils */,
+				310154823008CF89002E4BB2 /* BroadcastIdentity.swift */,
 				84D903A11DC696A600E61DA7 /* CertificateUtils.swift */,
 				31A421962F43B8C2003B97FC /* Connection.swift */,
 				84FA45D01DDDCB3D00EF3992 /* ConnectionProvider.swift */,
@@ -1328,6 +1331,7 @@
 				31332A352F6CCE320085A93A /* SystemVolumeSectionView.swift in Sources */,
 				8492379D1DE1C55900D95BBA /* DeviceMenu.swift in Sources */,
 				0223974F1F0908FB00B0C70A /* TextFieldWithLinks.swift in Sources */,
+				310154833008CF89002E4BB2 /* BroadcastIdentity.swift in Sources */,
 				3152C3F32F353AFA005152CB /* Logger+Categories.swift in Sources */,
 				31965FFF2FDF29B9003A3B77 /* NotificationThreadPolicy.swift in Sources */,
 				8499620E1D5728EE002B893A /* Test_Assertions.m in Sources */,

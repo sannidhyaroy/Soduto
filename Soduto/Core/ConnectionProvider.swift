@@ -164,18 +164,21 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         let properties: DataPacket.Body = [
             DataPacket.IdentityProperty.tcpPort.rawValue: Int(tcpPort) as AnyObject
         ]
-        let packet = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
-        sendBroadcast(packet: packet)
+        // Subnet broadcasts carry the size-constrained form (macOS cannot fragment broadcast datagrams)
+        // Directed unicasts carry the full identity
+        let broadcastPacket = BroadcastIdentity.packet(additionalProperties: properties, config: self.config)
+        let directedPacket = DataPacket.identityPacket(additionalProperties: properties, config: self.config)
+        sendBroadcast(broadcastPacket: broadcastPacket, directedPacket: directedPacket)
     }
     
-    /// Sends the identity packet as a UDP broadcast.
-    /// Uses the dedicated IPv4 broadcast channel (SO_BROADCAST only works on IPv4 sockets).
-    private func sendBroadcast(packet: DataPacket) {
+    /// Sends identity announcements over UDP using the dedicated IPv4 broadcast channel (SO_BROADCAST only works on IPv4 sockets): the size-constrained broadcast form to each interface's broadcast address, and the full identity as directed unicast to known devices (unicast datagrams may fragment).
+    private func sendBroadcast(broadcastPacket: DataPacket, directedPacket: DataPacket) {
         guard let channel = self.broadcastChannel else {
             Logger.network.error("Broadcast channel not available")
             return
         }
-        guard let bytes = try? packet.serialize() else { return }
+        guard let bytes = try? broadcastPacket.serialize() else { return }
+        Logger.network.debug("Broadcast identity: \(bytes.count, privacy: .public) bytes")
         
         // Get local interfaces and broadcast to each interface's broadcast address
         let localAddresses = NetworkUtils.localAddresses()
@@ -221,6 +224,8 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
             return
         }
         
+        guard let directedBytes = try? directedPacket.serialize() else { return }
+        
         let knownDeviceConfigs = self.config.knownDeviceConfigs()
         let accessibleAddresses = (try? NetworkUtils.accessibleIPv4Addresses()) ?? []
         var directedCount = 0
@@ -230,8 +235,8 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
                 guard deviceConfig.hwAddresses.contains(accessibleHwAddress) else { continue }
                 do {
                     let deviceAddress = try NIOCore.SocketAddress(ipAddress: accessibleAddress.ipAddressString, port: Int(ConnectionProvider.udpPort))
-                    var deviceBuffer = channel.allocator.buffer(capacity: bytes.count)
-                    deviceBuffer.writeBytes(bytes)
+                    var deviceBuffer = channel.allocator.buffer(capacity: directedBytes.count)
+                    deviceBuffer.writeBytes(directedBytes)
                     let envelope = AddressedEnvelope(remoteAddress: deviceAddress, data: deviceBuffer)
                     channel.writeAndFlush(envelope).whenComplete { result in
                         switch result {
