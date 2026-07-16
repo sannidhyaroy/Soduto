@@ -54,6 +54,13 @@ public class MDNSDiscoveryProvider {
     /// Delay before restarting browsing after a failure.
     private static let browseRestartDelay: TimeInterval = 5.0
     
+    /// Initial delay before re-attempting a failed mDNS registration.
+    /// Doubles per consecutive failure, capped at `advertiseRetryMaxDelay`.
+    private static let advertiseRetryDelay: TimeInterval = 5.0
+    
+    /// Cap for the advertisement retry backoff.
+    private static let advertiseRetryMaxDelay: TimeInterval = 60.0
+    
     /// Interval between reconnect knocks for visible-but-unconnected devices.
     /// Also the initial per-device knock backoff interval.
     private static let knockInterval: TimeInterval = 10.0
@@ -108,6 +115,10 @@ public class MDNSDiscoveryProvider {
     /// Per-device knock backoff (guarded by `lock`): the earliest time of the next knock, and the interval to apply after it fires.
     /// Reset when the device's browse record changes or it no longer needs a connection, so a returning device is always knocked promptly.
     private var knockBackoff: [String: (nextKnock: Date, interval: TimeInterval)] = [:]
+    
+    /// Current advertisement retry delay (guarded by `lock`).
+    /// Doubles per consecutive registration failure, reset on success.
+    private var advertiseRetryInterval: TimeInterval = MDNSDiscoveryProvider.advertiseRetryDelay
     
     /// Delegate for discovery events.
     public weak var delegate: MDNSDiscoveryProviderDelegate?
@@ -297,13 +308,28 @@ extension MDNSDiscoveryProvider: MDNSAdvertisementServiceDelegate {
     func mdnsAdvertisementService(_ service: MDNSAdvertisementService, didRegisterWithName name: String, domain: String) {
         let resolvedName = name.isEmpty ? self.config.hostDeviceId : name
         let resolvedDomain = domain.isEmpty ? type(of: self).serviceDomain : domain
+        lock.lock()
+        advertiseRetryInterval = type(of: self).advertiseRetryDelay
+        lock.unlock()
         Logger.network.info("mDNS registration confirmed: \(resolvedName, privacy: .public).\(resolvedDomain, privacy: .public)")
     }
     
     func mdnsAdvertisementService(_ service: MDNSAdvertisementService, didFailWithErrorCode errorCode: Int32) {
-        Logger.network.error("mDNS registration failed: \(errorCode, privacy: .public)")
-        if isRunning {
-            advertisementService.stop()
+        guard isRunning else {
+            Logger.network.error("mDNS registration failed: \(errorCode, privacy: .public)")
+            return
+        }
+        
+        lock.lock()
+        let delay = advertiseRetryInterval
+        advertiseRetryInterval = min(advertiseRetryInterval * 2, type(of: self).advertiseRetryMaxDelay)
+        lock.unlock()
+        
+        Logger.network.error("mDNS registration failed: \(errorCode, privacy: .public) — retrying in \(Int(delay), privacy: .public)s")
+        advertisementService.stop()
+        browserQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self = self, self.isRunning else { return }
+            self.startAdvertising()
         }
     }
 }
