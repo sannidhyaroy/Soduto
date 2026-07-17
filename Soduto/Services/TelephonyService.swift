@@ -14,15 +14,17 @@ import AVFoundation
 import CoreAudio
 import MediaPlayer
 
-/// Show notifications for phone call or SMS events. Also allows to send SMS
+/// Show notifications for phone call. Also allows to send SMS via the legacy
+/// compose window (non-v2 devices only)
 ///
 /// This service will display a notification each time a package with type
 /// "kdeconnect.telephony" is received. The type of notification will change
 /// depending on the contents of the field "event" (string).
 ///
 /// Valid contents for "event" are: "ringing", "talking", "missedCall" and "sms".
-/// Note that "talking" is just ignored in this implementation, while the others
-/// will display a system notification.
+/// Note that "sms" is ignored in this implementation, while the others (except
+/// "talking" which drives the ongoing-call HUD instead) will display a system
+/// notification.
 ///
 /// If the incoming package contains a "phoneNumber" string field, the notification
 /// will also display it. Note that "phoneNumber" can be a contact name instead
@@ -206,8 +208,8 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(identifier).appendingPathExtension("jpg")
             do {
                 try jpeg.write(to: tempURL)
-                // Do NOT delete tempURL here — UNNotificationAttachment on macOS stores a
-                // reference to the file rather than copying it eagerly. The OS cleans /tmp.
+                // Do NOT delete `tempURL` here
+                // UNNotificationAttachment on macOS stores a reference to the file rather than copying it eagerly. The OS cleans `/tmp`.
                 return try UNNotificationAttachment(identifier: identifier, url: tempURL)
             } catch {
                 Logger.services.error("Failed to create contact photo attachment: \(error, privacy: .public)")
