@@ -2,11 +2,11 @@
   <img src="Soduto/App Icons/Soduto.png" alt="Soduto Logo" width="200"/>
   <h1 style="font-weight: 700; font-size: 4em; margin: 0; padding-top: 0;">Soduto</h1>
   <div style="margin-bottom: 1em">
-  <a href="https://github.com/sannidhyaroy/soduto/blob/nightly/LICENSE"><img src="https://img.shields.io/github/license/sannidhyaroy/soduto.svg?color=B0BB88&style=flat-square" alt="GNU Licensed"></a>
-  <a href="https://github.com/sannidhyaroy/soduto/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/sannidhyaroy/soduto?color=B0BB88&style=flat-square"></a>
-  <a href="https://github.com/sannidhyaroy/soduto/commits/nightly"><img src="https://img.shields.io/github/last-commit/sannidhyaroy/soduto/nightly?color=B0BB88&style=flat-square" alt="Last Commit"></a>
-  <a href="https://github.com/sannidhyaroy/soduto/releases/latest"><img alt="GitHub Release Date" src="https://img.shields.io/github/release-date/sannidhyaroy/soduto?color=B0BB88&style=flat-square"></a>
-  <a href="https://github.com/sannidhyaroy/soduto/releases"><img alt="GitHub Release Downloads" src="https://img.shields.io/github/downloads/sannidhyaroy/soduto/total?color=B0BB88&style=flat-square"></a>
+  <a href="https://github.com/sannidhyaroy/soduto/blob/nightly/LICENSE"><img alt="GPL Licensed" src="https://img.shields.io/github/license/sannidhyaroy/soduto?style=flat-square&logo=spdx&logoColor=white&color=B0BB88"></a>
+  <a href="https://github.com/sannidhyaroy/soduto/commits/nightly"><img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/sannidhyaroy/soduto?style=flat-square&logo=sourcetree&logoColor=white&color=B0BB88"></a>
+  <a href="https://github.com/sannidhyaroy/soduto/releases/latest"><img alt="GitHub Release Date" src="https://img.shields.io/github/release-date/sannidhyaroy/soduto?style=flat-square&logo=docsdotrs&logoColor=white&color=B0BB88"></a>
+  <a href="https://github.com/sannidhyaroy/soduto/releases"><img alt="GitHub Release Downloads" src="https://img.shields.io/github/downloads/sannidhyaroy/soduto/total?style=flat-square&logo=icloud&logoColor=white&color=B0BB88"></a>
+  <a href="https://discord.gg/CEWxVVNHAe"><img alt="Soduto Labs Discord Server" src="https://img.shields.io/discord/1475760167197868123?style=flat-square&logo=discord&logoColor=white&label=Soduto%20Labs&color=B0BB88"></a>
   </div>
   <p>
   Soduto is a KDE Connect compatible application for macOS. It allows better integration between your phones, desktops and tablets. For more information take a look at <a href="https://www.soduto.com">soduto.com</a>
@@ -450,6 +450,9 @@ For comprehensive information about KDE Connect features, limitations, configura
 
 ---
 ## Get in touch
+
+For real-time chat, testing nightly builds, and shaping where Soduto goes, join [Soduto Labs](https://discord.gg/CEWxVVNHAe).
+
 To ask a question, offer suggestions or share an idea, please use the [discussions tab](https://github.com/sannidhyaroy/soduto/discussions) of this repository.
 
 If you spot any bugs or vulnerabilities, please [create an issue](https://github.com/sannidhyaroy/soduto/issues/). It's always a good idea to make sure there aren't any similar issues open, before creating a new one!
