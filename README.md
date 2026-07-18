@@ -16,7 +16,10 @@
 ---
 ## **Navigation**
 - [Installation](#installation)
-- [Features](#features)
+- [Roadmap](#roadmap)
+  - [Protocol Coverage](#protocol-coverage)
+  - [Quality of Life](#quality-of-life)
+  - [Beyond the Protocol](#beyond-the-protocol)
 - [Building](#building)
 - [Debugging](#debugging)
 - [Verifying Downloads](#verifying-downloads)
@@ -51,75 +54,92 @@ The official build of Soduto can be downloaded from [soduto.com](https://www.sod
 Please note that currently there's no brew cask for Soduto builds of this repository and the only source is the [Releases Page](https://github.com/sannidhyaroy/soduto/releases/latest) of this repository. Installation is a one-time process, and future upgrades are handled in-app using [Sparkle](https://sparkle-project.org/).
 
 ---
-## Features
+## Roadmap
+
+### Protocol Coverage
 
 Soduto implements the following KDE Connect plugin features (compatible with any KDE Connect device):
 
-### Notifications
-- [x] Receive: Mirror remote device notifications on macOS (with automatic OTP copying)
+#### Notifications
+- [x] Receive: Mirror remote device notifications on macOS
 - [ ] Send: Send macOS notifications to remote devices
 
-### Clipboard
+#### Clipboard
 - [x] Receive: Receive clipboard content from remote devices
 - [x] Send: Send macOS clipboard content to remote devices
 
-### File Sharing
+#### File Sharing
 - [x] Receive: Receive shared files, links, and text from remote devices (files are saved in the Downloads folder)
 - [x] Send: Share files, links, and text to remote devices via Share extension, drag and drop to menu bar, or `Send Files` option
 - [x] Browse storage: Access remote device filesystem via SFTP
 
-### Battery Status
+#### Battery Status
 - [x] Receive: View remote device battery level and charging status
 - [x] Send: Send macOS battery status to remote devices
 
-### Media Control (MPRIS)
+#### Media Control (MPRIS)
 - [x] Receive: Control remote device music/video playback from Dashboard or macOS Now Playing Module
 - [x] Send: Control macOS music/video playback from remote devices (experimental due to Apple's Private API)
 
-### System Volume
+#### System Volume
 - [x] Receive: View and Control audio streams on remote device from Mac
 - [x] Send: View and Control audio streams on Mac from remote device
 
-### Telephony
+#### Telephony
 - [x] Receive: View incoming call and SMS notifications from remote devices
 
-### SMS Window
-- [ ] Receive: View SMS of remote devices
+#### SMS Window
+- [x] Receive: View SMS of remote devices
 - [x] Send: Send SMS from macOS
 
-### Remote Input
+#### Remote Input
 - [x] Receive: Use remote device as keyboard and touchpad for macOS
 - [x] Send: Use macOS to control remote device input (experimental)
 
-### Ping
+#### Ping
 - [x] Receive: Receive ping messages from remote devices
 - [x] Send: Send ping messages to remote devices
 
-### Run Commands
+#### Run Commands
 - [x] Receive: Execute macOS commands from remote devices
 - [x] Send: Execute predefined commands on remote devices
 
-### Find My Device
+#### Find My Device
 - [x] Receive: Make macOS play an alarm sound to locate it
 - [x] Send: Make remote device play an alarm sound to locate it
 
-### Connectivity Report
+#### Lock
+- [x] Receive: View remote device lock status, and lock/unlock this Mac remotely (unlock won't succeed if the remote device is Android or macOS, since neither OS exposes an unlock API)
+- [x] Send: Report macOS lock status to remote devices, and lock/unlock the remote device (same unlock caveat applies)
+
+#### Connectivity Report
 - [x] Receive: Monitor remote device network connectivity status
 
-### Presentation Remote
+#### Presentation Remote
 - [x] Receive: Use remote device as presentation remote for macOS
 
-### Contacts
+#### Contacts
 - [x] Receive: Synchronize contacts between macOS and remote devices
 
-### Digitizer
-- [ ] Receive: Use remote device as pressure-sensitive drawing tablets
+#### Digitizer
+- [x] Receive: Use remote device as pressure-sensitive drawing tablets
 
-### System Integration
-- [ ] Screensaver Inhibit: Prevent macOS screensaver when device is connected
-- [ ] Call Pause: Automatically pause macOS media during device calls
+### Quality of Life
 
-For the complete list of KDE Connect features and documentation, visit the [official KDE Connect Wiki](https://userbase.kde.org/KDEConnect).
+- [x] Call Pause: Automatically pause macOS media during device calls
+- [x] Soduto Share: Share files, links, and text to remote devices straight from the native macOS Share Sheet in any app
+- [x] OTP Extraction: One-tap copy action on every notification's extracted OTP, plus automatic clipboard copy for live notifications (skipped during the initial sync catch-up)
+- [ ] Shortcuts App Integration: Expose Soduto actions as native Shortcuts app intents for custom automations
+- [ ] CLI Tool: A companion command-line tool for scripting and headless device actions
+- [ ] Proximity Media: Automatically pause Mac media when you step away from your desk with your phone still on the same network, and resume when you're back
+- [ ] Proximity Lock: Automatically lock your Mac when you step away from your desk with your phone still on the same network
+- [ ] Lock on Disconnect: Lock your Mac automatically if your phone fully disconnects from the network (opt-in, with a warning that it can trigger even while you're still at your desk, e.g. if you turn off your phone's WiFi on purpose)
+- [ ] Native Menubar Widgets: Desktop widgets for at-a-glance device status
+- [ ] Shake to Send: Copy a file (or share it via the Share Extension or menu bar drag) on the Mac, then shake the target phone within a few seconds to send it there instantly, an alternative to picking a device from a list
+
+### Beyond the Protocol (both devices require Soduto sibling clients)
+
+- [x] Webcam (experimental): Stream live video from a remote device's camera to macOS and use it as webcam
 
 ---
 ## Building
