@@ -302,6 +302,7 @@
 		02968CFE204C4B9000FCE5E0 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		02EC48B41F229CCE00C9370F /* Configuration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Configuration.swift; path = Configuration/Configuration.swift; sourceTree = "<group>"; };
 		02EC48B61F229CEE00C9370F /* ServiceConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceConfiguration.swift; sourceTree = "<group>"; };
+		3101548430092D0D002E4BB2 /* Soduto.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Soduto.png; sourceTree = "<group>"; };
 		3105288A2F49274400488ED4 /* MDNSDiscoveryProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDNSDiscoveryProvider.swift; sourceTree = "<group>"; };
 		311683792FB9269A00B1AEF8 /* UpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateManager.swift; sourceTree = "<group>"; };
 		3116837B2FB92CEC00B1AEF8 /* SMSWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMSWindowController.swift; sourceTree = "<group>"; };
@@ -569,6 +570,7 @@
 				319CBA292939F07D00DAE301 /* AirDrop.png */,
 				312E76FD2938A93F00F29BFA /* Messages.png */,
 				319CBA272939662400DAE301 /* Phone.png */,
+				3101548430092D0D002E4BB2 /* Soduto.png */,
 			);
 			path = "App Icons";
 			sourceTree = "<group>";

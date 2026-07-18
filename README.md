@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="Soduto/Assets.xcassets/AppIcon.appiconset/1024.png" alt="Soduto Logo" width="200"/>
+  <img src="Soduto/App Icons/Soduto.png" alt="Soduto Logo" width="200"/>
   <h1 style="font-weight: 700; font-size: 4em; margin: 0; padding-top: 0;">Soduto</h1>
   <div style="margin-bottom: 1em">
   <a href="https://github.com/sannidhyaroy/soduto/blob/nightly/LICENSE"><img src="https://img.shields.io/github/license/sannidhyaroy/soduto.svg?color=B0BB88&style=flat-square" alt="GNU Licensed"></a>
