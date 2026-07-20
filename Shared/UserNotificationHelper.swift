@@ -9,7 +9,7 @@
 import UserNotifications
 
 public enum UserNotificationHelper {
-    public static func show(title: String, subtitle: String? = nil, body: String, sound: Bool, id: String, urgency: UNMutableNotificationContent.NotificationUrgency = .active) {
+    public static func show(title: String, subtitle: String? = nil, body: String, sound: Bool, id: String, urgency: UNMutableNotificationContent.NotificationUrgency = .active, threadIdentifier: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = title
         if let subtitle {
@@ -18,6 +18,9 @@ public enum UserNotificationHelper {
         content.body = body
         content.sound = sound ? .default : nil
         content.setUrgency(urgency)
+        if let threadIdentifier {
+            content.threadIdentifier = threadIdentifier
+        }
         
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
         

@@ -1268,6 +1268,41 @@ This packet is a notification.
     "type": "kdeconnect.notification",
     "body": {
         "id": "notification-id",
+        "title": "Dr. Konqi",
+        "text": "I want to tell you that KDE Connect is awesome",
+        "ticker": "Dr. Konqi: I want to tell you that KDE Connect is awesome",
+        "groupName": "KDE Connect",
+        "appName": "Signal",
+        "isClearable": true,
+        "silent": true,
+        "requestReplyId": "17499937-334b-4704-9c2c-24a0bcd4155a",
+        "time": "1631436143331",
+        "actions": [
+            "Mute",
+            "Mark as read",
+            "Reply"
+        ],
+        "payloadHash": "d97f60d052bf11d1e88821e04fff0007",
+        "conversation": [
+            {
+                "sender": "Dr. Konqi",
+                "content": "Hi, I'm Dr. Konqi from KDE"
+            },
+            {
+                "sender": "Dr. Konqi",
+                "content": "I want to tell you that KDE Connect is awesome"
+            }
+        ]
+    }
+}
+```
+
+```js
+{
+    "id": 0,
+    "type": "kdeconnect.notification",
+    "body": {
+        "id": "notification-id",
         "isCancel": true
     }
 }
@@ -1313,9 +1348,29 @@ This packet is a notification.
 
     The notification body.
 
+* `groupName`: [**`String`**](#string)
+
+    The group name if the notification is a conversation message coming from a group.
+
 * `payloadHash`: [**`String`**](#string)
 
     An MD5 hash of the notification icon. If the packet contains this field, it will be accompanied by payload transfer information.
+
+* `conversation`: [**`Array`**](#array) of **`Message`**
+
+    A list of messages in the notification if it's a conversation.
+
+    * **`Message`** ([**`Object`**](#object))
+
+        A message sent in the conversation.
+
+        * `sender`: [**`String`**](#string) [🔒](#symbols)
+
+            The name of the person who sent the message.
+
+        * `content`: [**`String`**](#string) [🔒](#symbols)
+
+            The content of the message.
 
 * `actions`: [**`Array`**](#array) of [**`String`**](#string)
 

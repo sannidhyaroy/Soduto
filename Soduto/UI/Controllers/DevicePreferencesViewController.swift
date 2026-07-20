@@ -8,9 +8,6 @@
 
 import Foundation
 import Cocoa
-import Sparkle
-
-let updater = AppDelegate.shared().updaterController.updater
 
 class DevicePreferencesViewController: NSViewController {
     
@@ -47,7 +44,7 @@ class DevicePreferencesViewController: NSViewController {
             label.addAttributes([
                 NSAttributedString.Key.foregroundColor: NSColor.disabledControlTextColor,
                 NSAttributedString.Key.font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-                ], range: NSMakeRange(0, label.length))
+            ], range: NSMakeRange(0, label.length))
             label.append(NSAttributedString(string: "\n\(hostName)"))
             label.setAlignment(.center, range: NSMakeRange(0, label.length))
             self.hostNameLabel.attributedStringValue = label
@@ -83,7 +80,7 @@ class DevicePreferencesViewController: NSViewController {
             self.deviceTypeButton.selectItem(withTag: AppDefaultsStore.Preferences.deviceType)
         }
         if self.automaticCheckForUpdates != nil {
-            self.automaticCheckForUpdates.state = updater.automaticallyChecksForUpdates ? NSButton.StateValue.on : NSButton.StateValue.off
+            self.automaticCheckForUpdates.state = AppDelegate.shared().updateManager.automaticallyChecksForUpdates ? .on : .off
         }
     }
     
@@ -98,10 +95,8 @@ class DevicePreferencesViewController: NSViewController {
         }
     }
     
-    @IBAction func autoCheckForUpdates (_ sender: Any?) {
-        let checkBoxState = automaticCheckForUpdates.state
-        let state: Bool = (checkBoxState == .on) ? true : false
-        updater.automaticallyChecksForUpdates = state
+    @IBAction func autoCheckForUpdates(_ sender: Any?) {
+        AppDelegate.shared().updateManager.automaticallyChecksForUpdates = (automaticCheckForUpdates.state == .on)
     }
     
     @IBAction func openRunCommandsWindow(_ sender: Any?) {
@@ -110,8 +105,11 @@ class DevicePreferencesViewController: NSViewController {
             runCommandsWindowController?.delegate = self
         }
         
-        runCommandsWindowController?.showWindow(sender)
-        NSApp.activate(ignoringOtherApps: true)
+        if let parentWindow = view.window {
+            runCommandsWindowController?.presentAsSheet(in: parentWindow)
+        } else {
+            runCommandsWindowController?.showWindow(sender)
+        }
     }
 }
 
@@ -119,10 +117,14 @@ class DevicePreferencesViewController: NSViewController {
 
 extension DevicePreferencesViewController: RunCommandsWindowControllerDelegate {
     func getLocalCommands() -> [RunCommandService.Command]? {
-        return AppDelegate.shared().config.runCommands
+        return runCommandService?.localCommands
     }
     
     func saveLocalCommands(_ commands: [RunCommandService.Command]) {
-        AppDelegate.shared().config.runCommands = commands
+        runCommandService?.localCommands = commands
+    }
+    
+    private var runCommandService: RunCommandService? {
+        return AppDelegate.shared().serviceManager.service(ofType: RunCommandService.self)
     }
 }

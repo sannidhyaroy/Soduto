@@ -51,13 +51,16 @@ fileprivate extension DataPacket {
 /// field, that will be displayed in the notification body.
 public class PingService: Service {
     
-    let un = UNUserNotificationCenter.current()
-    
     // MARK: Types
     
     enum ActionId: ServiceAction.Id {
         case send
     }
+    
+    
+    // MARK: Properties
+    
+    let un = UNUserNotificationCenter.current()
     
     
     // MARK: Service properties
@@ -91,7 +94,7 @@ public class PingService: Service {
         ]
     }
     
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
         guard let actionId = ActionId(rawValue: id) else { return }
         guard device.pairingStatus == .Paired else { return }
         
@@ -113,6 +116,7 @@ public class PingService: Service {
         notification.title = device.name
         notification.body = (try? dataPacket.getMessage()) ?? "Device was pinged for testing connection status!"
         notification.sound = .default
+        notification.threadIdentifier = "ping"
         notification.setUrgency(.active)
         
         let id = "\(self.id).\(device.id)"

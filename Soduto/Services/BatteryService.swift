@@ -19,19 +19,17 @@ import UserNotifications
 /// - currentCharge (int): The charge % of the peer device
 /// - thresholdEvent (int) [optional when = 0, see below]:
 /// means that a battery threshold event were fired on the remote device:
-///     - 0: no event. generally not transmitted.
+///     - 0: no event. generally not transmitted
 ///     - 1: battery entered in low state
 ///
 /// It also sends packages with type kdeconnect.battery and a field "request": true,
 /// to ask the peer device to send a package like the mentioned above, and should
-/// also answer this same kind of packages with its own information.
+/// also answer this same kind of packages with its own information
 ///
-/// If the battery is low and discharging, it will notify the user.
-public class BatteryService: Service {
+/// If the battery is low and discharging, it will notify the user
+public class BatteryService: BidirectionalService, ObservableObject {
     
     // MARK: Types
-    
-    let un = UNUserNotificationCenter.current()
     
     public struct BatteryStatus {
         var currentCharge: Int
@@ -46,7 +44,13 @@ public class BatteryService: Service {
     
     // MARK: Properties
     
-    public private(set) var statuses: [Device.Id:BatteryStatus] = [:]
+    let un = UNUserNotificationCenter.current()
+    
+    @Published public private(set) var statuses: [Device.Id:BatteryStatus] = [:]
+    
+    var userDefaults: UserDefaults = .standard
+    let incomingPreferenceKey = AppDefaultsStore.Preferences.Services.Battery.incomingKey
+    let outgoingPreferenceKey = AppDefaultsStore.Preferences.Services.Battery.outgoingKey
     
     private var devices: [Device] = []
     private var runLoopSource: CFRunLoopSource?
@@ -66,33 +70,53 @@ public class BatteryService: Service {
     
     public static let serviceId: Service.Id = "com.soduto.services.battery"
     
-    public let incomingCapabilities = Set<Service.Capability>([ DataPacket.batteryPacketType, DataPacket.batteryRequestPacketType ])
-    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.batteryPacketType, DataPacket.batteryRequestPacketType ])
+    public var incomingCapabilities: Set<Service.Capability> {
+        // incomingEnabled: we accept battery status packets from the device
+        // outgoingEnabled: we handle battery request packets from the device (so we can respond)
+        var caps = Set<Service.Capability>()
+        if incomingEnabled { caps.insert(DataPacket.batteryPacketType) }
+        if outgoingEnabled    { caps.insert(DataPacket.batteryRequestPacketType) }
+        return caps
+    }
+    public var outgoingCapabilities: Set<Service.Capability> {
+        // incomingEnabled: we send battery request packets to ask the device for its status
+        // outgoingEnabled: we send battery status packets to the device
+        var caps = Set<Service.Capability>()
+        if incomingEnabled { caps.insert(DataPacket.batteryRequestPacketType) }
+        if outgoingEnabled    { caps.insert(DataPacket.batteryPacketType) }
+        return caps
+    }
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        guard dataPacket.isBatteryPacket || dataPacket.isBatteryRequestPacket else { return false }
-        
         do {
-            if dataPacket.isBatteryRequestPacket {
-                try handle(requestPacket: dataPacket, fromDevice: device)
-            } else {
+            switch dataPacket.type {
+            case DataPacket.batteryPacketType:
+                // Receiving remote device battery status
+                guard incomingEnabled else { return true }
                 try handle(statusPacket: dataPacket, fromDevice: device)
+            case DataPacket.batteryRequestPacketType:
+                // Remote device requesting us to send our battery status
+                guard outgoingEnabled else { return true }
+                try handle(requestPacket: dataPacket, fromDevice: device)
+            default:
+                return false
             }
         } catch {
             Logger.services.error("Error handling battery packet: \(error, privacy: .public)")
         }
-        
         return true
     }
     
     public func setup(for device: Device) {
         guard !self.devices.contains(where: { $0.id == device.id }) else { return }
         
+        // Ask the device for its battery status if we want to receive it
         if device.incomingCapabilities.contains(DataPacket.batteryRequestPacketType) {
-            device.send(DataPacket.batteryRequestPacket())
+            request(DataPacket.batteryRequestPacket(), from: device)
         }
         
-        if device.incomingCapabilities.contains(DataPacket.batteryPacketType) {
+        // Start monitoring Mac battery if we're willing to share it with this device
+        if outgoingEnabled && device.incomingCapabilities.contains(DataPacket.batteryPacketType) {
             self.devices.append(device)
             if self.runLoopSource == nil {
                 self.startMonitoringBatteryState()
@@ -116,7 +140,7 @@ public class BatteryService: Service {
         return []
     }
     
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
         // No supported actions
     }
     
@@ -160,7 +184,7 @@ public class BatteryService: Service {
         let subtitle = NSLocalizedString("Low Battery", comment: "notification title")
         let info = NSString(format: NSLocalizedString("%d%% of battery remaining", comment: "notification info") as NSString, status.currentCharge)
         
-        UserNotificationHelper.show(title: title, subtitle: subtitle, body: info as String, sound: true, id: self.notificationId(for: device), urgency: .active)
+        UserNotificationHelper.show(title: title, subtitle: subtitle, body: info as String, sound: true, id: self.notificationId(for: device), urgency: .active, threadIdentifier: "battery")
     }
     
     private func hideNotification(for device: Device) {
@@ -207,7 +231,7 @@ public class BatteryService: Service {
         let chargeDropedBelowThreshold = chargeDropped && batteryStatus.currentCharge <= self.thresholdValue
         let thresholdEvent: DataPacket.ThresholdEvent = batteryStatus.isCritical || (chargeDropedBelowThreshold && !batteryStatus.isCharging) ? .batteryLow : .none
         let packet = DataPacket.batteryPacket(currentCharge: batteryStatus.currentCharge, isCharging: batteryStatus.isCharging, thresholdEvent: thresholdEvent)
-        device.send(packet)
+        send(packet, to: device)
     }
     
     private func startMonitoringBatteryState() {
@@ -244,6 +268,53 @@ func PowerSourceChanged(context: UnsafeMutableRawPointer?) {
     let opaque = Unmanaged<BatteryService>.fromOpaque(context!)
     let _self = opaque.takeUnretainedValue()
     _self.powerSourceChanged()
+}
+
+
+// MARK: - StatusBarImageProvider
+
+extension BatteryService: StatusBarImageProvider {
+    
+    public var statusBarImageSortOrder: Int { 1 }
+    
+    public func statusBarImage(for device: Device) -> NSImage? {
+        guard let status = statuses[device.id] else { return nil }
+        
+        let imageHeight: CGFloat = 13
+        let batteryWidth: CGFloat = 54  // icon (~26px) + percentage text (~28px)
+        
+        let image = NSImage(size: CGSize(width: batteryWidth, height: imageHeight), flipped: false) { _ in
+            // Map charge % to the nearest symbol tier (0, 10, 25, 50, 75, 100).
+            // Breakpoints are at midpoints between adjacent tiers.
+            let tier: Int
+            switch status.currentCharge {
+            case 0...5:   tier = 0
+            case 6...17:  tier = 10
+            case 18...37: tier = 25
+            case 38...62: tier = 50
+            case 63...87: tier = 75
+            default:      tier = 100
+            }
+            
+            let config = NSImage.SymbolConfiguration.preferringMulticolor()
+            let symbolName = status.isCharging ? "battery.\(tier)percent.bolt" : "battery.\(tier)percent"
+            if let symbol = NSImage(symbolName: symbolName, variableValue: 1)?.withSymbolConfiguration(config) {
+                symbol.draw(in: NSRect(x: 0, y: (imageHeight - symbol.size.height) / 2,
+                                       width: symbol.size.width, height: symbol.size.height))
+            }
+            
+            let percentage = "\(status.currentCharge)%" as NSString
+            let attr: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 10),
+                .foregroundColor: NSColor.labelColor
+            ]
+            percentage.draw(in: NSRect(x: 26, y: 2, width: 28, height: 10), withAttributes: attr)
+            
+            return true
+        }
+        
+        return image
+    }
 }
 
 

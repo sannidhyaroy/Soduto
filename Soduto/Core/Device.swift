@@ -16,7 +16,7 @@ import os
 /// - Laptop: Device is laptop computer.
 /// - Phone: Device is a mobile phone.
 /// - Tablet: Device is a tablet.
-public enum DeviceType: String {
+public enum DeviceType: String, Sendable {
     case Unknown = "unknown"
     case Desktop = "desktop"
     case Laptop = "laptop"
@@ -74,6 +74,21 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
     public let outgoingCapabilities: Set<Service.Capability>
     public let config: DeviceConfiguration
     
+    /// Identity protocol extension fields (absent on standard KDE Connect clients).
+    public private(set) var clientName: String?
+    public private(set) var clientVersion: String?
+    public let platformName: String?
+    public private(set) var platformVersion: String?
+    
+    /// True only when the peer explicitly identifies as in our own clien family.
+    public var isSiblingClient: Bool { clientName == Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String }
+    
+    /// True when the peer is the sibling client running specifically on Android.
+    public var isAndroidCompanion: Bool { isSiblingClient && platformName == "Android" }
+    
+    /// True when the peer is the same client running specifically on macOS.
+    public var isMacOSCompanion: Bool { isSiblingClient && platformName == "macOS" }
+    
     public var peerCertificate: SecCertificate? {
         if let certificate = self.connections.first?.peerCertificate { return certificate }
         return self.config.certificate
@@ -130,6 +145,10 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         self.type = DeviceType(rawValue: try identity.getDeviceType()) ?? DeviceType.Unknown
         self.incomingCapabilities = try identity.getIncomingCapabilities()
         self.outgoingCapabilities = try identity.getOutgoingCapabilities()
+        self.clientName = identity.getClientName()
+        self.clientVersion = identity.getClientVersion()
+        self.platformName = identity.getPlatformName()
+        self.platformVersion = identity.getPlatformVersion()
         self.config = config
         self.pairingStatus = self.config.isPaired ? .Paired : .Unpaired
         
@@ -151,6 +170,10 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         self.type = config.type
         self.incomingCapabilities = Set<Service.Capability>()
         self.outgoingCapabilities = Set<Service.Capability>()
+        self.clientName = nil
+        self.clientVersion = nil
+        self.platformName = nil
+        self.platformVersion = nil
         self.config = config
         self.pairingStatus = self.config.isPaired ? .Paired : .Unpaired
     }
@@ -169,6 +192,13 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
     public func addConnection(_ connection: Connection) {
         connection.delegate = self
         connection.pairingDelegate = self
+        // Refresh identity extension fields unconditionally so they always reflect the
+        // peer's current build (e.g. after updating the peer app).
+        if let identity = connection.identity {
+            self.clientName    = identity.getClientName()
+            self.clientVersion = identity.getClientVersion()
+            self.platformVersion = identity.getPlatformVersion()
+        }
         self.connections.append(connection)
         
         // remove connection of the same type if present
@@ -230,6 +260,12 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
         }
     }
     
+    /// Cancels the upload for a specific packet ID across all active and lingering connections.
+    /// No-op if the packet ID is not found or the task has already finished.
+    public func cancelUpload(forPacketId packetId: Int64) {
+        (connections + lingeringConnections).forEach { $0.cancelUpload(forPacketId: packetId) }
+    }
+    
     /// Cleanup all pending to send packets, executing their completion handlers if any.
     public func discardPendingPackets() {
         for pendingPacket in self.pendingPackets {
@@ -263,6 +299,15 @@ public class Device: ConnectionDelegate, ConnectionPairingDelegate, Pairable, Cu
             }
         default:
             assertionFailure("Unexpected connection state switch: \(connection) -> \(state)")
+        }
+    }
+    
+    /// Forward upload progress events to services that explicitly opt-in by conforming to `ConnectionDelegate`.
+    public func connection(_ connection: Connection, uploadPayloadProgress bytesSent: Int64, totalBytes: Int64?, forPacket packet: DataPacket) {
+        for handler in packetHandlers {
+            if let delegate = handler as? ConnectionDelegate {
+                delegate.connection(connection, uploadPayloadProgress: bytesSent, totalBytes: totalBytes, forPacket: packet)
+            }
         }
     }
     

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="21507" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24506" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="21507"/>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24506"/>
     </dependencies>
     <objects>
         <customObject id="-2" userLabel="File's Owner" customClass="NSApplication">
@@ -21,6 +22,7 @@
         <customObject id="vQj-dd-GoX" userLabel="Status Bar Menu Controller" customClass="StatusBarMenuController" customModule="Soduto" customModuleProvider="target">
             <connections>
                 <outlet property="availableDevicesItem" destination="NHO-Gf-5Mq" id="4VO-UZ-TwJ"/>
+                <outlet property="dashboardMenuItem" destination="aDl-yH-XuU" id="cJh-WK-r8w"/>
                 <outlet property="launchOnLoginItem" destination="tU8-jY-Cw3" id="v4B-wm-ctZ"/>
                 <outlet property="statusBarMenu" destination="LIO-WS-395" id="8BX-ha-3Ci"/>
             </connections>
@@ -38,13 +40,19 @@
                 </menuItem>
                 <menuItem isSeparatorItem="YES" id="Zv9-hp-heD"/>
                 <menuItem title="Check for Updates" keyEquivalent="u" id="zow-ql-WNV"/>
-                <menuItem title="Preferences" keyEquivalent="," id="NNU-ep-Fgn" userLabel="Open Soduto Preferences">
+                <menuItem title="Dashboard" keyEquivalent="d" id="aDl-yH-XuU">
+                    <connections>
+                        <action selector="openDashboard:" target="vQj-dd-GoX" id="rR2-vZ-ooO"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Preferences" keyEquivalent="," id="NNU-ep-Fgn">
                     <connections>
                         <action selector="openPreferences:" target="vQj-dd-GoX" id="rrW-aH-Gim"/>
                     </connections>
                 </menuItem>
                 <menuItem isSeparatorItem="YES" id="NAb-Li-52a"/>
                 <menuItem title="About" id="sNE-CC-2Jm">
+                    <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="showAboutWindow:" target="vQj-dd-GoX" id="Z8y-Zi-KJK"/>
                     </connections>

@@ -39,18 +39,8 @@ public class DeviceMenu: NSMenu {
         
         for groupActions in actionsByGroup {
             for action in groupActions.value {
-                // Special handling for Run Command action - replace with submenu
-                if let runCommandService = action.service as? RunCommandService,
-                   runCommandService.actions(for: device).contains(where: { $0.id == RunCommandService.ActionId.runCommand.rawValue }) {
-                    // Create menu item with submenu
-                    let item = NSMenuItem(title: action.title, action: nil, keyEquivalent: "")
-                    item.submenu = runCommandService.createRunCommandMenu(for: device)
-                    self.addItem(item)
-                } else {
-                    // Normal handling for other actions
-                    let item = ServiceActionMenuItem(serviceAction: action)
-                    self.addItem(item)
-                }
+                let item = ServiceActionMenuItem(serviceAction: action)
+                self.addItem(item)
             }
             self.addItem(NSMenuItem.separator())
         }

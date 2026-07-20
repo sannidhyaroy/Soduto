@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="Soduto/Assets.xcassets/AppIcon.appiconset/1024.png" alt="Soduto Logo" width="200"/>
+  <img src="Soduto/App Icons/Soduto.png" alt="Soduto Logo" width="200"/>
   <h1 style="font-weight: 700; font-size: 4em; margin: 0; padding-top: 0;">Soduto</h1>
   <div style="margin-bottom: 1em">
   <a href="https://github.com/sannidhyaroy/soduto/blob/nightly/LICENSE"><img src="https://img.shields.io/github/license/sannidhyaroy/soduto.svg?color=B0BB88&style=flat-square" alt="GNU Licensed"></a>
@@ -57,62 +57,68 @@ Please note that currently there's no brew cask for Soduto builds of this reposi
 Soduto implements the following KDE Connect plugin features (compatible with any KDE Connect device):
 
 ### Notifications
-- [x] Receive — Mirror remote device notifications on macOS (with automatic OTP copying)
-- [ ] Send — Send macOS notifications to remote devices
+- [x] Receive: Mirror remote device notifications on macOS (with automatic OTP copying)
+- [ ] Send: Send macOS notifications to remote devices
 
 ### Clipboard
-- [x] Receive — Receive clipboard content from remote devices
-- [x] Send — Send macOS clipboard content to remote devices
+- [x] Receive: Receive clipboard content from remote devices
+- [x] Send: Send macOS clipboard content to remote devices
 
 ### File Sharing
-- [x] Receive — Receive shared files, links, and text from remote devices (files are saved in the Downloads folder)
-- [x] Send — Share files, links, and text to remote devices via Share extension, drag and drop to menu bar, or `Send Files` option
-- [x] Browse storage — Access remote device filesystem via SFTP
+- [x] Receive: Receive shared files, links, and text from remote devices (files are saved in the Downloads folder)
+- [x] Send: Share files, links, and text to remote devices via Share extension, drag and drop to menu bar, or `Send Files` option
+- [x] Browse storage: Access remote device filesystem via SFTP
 
 ### Battery Status
-- [x] Receive — View remote device battery level and charging status
-- [x] Send — Send macOS battery status to remote devices
+- [x] Receive: View remote device battery level and charging status
+- [x] Send: Send macOS battery status to remote devices
 
 ### Media Control (MPRIS)
-- [x] Receive — Control remote device music/video playback from macOS Control Center and Now Playing Module (experimental)
-- [ ] Send — Control macOS music/video playback from remote devices
+- [x] Receive: Control remote device music/video playback from Dashboard or macOS Now Playing Module
+- [x] Send: Control macOS music/video playback from remote devices (experimental due to Apple's Private API)
+
+### System Volume
+- [x] Receive: View and Control audio streams on remote device from Mac
+- [x] Send: View and Control audio streams on Mac from remote device
 
 ### Telephony
-- [x] Receive — View incoming call and SMS notifications from remote devices
+- [x] Receive: View incoming call and SMS notifications from remote devices
 
 ### SMS Window
-- [ ] Receive — View SMS of remote devices
-- [x] Send — Send SMS from macOS
+- [ ] Receive: View SMS of remote devices
+- [x] Send: Send SMS from macOS
 
 ### Remote Input
-- [x] Receive — Use remote device as keyboard and touchpad for macOS
-- [x] Send — Use macOS to control remote device input (experimental)
+- [x] Receive: Use remote device as keyboard and touchpad for macOS
+- [x] Send: Use macOS to control remote device input (experimental)
 
 ### Ping
-- [x] Receive — Receive ping messages from remote devices
-- [x] Send — Send ping messages to remote devices
+- [x] Receive: Receive ping messages from remote devices
+- [x] Send: Send ping messages to remote devices
 
 ### Run Commands
-- [x] Receive — Execute macOS commands from remote devices
-- [ ] Send — Execute predefined commands on remote devices
+- [x] Receive: Execute macOS commands from remote devices
+- [x] Send: Execute predefined commands on remote devices
 
 ### Find My Device
-- [x] Receive — Make macOS play an alarm sound to locate it
-- [x] Send — Make remote device play an alarm sound to locate it
+- [x] Receive: Make macOS play an alarm sound to locate it
+- [x] Send: Make remote device play an alarm sound to locate it
 
 ### Connectivity Report
-- [x] Receive — Monitor remote device network connectivity status
+- [x] Receive: Monitor remote device network connectivity status
 
 ### Presentation Remote
-- [x] Receive — Use remote device as presentation remote for macOS
-- [ ] Send — Use macOS as presentation remote for remote device
+- [x] Receive: Use remote device as presentation remote for macOS
 
 ### Contacts
-- [x] Receive — Synchronize contacts between macOS and remote devices
+- [x] Receive: Synchronize contacts between macOS and remote devices
+
+### Digitizer
+- [ ] Receive: Use remote device as pressure-sensitive drawing tablets
 
 ### System Integration
-- [ ] Screensaver Inhibit — Prevent macOS screensaver when device is connected
-- [ ] Call Pause — Automatically pause macOS media during device calls
+- [ ] Screensaver Inhibit: Prevent macOS screensaver when device is connected
+- [ ] Call Pause: Automatically pause macOS media during device calls
 
 For the complete list of KDE Connect features and documentation, visit the [official KDE Connect Wiki](https://userbase.kde.org/KDEConnect).
 
@@ -133,11 +139,31 @@ For the complete list of KDE Connect features and documentation, visit the [offi
 
   </details>
 
-- Open project `Soduto.xcodeproj` with Xcode (select the Soduto Project menu in Xcode Project Navigator).
-  - Swift Package dependencies (`swift-certificates`, `SwiftNIO`, `NIOSSL`, `NIOSSH`, `Citadel`, `Sparkle`, etc.) will resolve automatically on first build.
-- Select `Soduto` as Target. Go to `Signing & Capabilities` and under the `Signing` section, ensure your appropriate `Team` is selected.
-- Make sure you have the same `App Group key` for `Soduto Share` and also verify that the same `Team` is selected for each target.
-- Build target `Soduto`
+> [!NOTE]
+> Make sure you are signed in to Xcode with your Apple ID first (`Xcode → Settings → Apple Accounts`). This works for both free and paid Apple Developer accounts.
+
+- Set up your local build configuration:
+
+  - Create the local build configuration file from the template:
+
+    ```bash
+    cp -v LocalConfig.xcconfig.example LocalConfig.xcconfig
+    ```
+
+  - Open `LocalConfig.xcconfig` and fill in your `DEVELOPMENT_TEAM`. This is your Apple Developer Team ID, a 10-character alphanumeric string tied to your Apple ID. You can find it by running:
+
+    ```bash
+    security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject | grep -o 'OU=[A-Z0-9]*' | sed 's/OU=//'
+    ```
+
+- Open the `.xcodeproj` in Xcode.
+
+  - Swift Package dependencies (`swift-certificates`, `SwiftNIO`, `NIOSSL`, `NIOSSH`, `Citadel`, `Sparkle`, etc.) resolve automatically on first build.
+
+- Build target `Soduto` (`Cmd+B`).
+
+> [!IMPORTANT]
+> **Do not** set the Team in Signing & Capabilities, that would write your Team ID into `project.pbxproj`, dirtying the project file with personal development team identifiers. The `LocalConfig.xcconfig` approach keeps `project.pbxproj` clean for everyone.
 
 ---
 ## Debugging
@@ -277,13 +303,13 @@ You can use the fingerprint above to manually verify that you have obtained the 
 ## Limitations
 
 #### Clipboard Sync (Android 10+)
-Google introduced privacy restrictions on Android 10 and higher that prevent apps from accessing clipboard data unless the app is the default input method editor (IME) or is currently in focus. This affects seamless clipboard sync between KDE Connect and Soduto. Your clipboard will automatically sync to your other devices when you copy something on your mac, however you will have to manually tap on `Send Clipboard` in the KDE Connect app every time you want to sync your Android's clipboard to your mac.
+Google introduced privacy restrictions on Android 10 and higher that prevent apps from accessing clipboard data unless the app is the default input method editor (IME) or is currently in focus. This affects seamless clipboard sync between KDE Connect and Soduto. Your clipboard will automatically sync to your other devices when you copy something on your mac, however you will have to manually tap on `Send Clipboard` in the KDE Connect app every time you want to sync your Android's clipboard to your mac ([see the workaround](#clipboard-sync-android-10-1)).
 
 #### Storage Access (Android 11+)
-On Android 11 and higher, you may not be able to add the root location of your Internal Storage or your Download folder to KDE Connect's `Filesystem expose` locations due to Google's privacy changes.
+On Android 11 and higher, you may not be able to add the root location of your Internal Storage or your Download folder to KDE Connect's `Filesystem expose` locations due to Google's privacy changes ([see the workaround](#storage-access-android-11-1)).
 
 #### Sensitive Notification Content (Android 15+)
-On Android 15 and higher, the system hides sensitive notification content (such as passwords, OTPs, and other sensitive information) from applications by default. This means Soduto will display "Sensitive notification content hidden" instead of the actual content. This restriction also affects automatic OTP copying in Soduto. KDE Connect will not receive sensitive notifications unless you explicitly grant the `RECEIVE_SENSITIVE_NOTIFICATIONS` permission (see workarounds below).
+On Android 15 and higher, the system hides sensitive notification content (such as passwords, OTPs, and other sensitive information) from applications by default. This means Soduto will display "Sensitive notification content hidden" instead of the actual content. This restriction also affects automatic OTP copying in Soduto. KDE Connect will not receive sensitive notifications unless you explicitly grant the `RECEIVE_SENSITIVE_NOTIFICATIONS` permission ([see the workaround](#sensitive-notification-content-android-15-1)).
 
 ---
 ## Workarounds
@@ -297,16 +323,16 @@ If you have `Riru` or `Zygisk`, you can bypass the clipboard restriction on Andr
 #### Sensitive Notification Content (Android 15+)
 The recommended approach is to grant KDE Connect the `RECEIVE_SENSITIVE_NOTIFICATIONS` permission using ADB (Android Debug Bridge). This will allow sensitive notifications to be delivered normally and enable automatic OTP copying.
 
-- **Set up ADB** — Follow the [official Android ADB setup guide](https://developer.android.com/tools/adb).
+- **Set up ADB**: Follow the [official Android ADB setup guide](https://developer.android.com/tools/adb).
 
-- **Connect your device** — Connect your phone via USB or wireless ADB.
+- **Connect your device**: Connect your phone via USB or wireless ADB.
 
-- **Grant the permission** — Run this command:
+- **Grant the permission**: Run the following command
   ```bash
   adb shell cmd appops set --user 0 org.kde.kdeconnect_tp RECEIVE_SENSITIVE_NOTIFICATIONS allow
   ```
 
-- **If permission monitoring error occurs** — If you see this error, follow these steps:
+- **If permission monitoring error occurs**: If you see this error, follow these steps:
   ```
   java.lang.SecurityException: uid 2000 does not have android.permission.MANAGE_APP_OPS_MODES
   ```
@@ -314,7 +340,7 @@ The recommended approach is to grant KDE Connect the `RECEIVE_SENSITIVE_NOTIFICA
    - Reboot your phone
    - Run the ADB command again
 
-- **Reboot** — Reboot your phone for the changes to take effect.
+- **Reboot**: Reboot your phone for the changes to take effect.
 
 After completing these steps, sensitive notifications (including OTPs) will be delivered to Soduto, and automatic OTP copying will work as expected.
 

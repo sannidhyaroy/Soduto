@@ -25,14 +25,20 @@ import UserNotifications
 /// The received packages will contain the following fields:
 ///
 /// "id" (string): A unique notification id.
-/// "appName" (string): The app that generated the notification
-/// "ticker" (string): The title or headline of the notification.
+/// "appName" (string): The app that generated the notification.
+/// "ticker" (string): Brief summary of the notification.
+/// "title" (string, optional): Notification title (e.g., sender name in messaging apps).
+/// "text" (string, optional): Full notification body text.
 /// "isClearable" (boolean): True if we can request to dismiss the notification.
 /// "isCancel" (boolean): True if the notification was dismissed in the peer device.
-/// "requestAnswer" (boolean): True if this is an answer to a "request" package.
+/// "silent" (boolean): True if the notification is pre-existing (not fresh).
+/// "actions" (string[], optional): Available action buttons.
+/// "requestReplyId" (string, optional): UUID for repliable notifications (e.g., chat replies).
+/// "payloadHash" (string, optional): MD5 hash of the notification icon (requires payload download).
+/// "groupName" (string, optional): Group name for group conversation messages.
+/// "conversation" ([{sender, content}], optional): Message history for messaging-style notifications.
 ///
-/// Additionally the package can contain a payload with the icon of the notification
-/// in PNG format.
+/// Additionally the package can contain a payload with the icon of the notification in PNG format.
 ///
 /// The content of these fields is used to display the notifications to the user.
 /// Note that if we receive a second notification with the same "id", we should
@@ -48,15 +54,6 @@ import UserNotifications
 /// Due to KDE Connect protocol limitations, some remote notifications may not be mirrored.
 public class NotificationsService: Service, DownloadTaskDelegate, UserNotificationActionHandler {
     
-    let un = UNUserNotificationCenter.current()
-    
-    @MainActor
-    private var userNotificationManager: UserNotificationManager {
-        let manager = AppDelegate.shared().userNotificationManager
-        precondition(manager != nil, "UserNotificationManager accessed before applicationDidFinishLaunching")
-        return manager!
-    }
-    
     // MARK: Types
     
     public typealias NotificationId = String
@@ -66,7 +63,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         case notificationId = "com.soduto.services.notifications.notificationId"
         case requestReplyId = "com.soduto.services.notifications.requestReplyId"
         case isCancelable = "com.soduto.services.notifications.isCancelable"
-        case dontPresent = "com.soduto.services.notifications.dontPresent"
+        case contentHash = "com.soduto.services.notifications.contentHash"
     }
     
     enum ActionId: ServiceAction.Id {
@@ -276,6 +273,33 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
     
+    /// Represents the synchronization phase for a single device's notification sync lifecycle
+    ///
+    /// The sync lifecycle proceeds as:
+    ///   `.preparing` → `.syncing` → (optionally) `.verifying` → back to absent (idle)
+    ///
+    /// - `preparing`: setup() is running async prep work (cleanup, reconcile, repopulate).
+    ///   Notification IDs arriving during this phase are buffered.
+    /// - `syncing`: The first `notification.request` has been sent. Received IDs are tracked.
+    ///   When the debounce timer fires, `finishSyncWindow` computes suspected stale IDs.
+    ///   If none are found, the phase ends. If some are found, transitions to `.verifying`.
+    /// - `verifying`: A second `notification.request` has been sent solely to confirm whether
+    ///   suspected-stale IDs are truly gone. New notifications are still processed normally,
+    ///   but **no new suspects are created**. When the debounce timer fires again, any IDs still
+    ///   absent from both responses are confirmed stale and removed.
+    private enum SyncPhase {
+        /// Async prep in progress; buffering early-arriving notification IDs.
+        case preparing(bufferedIds: Set<NotificationId>)
+        
+        /// First sync window open; tracking received IDs from the initial `notification.request`.
+        case syncing(receivedIds: Set<NotificationId>)
+        
+        /// Verification window open; confirming suspected-stale IDs with a second request.
+        /// `suspectedStaleIds`: IDs absent from the first response that need confirmation.
+        /// `receivedIds`: IDs received during this verification window.
+        case verifying(suspectedStaleIds: Set<NotificationId>, receivedIds: Set<NotificationId>)
+    }
+    
     /// MainActor-isolated state manager for active notifications and sync tasks.
     @MainActor
     private class NotificationStateManager {
@@ -287,17 +311,14 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         /// Tracks the last known content hash for each notification to detect true updates vs reconnection duplicates
         var notificationContentHashes: [NotificationId: String] = [:]
         
-        /// Tracks notification IDs received during a sync window
-        var pendingSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
+        /// Current sync phase per device. Absent (nil) means idle — no sync in progress.
+        var syncPhase: [Device.Id: SyncPhase] = [:]
         
-        /// Buffers notification IDs received after setup starts but before sync window starts.
-        var preSyncReceivedIds: [Device.Id: Set<NotificationId>] = [:]
+        /// Debounce tasks for sync window reconciliation, per device.
+        var debounceTasks: [Device.Id: Task<Void, Never>] = [:]
         
         /// Tracks setup generations to prevent stale setup tasks from mutating current sync state.
         var setupGenerationByDevice: [Device.Id: Int] = [:]
-        
-        /// Tasks for post-sync reconciliation
-        var syncReconciliationTasks: [Device.Id: Task<Void, Never>] = [:]
         
         /// Tasks for device setup/sync
         var setupTasks: [Device.Id: Task<Void, Never>] = [:]
@@ -316,21 +337,38 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         func reset() {
             notificationIds.removeAll()
             notificationContentHashes.removeAll()
-            syncReconciliationTasks.values.forEach { $0.cancel() }
-            syncReconciliationTasks.removeAll()
-            preSyncReceivedIds.removeAll()
+            debounceTasks.values.forEach { $0.cancel() }
+            debounceTasks.removeAll()
+            syncPhase.removeAll()
             setupGenerationByDevice.removeAll()
             setupTasks.values.forEach { $0.cancel() }
             setupTasks.removeAll()
         }
     }
     
+    
+    // MARK: Properties
+    
+    let un = UNUserNotificationCenter.current()
+    
+    @MainActor
+    private var userNotificationManager: UserNotificationManager {
+        let manager = AppDelegate.shared().userNotificationManager
+        precondition(manager != nil, "UserNotificationManager accessed before applicationDidFinishLaunching")
+        return manager!
+    }
+    
+    
     // MARK: Service properties
     
     public static let serviceId: Service.Id = "com.soduto.services.notifications"
     
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.notificationPacketType ])
-    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.notificationPacketType ])
+    public let outgoingCapabilities = Set<Service.Capability>([
+        DataPacket.notificationRequestPacketType,
+        DataPacket.notificationReplyPacketType,
+        DataPacket.notificationActionPackageType
+    ])
     
     private let iconState = IconStateManager()
     private let state = NotificationStateManager()
@@ -339,11 +377,13 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     private static let cleanupManager = StartupCleanupManager()
     
     /// Time to wait for the first notification packet before assuming the device has no notifications.
-    private let initialSyncTimeout: TimeInterval = 3.5
+    /// Generous enough to absorb other plugins' heavy connect-time responses (notably uncached
+    /// contacts vCards with embedded photos) so notification sync responses can land within the window.
+    private let initialSyncTimeout: TimeInterval = 15.0
     
     /// Time to wait after the last received notification packet before reconciling.
     /// This acts as a debounce to ensure we received the full batch of notifications even on slow networks.
-    private let syncDebounceTimeout: TimeInterval = 2.0
+    private let syncDebounceTimeout: TimeInterval = 3.0
     
     // MARK: Service methods
     
@@ -410,24 +450,34 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     
     /// Called when a device connects. Requests current notifications from the device.
     ///
-    /// Synchronization model:
-    /// - Rebuild local knowledge from Notification Center first (`repopulateNotificationIds`)
-    /// - Start a sync window and track all IDs observed during that window
-    /// - Reconcile only against IDs observed in that window
+    /// ## Synchronization model
     ///
-    /// Important behavioral choice:
-    /// - If zero notification packets are observed in a sync window, we treat the sync as
-    ///   non-authoritative and skip destructive stale-removal. This avoids deleting valid local
-    ///   notifications when a peer fails to answer `notification.request` reliably.
-    /// - IDs observed after setup begins but before the sync window opens are buffered and merged
-    ///   into the window. This prevents a race where early packets would otherwise be missed.
+    /// The sync lifecycle for a device proceeds through explicit phases (see `SyncPhase`):
     ///
-    /// TODO: Verify if existing notifications are send continuously, then comment out the codeblock inside this function.
+    /// 1. **Preparing** (`.preparing`): Async setup work runs — icon cleanup, state reconciliation,
+    ///    repopulation from Notification Center. Notification IDs arriving early are buffered.
+    /// 2. **Syncing** (`.syncing`): The first `notification.request` is sent. Received IDs are tracked
+    ///    with a debounce timer. When the timer fires, suspected-stale IDs are computed.
+    /// 3. **Verifying** (`.verifying`): If any suspected-stale IDs were found, a second
+    ///    `notification.request` is sent to confirm. IDs absent from both responses are confirmed
+    ///    stale and removed. No new suspects are created in this phase.
     ///
-    /// Duplicate alerts are prevented by:
+    /// ## Key behavioral choices
+    ///
+    /// - If zero notification packets are observed in a sync window, the sync is treated as
+    ///   non-authoritative and no destructive stale-removal is performed.
+    /// - IDs observed after setup begins but before the sync window opens are buffered in the
+    ///   `.preparing` phase and merged when transitioning to `.syncing`.
+    /// - Stale removal requires two consecutive absences (initial + verification) to protect against
+    ///   Android's `NotificationListenerService.getActiveNotifications()` occasionally returning
+    ///   incomplete results. This ensures we don't falsely remove notifications that Android simply
+    ///   didn't include in a single response.
+    ///
+    /// ## Duplicate alert prevention
+    ///
     /// - `isAlreadyDisplayed` check: Notifications already in `notificationIds` are skipped entirely
-    ///   if their content hash is unchanged (reconnection scenario), preventing unnecessary refreshes when the
-    ///   device momentarily reconnects (e.g., WiFi change, charging starts)
+    ///   if their content hash is unchanged (reconnection scenario), preventing unnecessary refreshes
+    ///   when the device momentarily reconnects (e.g., WiFi change, charging starts)
     ///
     /// On app startup, `notificationIds` is empty, so we first repopulate it from the
     /// Notification Center's delivered notifications before requesting new ones.
@@ -439,9 +489,10 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         /// we might delete valid icons for newly arriving notifications.
         Task { @MainActor in
             state.setupTasks[device.id]?.cancel()
+            state.debounceTasks[device.id]?.cancel()
             let generation = (state.setupGenerationByDevice[device.id] ?? 0) + 1
             state.setupGenerationByDevice[device.id] = generation
-            state.preSyncReceivedIds[device.id] = []
+            state.syncPhase[device.id] = .preparing(bufferedIds: [])
             
             let setupTask = Task {
                 await Self.cleanupManager.ensureCleanup { Self.cleanupStaleIconFiles() }
@@ -456,8 +507,8 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                     state.setupGenerationByDevice[device.id] == generation
                 }
                 guard shouldProceed else { return }
-
-                // Start sync window and update state on MainActor
+                
+                // Transition from .preparing to .syncing, merging any buffered IDs
                 await MainActor.run {
                     startSyncWindow(for: device)
                     state.setupGenerationByDevice.removeValue(forKey: device.id)
@@ -498,7 +549,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     }
     
     /// Performs service actions for a specific device (like: `Request Notifications`)
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
         guard let actionId = ActionId(rawValue: id) else { return }
         guard device.pairingStatus == .Paired else { return }
         
@@ -570,6 +621,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
     /// - **Dismiss**: Sends a cancel packet to the remote device if the notification is cancelable
     /// - **Reply**: Sends the user's text reply to the remote device
     /// - **Action1/2/3**: Sends the semantic action string stored in userInfo to trigger the remote action
+    /// - **Copy OTP**: Copies the detected OTP from userInfo to the clipboard (no device interaction)
     /// - **Default (body click)**: Ignored - notification remains visible
     public static func handleAction(for response: UNNotificationResponse, context: UserNotificationContext) {
         let userInfo = response.notification.request.content.userInfo
@@ -578,6 +630,18 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         // Users must use the explicit "Dismiss" button to dismiss on both macOS and Android.
         // See the Dismiss Philosophy documentation above.
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            return
+        }
+        
+        // Handle "Copy OTP" — reads the stored code from userInfo, copies it to the clipboard,
+        // and shows a HUD toast. No device interaction needed, so this works even if the remote
+        // device has disconnected since the notification was delivered.
+        if response.actionIdentifier == UserNotificationManager.ActionIdentifier.copyOtp.rawValue {
+            if let otp = userInfo[UserNotificationManager.Property.otpCode.rawValue] as? String {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(otp, forType: .string)
+                MainActor.assumeIsolated { HUDToast.show("OTP Copied") }
+            }
             return
         }
         
@@ -711,9 +775,17 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 if identifier.hasPrefix(prefix) {
                     let alreadyTracked = state.notificationIds[device.id]?.contains(identifier) ?? false
                     state.addNotificationId(identifier, from: device)
-                    // Also restore the content hash so we can detect reconnection duplicates
-                    let body = notification.request.content.body
-                    state.notificationContentHashes[identifier] = StableHashing.sha256(body)
+                    // Restore the content hash so we can detect reconnection duplicates.
+                    // Prefer the hash we stamped into userInfo at delivery (byte-exact match
+                    // with what `showNotification` will compute next time). Fall back to hashing
+                    // the rendered body for notifications delivered before this field existed.
+                    // Those will re-deliver once, then have the proper hash stamped from then on.
+                    if let storedHash = notification.request.content.userInfo[UserInfoProperty.contentHash.rawValue] as? String {
+                        state.notificationContentHashes[identifier] = storedHash
+                    } else {
+                        let body = notification.request.content.body
+                        state.notificationContentHashes[identifier] = StableHashing.sha256(body)
+                    }
                     matchCount += 1
                     if !alreadyTracked {
                         insertedCount += 1
@@ -816,9 +888,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             
             for fileName in tempContents {
                 // Only clean up files that look like our notification icons
-                let isNotificationIcon = fileName.hasSuffix(".png") ||
-                                          fileName.hasSuffix(".png.cache") ||
-                                          fileName.hasSuffix(".part")
+                let isNotificationIcon = fileName.hasSuffix(".png") || fileName.hasSuffix(".png.cache") || fileName.hasSuffix(".part")
                 
                 // Skip files that don't match our patterns
                 guard isNotificationIcon else { continue }
@@ -840,33 +910,36 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         for dataPacket: DataPacket,
         from device: Device,
         of packetNotificationId: String,
+        package packageId: String?,
+        conversation: [DataPacket.ConversationMessage]?,
+        hash contentHash: String,
         isSilent: Bool,
-        dontPresent: Bool,
         title: String?,
         body: String?,
+        groupName: String?,
         ticker: String,
         appName: String,
         replyId: String?,
         isCancelable: Bool,
-        actions: [String]?
+        actions: [String]?,
+        otpCode: String?
     ) async -> UNMutableNotificationContent {
         let notification = UNMutableNotificationContent()
         
-        /// Filter actions - exclude copy OTP actions, "Reply" actions (handled separately via requestReplyId), and limit to max 3
+        /// Filter actions — exclude:
+        /// - Empty action buttons (like in sensitive notifications from Google Messages)
+        /// - "Reply" (handled separately via requestReplyId)
+        /// - Native copy-OTP actions (e.g. `Copy OTP`, `Copy "XYZABC"`) — they copy on the remote device, which is useless on macOS. We provide our own button when an OTP is detected
         var filteredActions: [String] = []
         if let actions = actions {
             for action in actions {
-                // Don't show if there's a copy action from "Messages" app and instead copy it to clipboard automatically
-                if action.hasPrefix("Copy \"") && action.hasSuffix("\"") && appName == "Messages" {
-                    await self.copyOTP(from: action) // Copy OTP to clipboard
-                }
-                // Skip "Reply" actions since we handle reply separately via requestReplyId
-                else if action.lowercased() == "reply" {
-                    continue
-                }
-                else {
-                    filteredActions.append(action)
-                }
+                let lower = action.lowercased()
+                if lower == "" { continue }
+                // Suppress inline reply buttons as they are not supported
+                if lower == "reply" { continue }
+                // Suppress native copy-otp style buttons as we provide our own
+                if lower.hasPrefix("copy") { continue }
+                filteredActions.append(action)
             }
         }
         // Limit to max 3 custom actions (Android can show max 3)
@@ -880,7 +953,7 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             UserInfoProperty.notificationId.rawValue: packetNotificationId,
             UserInfoProperty.requestReplyId.rawValue: replyId as Any,
             UserInfoProperty.isCancelable.rawValue: NSNumber(value: isCancelable),
-            UserNotificationManager.Property.dontPresent.rawValue: NSNumber(value: dontPresent),
+            UserInfoProperty.contentHash.rawValue: contentHash,
             UserNotificationManager.Property.shouldMute.rawValue: NSNumber(value: shouldMute),
             UserNotificationManager.Property.actionHandlerClass.rawValue: NSStringFromClass(NotificationsService.self)
         ]
@@ -895,17 +968,33 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         if actionCount >= 3 {
             userInfo[UserNotificationManager.Property.action3.rawValue] = filteredActions[2]
         }
+        if let otp = otpCode {
+            userInfo[UserNotificationManager.Property.otpCode.rawValue] = otp
+        }
         
         notification.userInfo = userInfo
         notification.title = "\(appName) | \(device.name)"
-        notification.subtitle = title ?? ""
-        notification.body = body ?? ticker
+        
+        (notification.subtitle, notification.body) = renderNotificationContent(
+            title: title,
+            body: body,
+            ticker: ticker,
+            groupName: groupName,
+            conversation: conversation
+        )
+        notification.threadIdentifier = NotificationThreadPolicy.threadIdentifier(
+            for: appName,
+            on: device.id,
+            package: packageId,
+            peer: device.type
+        )
         
         let hasReply = replyId != nil
         let actionTitles = Array(filteredActions.prefix(3))
         let categoryId = await userNotificationManager.getOrCreateCategory(
             hasReply: hasReply,
-            actionTitles: actionTitles
+            actionTitles: actionTitles,
+            otpCode: otpCode
         )
         notification.categoryIdentifier = categoryId
         
@@ -924,6 +1013,59 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
         
         return notification
+    }
+    
+    /// Renders the subtitle and body for a notification, with conversation-aware formatting.
+    ///
+    /// Conversation rendering follows KDE Desktop's approach:
+    ///  - **Group conversation** (groupName present): subtitle = groupName, body shows sender labels
+    ///    only when the sender changes between consecutive messages.
+    ///  - **1:1 conversation** (no groupName): subtitle = first message's sender (or existing title),
+    ///    body shows message content only (single sender, no labels needed).
+    ///  - **Non-conversation**: subtitle = title, body = text (or ticker fallback).
+    ///
+    /// - Parameters:
+    ///   - title: The notification title (e.g., sender name in messaging apps)
+    ///   - body: The notification body text
+    ///   - ticker: The notification summary (fallback)
+    ///   - groupName: The group name if this is a group conversation
+    ///   - conversation: Message history array if this is a conversation notification
+    /// - Returns: A tuple of (subtitle, body) for the notification content
+    private func renderNotificationContent(
+        title: String?,
+        body: String?,
+        ticker: String,
+        groupName: String?,
+        conversation: [DataPacket.ConversationMessage]?
+    ) -> (subtitle: String, body: String) {
+        guard let messages = conversation, !messages.isEmpty else {
+            return (subtitle: groupName ?? title ?? "", body: body ?? ticker)
+        }
+        
+        let isGroup = groupName != nil
+        let subtitle = isGroup ? groupName! : (messages.first?.sender ?? title ?? "")
+        
+        var lines: [String] = []
+        var previousSender: String? = subtitle
+        for message in messages {
+            guard !message.content.isEmpty else { continue }
+            if isGroup {
+                if message.sender != previousSender {
+                    lines.append("\(message.sender): \(message.content)")
+                    previousSender = message.sender
+                } else {
+                    lines.append("  \(message.content)")
+                }
+            } else if message.sender != subtitle {
+                // 1:1: mark non-contact messages with › (e.g. the user's own replies)
+                lines.append("› \(message.content)")
+            } else {
+                lines.append(message.content)
+            }
+        }
+        let renderedBody = lines.isEmpty ? (body ?? ticker) : lines.joined(separator: "\n")
+        
+        return (subtitle: subtitle, body: renderedBody)
     }
     
     private func showNotification(for dataPacket: DataPacket, from device: Device) async {
@@ -954,23 +1096,31 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             
             let title = try dataPacket.getTitle()
             let body = try dataPacket.getText()
+            let packageId = try? dataPacket.getPackageId()
+            let groupName = try dataPacket.getGroupName()
+            let conversation = try dataPacket.getConversation()
             let replyId = try dataPacket.getReplyRequestId()
             let actions = try dataPacket.getActions()
-            let isAnswer = try dataPacket.getAnswerFlag()
             let isSilent = try dataPacket.getSilentFlag()
             let isCancelable = try dataPacket.getClearableFlag()
+            
+            // Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content).
+            // For conversations, hash includes sender + content so new messages in the thread trigger an update.
+            let contentForHash: String
+            if let conversation = conversation, !conversation.isEmpty {
+                contentForHash = conversation.map { "\($0.sender)\u{1F}\($0.content)" }.joined(separator: "\u{1E}")
+            } else {
+                contentForHash = body ?? ticker
+            }
+            let currentContentHash = StableHashing.sha256(contentForHash)
             
             // Interact with MainActor state
             let shouldShow = await MainActor.run { () -> Bool in
                 let isAlreadyDisplayed = state.notificationIds[device.id]?.contains(notificationId) ?? false
-                
-                /// Compute content hash to detect if this is a true update (content changed) vs reconnection duplicate (same content)
-                let contentForHash = body ?? ticker
-                let currentContentHash = StableHashing.sha256(contentForHash)
                 let previousContentHash = state.notificationContentHashes[notificationId]
                 let isContentChanged = previousContentHash == nil || previousContentHash != currentContentHash
                 
-                /// isReconnectionDuplicate: Same notification with same content arriving again
+                // Check if same notification with same content arrived again
                 let isReconnectionDuplicate = isAlreadyDisplayed && !isContentChanged
                 
                 guard !isReconnectionDuplicate else {
@@ -985,8 +1135,15 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
             
             guard shouldShow else { return }
             
-            /// dontPresent: Don't show notification
-            let dontPresent = isAnswer
+            // Extract OTP if notification is from an allowed app
+            // Show action button always but only auto-copy when in idle phase
+            let otpCode: String? = await MainActor.run {
+                OTPExtractor.handleIfOTP(
+                    body: body, title: title, appName: appName,
+                    packageId: packageId,
+                    autoCopy: !isSilent
+                )
+            }
             
             let notificationIconURL: URL? = await iconState.getDownloadedIconURL(for: packetNotificationId)
             
@@ -994,15 +1151,19 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
                 for: dataPacket,
                 from: device,
                 of: packetNotificationId,
+                package: packageId,
+                conversation: conversation,
+                hash: currentContentHash,
                 isSilent: isSilent,
-                dontPresent: dontPresent,
                 title: title,
                 body: body,
+                groupName: groupName,
                 ticker: ticker,
                 appName: appName,
                 replyId: replyId,
                 isCancelable: isCancelable,
-                actions: actions
+                actions: actions,
+                otpCode: otpCode
             )
             
             /// Set Notification App Icon
@@ -1056,6 +1217,12 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         
         guard let id = self.notificationId(for: dataPacket, from: device) else { return }
         
+        // If we're in verification phase and this ID is in the suspected set, clear it.
+        // The explicit isCancel is authoritative — no need for verification to re-process it.
+        await MainActor.run {
+            clearSuspectedId(id, for: device)
+        }
+        
         // Clean up downloaded icon file for this packet
         if let packetId = try? dataPacket.getId() {
             if let iconURL = await iconState.removeDownloadedIconURL(for: packetId) {
@@ -1081,141 +1248,220 @@ public class NotificationsService: Service, DownloadTaskDelegate, UserNotificati
         }
     }
     
-    @MainActor
-    private func copyOTP(from string:String) {
-        let prefixToRemove = "Copy \""
-        let suffixToRemove = "\""
-        let pattern = "[^0-9A-Za-z]" // Matches any character that is NOT a number or letter
-        
-        // Extract OTP
-        let startIndex = string.index(string.startIndex, offsetBy: prefixToRemove.count)
-        let endIndex = string.index(string.endIndex, offsetBy: -suffixToRemove.count)
-        let slicedString = string[startIndex..<endIndex]
-        
-        let regex = try! NSRegularExpression(pattern: pattern, options: [])
-        let range = NSRange(location: 0, length: slicedString.utf16.count)
-        
-        // Remove any non-alphanumeric character (like invisible unicode characters)
-        let otp = regex.stringByReplacingMatches(in: String(slicedString), options: [], range: range, withTemplate: "")
-        
-        // Copy to clipboard
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(otp, forType: .string)
-    }
-    
     // MARK: Sync Window & Stale Notification Removal
     
-    /// Starts a sync window for a device. During this window, all received notification IDs are tracked.
+    /// Transitions a device from `.preparing` to `.syncing` phase.
     ///
-    /// Any IDs buffered during setup (received before the window opened) are seeded into the
-    /// pending set, so reconciliation does not lose early packets.
+    /// Any notification IDs buffered during the `.preparing` phase are seeded into the
+    /// `.syncing` received set, so reconciliation does not lose early packets.
+    /// Starts the initial sync timeout (debounce timer).
     @MainActor
     private func startSyncWindow(for device: Device) {
-        state.syncReconciliationTasks[device.id]?.cancel() // Cancel any existing task for this device
-        let bufferedIds = state.preSyncReceivedIds.removeValue(forKey: device.id) ?? []
-        state.pendingSyncReceivedIds[device.id] = bufferedIds
+        state.debounceTasks[device.id]?.cancel()
         
+        // Extract buffered IDs from the preparing phase
+        var bufferedIds: Set<NotificationId> = []
+        if case .preparing(let ids) = state.syncPhase[device.id] {
+            bufferedIds = ids
+        }
+        
+        // Transition to syncing phase
+        state.syncPhase[device.id] = .syncing(receivedIds: bufferedIds)
+        
+        // Start initial sync timeout
         let task = Task<Void, Never> {
             try? await Task.sleep(nanoseconds: UInt64(initialSyncTimeout * 1_000_000_000))
-            
             guard !Task.isCancelled else { return }
             await finishSyncWindow(for: device)
         }
-        state.syncReconciliationTasks[device.id] = task
+        state.debounceTasks[device.id] = task
+        
         if bufferedIds.isEmpty {
-            Logger.services.debug("Started sync window for device \(device.name, privacy: .public)")
+            Logger.services.debug("Sync phase → .syncing for \(device.name, privacy: .public)")
         } else {
-            Logger.services.debug("Started sync window for device \(device.name, privacy: .public) with \(bufferedIds.count, privacy: .public) pre-sync notification IDs")
+            Logger.services.debug("Sync phase → .syncing for \(device.name, privacy: .public) with \(bufferedIds.count, privacy: .public) buffered IDs from .preparing")
         }
     }
     
     /// Records a notification ID for sync reconciliation.
     ///
-    /// Behavior:
-    /// - If a sync window is active, the ID is added to that window's pending set.
-    /// - If setup is active but the window is not open yet, the ID is buffered in pre-sync state.
-    ///   This closes the setup->sync race and preserves packet visibility for reconciliation.
+    /// Behavior depends on the current `SyncPhase`:
+    /// - `.preparing`: The ID is buffered. It will be merged when transitioning to `.syncing`.
+    /// - `.syncing`: The ID is recorded and the debounce timer is reset.
+    /// - `.verifying`: The ID is recorded (confirming it's alive) and the debounce timer is reset.
+    ///   No new suspects are created in this phase.
+    /// - Absent (idle): The ID is ignored — no sync is in progress.
     @MainActor
     private func recordReceivedNotificationId(_ notificationId: NotificationId, for device: Device) {
-        // If sync window is active, record directly for reconciliation.
-        if state.pendingSyncReceivedIds[device.id] != nil {
-            state.pendingSyncReceivedIds[device.id]?.insert(notificationId)
-            
-            // Debounce: Reschedule the reconciliation task to wait for end of stream
-            state.syncReconciliationTasks[device.id]?.cancel()
-            
-            let task = Task<Void, Never> {
-                try? await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
-                
-                guard !Task.isCancelled else { return }
-                await finishSyncWindow(for: device)
-            }
-            state.syncReconciliationTasks[device.id] = task
-            return
-        }
+        guard let phase = state.syncPhase[device.id] else { return }
         
-        // If setup is in progress but sync window hasn't started yet, buffer this ID.
-        guard state.setupGenerationByDevice[device.id] != nil else { return }
-        if state.preSyncReceivedIds[device.id] == nil {
-            state.preSyncReceivedIds[device.id] = []
+        switch phase {
+        case .preparing(var bufferedIds):
+            bufferedIds.insert(notificationId)
+            state.syncPhase[device.id] = .preparing(bufferedIds: bufferedIds)
+            // No debounce needed during preparation — setup drives the transition.
+            
+        case .syncing(var receivedIds):
+            receivedIds.insert(notificationId)
+            state.syncPhase[device.id] = .syncing(receivedIds: receivedIds)
+            resetDebounceTimer(for: device)
+            
+        case .verifying(let suspectedStaleIds, var receivedIds):
+            receivedIds.insert(notificationId)
+            state.syncPhase[device.id] = .verifying(suspectedStaleIds: suspectedStaleIds, receivedIds: receivedIds)
+            resetDebounceTimer(for: device)
         }
-        state.preSyncReceivedIds[device.id]?.insert(notificationId)
     }
     
-    /// Finishes the sync window for a device. Removes local notifications not received during sync.
+    /// Resets the debounce timer for a device's sync window.
+    /// When the timer fires, `finishSyncWindow` is called to process the current phase.
+    @MainActor
+    private func resetDebounceTimer(for device: Device) {
+        state.debounceTasks[device.id]?.cancel()
+        let task = Task<Void, Never> {
+            try? await Task.sleep(nanoseconds: UInt64(syncDebounceTimeout * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await finishSyncWindow(for: device)
+        }
+        state.debounceTasks[device.id] = task
+    }
+    
+    /// Removes a notification ID from the verification suspected-stale set, if present.
+    ///
+    /// This is called when an explicit `isCancel` packet arrives during the `.verifying` phase.
+    /// Since the notification is being authoritatively cancelled, it should not remain in the
+    /// suspected set (which would cause a redundant removal attempt in `finishSyncWindow`).
+    @MainActor
+    private func clearSuspectedId(_ notificationId: NotificationId, for device: Device) {
+        guard case .verifying(var suspectedStaleIds, let receivedIds) = state.syncPhase[device.id] else { return }
+        if suspectedStaleIds.remove(notificationId) != nil {
+            state.syncPhase[device.id] = .verifying(suspectedStaleIds: suspectedStaleIds, receivedIds: receivedIds)
+            Logger.services.debug("Cleared \(notificationId, privacy: .public) from suspected-stale set (explicit isCancel during verification)")
+        }
+    }
+    
+    /// Finishes the sync window for a device. Behavior depends on the current `SyncPhase`.
+    ///
+    /// ## `.syncing` phase (first pass)
+    /// Computes `suspectedStaleIds = localIds - receivedIds`.
+    /// - If empty: all local notifications confirmed alive → transition to idle.
+    /// - If non-empty: suspected notifications may be stale OR Android simply didn't include
+    ///   them in this batch (its `NotificationListenerService.getActiveNotifications()` response
+    ///   is not guaranteed to be complete). Transition to `.verifying` and send a second
+    ///   `notification.request` to confirm.
+    /// - If zero IDs were received: non-authoritative → skip stale removal entirely.
+    ///
+    /// ## `.verifying` phase (second pass)
+    /// Checks suspected IDs against the second response.
+    /// - IDs that appeared in the verification window: confirmed alive, keep them.
+    /// - IDs still absent after two consecutive requests: confirmed stale, remove them.
+    /// - If zero IDs were received during verification: non-authoritative → keep all suspects.
+    ///
+    /// This two-pass approach intentionally favors false negatives (keeping a stale notification
+    /// slightly longer) over false positives (incorrectly deleting a still-valid notification).
+    /// Truly dismissed notifications will be consistently absent across both requests.
+    ///
     /// NOTE: KDE Connect does not provide an authoritative or complete notification snapshot.
     /// There is no explicit end-of-list marker or completeness guarantee.
     /// Stale removal performed here is therefore best-effort and heuristic-based.
-    ///
-    /// Reconciliation contract:
-    /// - If we observed at least one notification ID in this window, the result is treated as
-    ///   authoritative and local stale notifications are removed.
-    /// - If we observed zero IDs, reconciliation is treated as inconclusive and no destructive
-    ///   removal is performed.
-    ///
-    /// This intentionally favors false negatives (keeping a stale local notification a bit longer)
-    /// over false positives (incorrectly deleting a still-valid remote notification).
-    /// They will be re-added when the notification packet arrives later. This situation may arise in devices that delay sending notification packets, even after establishing connection.
-    /// This behavior is an intentional trade-off to provide a cleaner and more seamless notification mirroring experience on macOS.
-    /// TODO: Verify if existing notifications are send continuously, then comment out the `for loop` codeblock inside this function
     @MainActor
     private func finishSyncWindow(for device: Device) async {
-        guard let receivedIds = state.pendingSyncReceivedIds.removeValue(forKey: device.id) else { return }
-        state.syncReconciliationTasks.removeValue(forKey: device.id)
+        guard let phase = state.syncPhase[device.id] else { return }
+        state.debounceTasks[device.id]?.cancel()
+        state.debounceTasks.removeValue(forKey: device.id)
         
+        switch phase {
+        case .preparing:
+            // Should not happen — startSyncWindow transitions away from .preparing.
+            // But if it does, just clean up.
+            Logger.services.debug("finishSyncWindow called during .preparing for \(device.name, privacy: .public); ignoring")
+            return
+            
+        case .syncing(let receivedIds):
+            await finishInitialSync(for: device, receivedIds: receivedIds)
+            
+        case .verifying(let suspectedStaleIds, let receivedIds):
+            await finishVerification(for: device, suspectedStaleIds: suspectedStaleIds, receivedIds: receivedIds)
+        }
+    }
+    
+    /// Handles completion of the initial `.syncing` phase.
+    @MainActor
+    private func finishInitialSync(for device: Device, receivedIds: Set<NotificationId>) async {
         guard let localIds = state.notificationIds[device.id] else {
-            Logger.services.debug("Finished sync window for \(device.name, privacy: .public): no local notifications to reconcile")
+            Logger.services.debug("Sync [initial] for \(device.name, privacy: .public): no local notifications to reconcile")
+            state.syncPhase.removeValue(forKey: device.id)
             return
         }
         
-        // If we didn't receive any notification IDs during the sync window, we won't make destructive assumptions
+        // If we didn't receive any notification IDs, the response was non-authoritative
         guard !receivedIds.isEmpty else {
-            Logger.services.debug("Finished sync window for \(device.name, privacy: .public): no notification packets received; skipping stale removal")
+            Logger.services.debug("Sync [initial] for \(device.name, privacy: .public): no notification packets received; skipping stale removal")
+            state.syncPhase.removeValue(forKey: device.id)
             return
         }
         
-        // Find local notifications that were NOT received from the device (i.e., dismissed on remote)
-        let staleIds = localIds.subtracting(receivedIds)
+        let suspectedStaleIds = localIds.subtracting(receivedIds)
         
-        if staleIds.isEmpty {
-            Logger.services.debug("Finished sync window for \(device.name, privacy: .public): all local notifications still exist on remote")
+        if suspectedStaleIds.isEmpty {
+            Logger.services.debug("Sync [initial] for \(device.name, privacy: .public): all \(localIds.count, privacy: .public) local notifications confirmed alive (received \(receivedIds.count, privacy: .public))")
+            state.syncPhase.removeValue(forKey: device.id)
             return
         }
         
-        Logger.services.debug("Finished sync window for \(device.name, privacy: .public): removing \(staleIds.count, privacy: .public) stale notifications")
+        // Suspected stale IDs found — transition to verification phase
+        Logger.services.debug("Sync [initial] for \(device.name, privacy: .public): \(suspectedStaleIds.count, privacy: .public) suspected stale (received \(receivedIds.count, privacy: .public) of \(localIds.count, privacy: .public) local); sending verification request")
+        
+        state.syncPhase[device.id] = .verifying(suspectedStaleIds: suspectedStaleIds, receivedIds: [])
+        
+        // Start verification timeout and send second request
+        let task = Task<Void, Never> {
+            try? await Task.sleep(nanoseconds: UInt64(initialSyncTimeout * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await finishSyncWindow(for: device)
+        }
+        state.debounceTasks[device.id] = task
+        device.send(DataPacket.notificationRequestPacket())
+    }
+    
+    /// Handles completion of the `.verifying` phase.
+    @MainActor
+    private func finishVerification(for device: Device, suspectedStaleIds: Set<NotificationId>, receivedIds: Set<NotificationId>) async {
+        // Always transition to idle after verification, regardless of outcome
+        state.syncPhase.removeValue(forKey: device.id)
+        
+        // If zero IDs received during verification, the response was non-authoritative
+        guard !receivedIds.isEmpty else {
+            Logger.services.debug("Sync [verification] for \(device.name, privacy: .public): no notification packets received during verification; keeping all \(suspectedStaleIds.count, privacy: .public) suspects")
+            return
+        }
+        
+        // IDs that appeared in the verification window are confirmed alive
+        let confirmedStaleIds = suspectedStaleIds.subtracting(receivedIds)
+        let confirmedAliveIds = suspectedStaleIds.intersection(receivedIds)
+        
+        if !confirmedAliveIds.isEmpty {
+            Logger.services.debug("Sync [verification] for \(device.name, privacy: .public): \(confirmedAliveIds.count, privacy: .public) suspected notifications confirmed alive")
+        }
+        
+        if confirmedStaleIds.isEmpty {
+            Logger.services.debug("Sync [verification] for \(device.name, privacy: .public): all suspected notifications confirmed alive; no removals")
+            return
+        }
+        
+        Logger.services.debug("Sync [verification] for \(device.name, privacy: .public): removing \(confirmedStaleIds.count, privacy: .public) confirmed-stale notifications")
         let deliveredByIdentifier = Dictionary(uniqueKeysWithValues: (await un.deliveredNotifications()).map { ($0.request.identifier, $0.request.content) })
         
-        for staleId in staleIds {
+        for staleId in confirmedStaleIds {
             let remotePacketId = packetNotificationId(from: staleId, for: device)
             if let content = deliveredByIdentifier[staleId] {
                 let bodyPreview = String(content.body.prefix(180))
                 Logger.services.debug(
-                    "Removing stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), title=\(content.title, privacy: .public), subtitle=\(content.subtitle, privacy: .public), bodyPreview=\(bodyPreview, privacy: .public)"
+                    "Removing confirmed-stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), title=\(content.title, privacy: .public), subtitle=\(content.subtitle, privacy: .public), bodyPreview=\(bodyPreview, privacy: .public)"
                 )
             } else {
                 Logger.services.debug(
-                    "Removing stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), deliveredMetadata=missing"
+                    "Removing confirmed-stale notification for \(device.name, privacy: .public): localId=\(staleId, privacy: .public), remoteId=\(remotePacketId, privacy: .public), deliveredMetadata=missing"
                 )
             }
             /// NOTE: KDE Connect does NOT send download Task payload on subsequent requests, hence we'll take a conservative approach and keep our icon caches
@@ -1238,12 +1484,16 @@ fileprivate extension DataPacket {
         case invalidCancelRequest
         case invalidReplyIdRequest
         case invalidId
+        case invalidPackageId
         case invalidAppName
+        case invalidGroupName
+        case invalidTitle
+        case invalidConversation
+        case invalidText
         case invalidTicker
         case invalidActions
         case invalidClearableFlag
         case invalidCancelFlag
-        case invalidAnswerFlag
         case invalidSilentFlag
         case invalidPayloadHash
         case partFileRenameFailed
@@ -1266,13 +1516,20 @@ fileprivate extension DataPacket {
         case appName = "appName"             /// (string): The app that generated the notification
         case title = "title"                 /// (string): The notification title (e.g., sender name in messaging apps)
         case text = "text"                   /// (string): The full notification body text (may contain newlines for message history)
+        case groupName = "groupName"         /// (string): The group name if the notification is a group conversation message
         case ticker = "ticker"               /// (string): The notification summary
+        case conversation = "conversation"   /// (array): List of {sender, content} messages if the notification is a conversation
         case actions = "actions"             /// (string array): The available actions of the notification.
         case isClearable = "isClearable"     /// (boolean): True if we can request to dismiss the notification.
         case isCancel = "isCancel"           /// (boolean): True if the notification was dismissed in the peer device.
-        case requestAnswer = "requestAnswer" /// (boolean): True if this is an answer to a "request" package.
         case silent = "silent"               /// (boolean): True if this notification should be silent.
         case payloadHash = "payloadHash"     /// (string): The hash of the payload
+    }
+    
+    /// Represents a single message in a conversation notification.
+    struct ConversationMessage {
+        let sender: String
+        let content: String
     }
     
     
@@ -1341,11 +1598,49 @@ fileprivate extension DataPacket {
         return value
     }
     
+    /// Extracts the Android package name from this notification packet's `id`.
+    ///
+    /// Android `NotificationListenerService` ids have the form:
+    ///   `<number>|<package>|<id>|<tag>|<uid>`
+    /// e.g. `0|com.google.android.apps.messaging|2|...|10279`
+    func getPackageId() throws -> String? {
+        guard let id = try getId() else { return nil }
+        let components = id.split(separator: "|", omittingEmptySubsequences: false)
+        guard components.count >= 2 else { throw NotificationError.invalidPackageId }
+        let packageId = String(components[1])
+        // Sanity check: Android package IDs always contain at least one dot
+        guard packageId.contains(".") else { throw NotificationError.invalidPackageId }
+        return packageId
+    }
+    
     func getAppName() throws -> String? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.appName.rawValue) else { return nil }
         guard let value = body[NotificationProperty.appName.rawValue] as? String else { throw NotificationError.invalidAppName }
         return value
+    }
+    
+    /// Gets the group name for group conversation notifications (e.g., a Signal group chat name).
+    func getGroupName() throws -> String? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.groupName.rawValue) else { return nil }
+        guard let value = body[NotificationProperty.groupName.rawValue] as? String else { throw NotificationError.invalidGroupName }
+        return value.isEmpty ? nil : value
+    }
+    
+    /// Gets the conversation message history from messaging-style notifications.
+    /// Returns nil if the field is absent. Messages with missing sender or content are skipped.
+    func getConversation() throws -> [ConversationMessage]? {
+        try self.validateNotificationType()
+        guard body.keys.contains(NotificationProperty.conversation.rawValue) else { return nil }
+        guard let array = body[NotificationProperty.conversation.rawValue] as? [[String: Any]] else { throw NotificationError.invalidConversation }
+        
+        var messages: [ConversationMessage] = []
+        for obj in array {
+            guard let sender = obj["sender"] as? String, let content = obj["content"] as? String else { continue }
+            messages.append(ConversationMessage(sender: sender, content: content))
+        }
+        return messages
     }
     
     /// Gets the notification ticker (a brief summary, e.g., "Sender: message")
@@ -1360,7 +1655,7 @@ fileprivate extension DataPacket {
     func getTitle() throws -> String? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.title.rawValue) else { return nil }
-        guard let value = body[NotificationProperty.title.rawValue] as? String else { return nil }
+        guard let value = body[NotificationProperty.title.rawValue] as? String else { throw NotificationError.invalidTitle }
         return value
     }
     
@@ -1368,7 +1663,7 @@ fileprivate extension DataPacket {
     func getText() throws -> String? {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.text.rawValue) else { return nil }
-        guard let value = body[NotificationProperty.text.rawValue] as? String else { return nil }
+        guard let value = body[NotificationProperty.text.rawValue] as? String else { throw NotificationError.invalidText }
         return value
     }
     
@@ -1400,13 +1695,6 @@ fileprivate extension DataPacket {
         try self.validateNotificationType()
         guard body.keys.contains(NotificationProperty.silent.rawValue) else { return false }
         guard let value = body[NotificationProperty.silent.rawValue] as? NSNumber else { throw NotificationError.invalidSilentFlag }
-        return value.boolValue
-    }
-    
-    func getAnswerFlag() throws -> Bool {
-        try self.validateNotificationType()
-        guard body.keys.contains(NotificationProperty.requestAnswer.rawValue) else { return false }
-        guard let value = body[NotificationProperty.requestAnswer.rawValue] as? NSNumber else { throw NotificationError.invalidAnswerFlag }
         return value.boolValue
     }
     

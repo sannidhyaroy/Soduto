@@ -10,18 +10,23 @@ import Foundation
 import AppKit
 import ServiceManagement
 import UniformTypeIdentifiers
+import Combine
 
 public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate, NSDraggingDestination {
     
     @IBOutlet weak var statusBarMenu: NSMenu!
     @IBOutlet weak var availableDevicesItem: NSMenuItem!
     @IBOutlet weak var launchOnLoginItem: NSMenuItem!
+    @IBOutlet weak var dashboardMenuItem: NSMenuItem!
     
     public var deviceDataSource: DeviceDataSource?
     public var serviceManager: ServiceManager?
     public var config: Configuration?
     
     let statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    private var cancellables: Set<AnyCancellable> = []
+    /// Persistent references to device menu items keyed by device ID, for in-place image updates
+    private var deviceMenuItems: [String: NSMenuItem] = [:]
     
     lazy var preferencesWindowController: PreferencesWindowController? = {
         let controller = PreferencesWindowController.loadController()
@@ -29,6 +34,9 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         controller.config = self.config
         return controller
     }()
+    
+    private var dashboardWindowController: DeviceDashboardWindowController?
+    private var remoteControlWindowController: RemoteControlWindowController?
     
     private var dragOperationPerformed: Bool = false
     
@@ -50,6 +58,34 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         self.statusBarItem.button?.window?.delegate = self
     }
     
+    private func setupServiceObservers() {
+        cancellables.removeAll()
+        guard let serviceManager = self.serviceManager else { return }
+        
+        if let rcService = serviceManager.service(ofType: RemoteControlService.self) {
+            if remoteControlWindowController == nil {
+                remoteControlWindowController = RemoteControlWindowController(service: rcService)
+            }
+            rcService.openPanel = { [weak self] device in
+                self?.remoteControlWindowController?.show(for: device)
+            }
+        }
+        
+        if let batteryService = serviceManager.service(ofType: BatteryService.self) {
+            batteryService.$statuses
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in Task { @MainActor [weak self] in self?.updateDeviceImages() } }
+                .store(in: &cancellables)
+        }
+        
+        if let connectivityService = serviceManager.service(ofType: ConnectivityReportService.self) {
+            connectivityService.$statuses
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in Task { @MainActor [weak self] in self?.updateDeviceImages() } }
+                .store(in: &cancellables)
+        }
+    }
+    
     
     // MARK: Actions
     
@@ -68,6 +104,24 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     
     @IBAction func openPreferences(_ sender: Any?) {
         self.preferencesWindowController?.showWindow(nil)
+    }
+    
+    @IBAction func openDashboard(_ sender: Any?) {
+        if dashboardWindowController == nil {
+            guard let deviceDataSource = deviceDataSource,
+                  let serviceManager = serviceManager else { return }
+            let controller = DeviceDashboardWindowController(
+                deviceDataSource: deviceDataSource,
+                mediaPlayerService: serviceManager.service(ofType: MediaPlayerService.self),
+                systemVolumeService: serviceManager.service(ofType: SystemVolumeService.self),
+                batteryService: serviceManager.service(ofType: BatteryService.self),
+                connectivityReportService: serviceManager.service(ofType: ConnectivityReportService.self),
+                lockService: serviceManager.service(ofType: LockService.self)
+            )
+            controller.onClose = { [weak self] in self?.dashboardWindowController = nil }
+            dashboardWindowController = controller
+        }
+        dashboardWindowController?.show()
     }
     
     @IBAction func showAboutWindow(_ sender: Any?) {
@@ -129,6 +183,7 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
         // Only broadcast on: app start, network change, manual Cmd+R
         
         if menu == self.statusBarMenu {
+            self.dashboardMenuItem?.isEnabled = !(deviceDataSource?.pairedDevices.isEmpty ?? true) || !(deviceDataSource?.unavailableDevices.isEmpty ?? true)
             self.refreshMenuDeviceList()
             if #available(macOS 13.0, *) {
                 let loginItem = SMAppService.mainApp
@@ -154,22 +209,29 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
     
     func refreshDeviceLists() {
         self.preferencesWindowController?.refreshDeviceLists()
+        self.dashboardWindowController?.refreshDeviceList()
+        self.dashboardMenuItem?.isEnabled = !(deviceDataSource?.pairedDevices.isEmpty ?? true) || !(deviceDataSource?.unavailableDevices.isEmpty ?? true)
+    }
+    
+    /// Call this once from AppDelegate after all services have been registered.
+    func startServiceObservers() {
+        setupServiceObservers()
     }
     
     
     // MARK: Private methods
     
+    @MainActor
     private func refreshMenuDeviceList() {
-        // remove old device items
-        
+        // Remove all existing device items and clear stored references
+        deviceMenuItems.removeAll()
         var item = self.statusBarMenu.item(withTag: InterfaceElementTags.availableDeviceMenuItem.rawValue)
         while item != nil {
             self.statusBarMenu.removeItem(item!)
             item = self.statusBarMenu.item(withTag: InterfaceElementTags.availableDeviceMenuItem.rawValue)
         }
         
-        // add new device items
-        
+        // Re-add device items, storing references for live image updates
         let devices = self.deviceDataSource?.pairedDevices ?? []
         guard devices.count > 0 else { return }
         
@@ -182,100 +244,58 @@ public class StatusBarMenuController: NSObject, NSWindowDelegate, NSMenuDelegate
             item.image = statusImage(for: device)
             index += 1
             self.statusBarMenu.insertItem(item, at: index)
+            deviceMenuItems[device.id] = item
         }
     }
     
+    /// Updates only the status images on existing device menu items without rebuilding the menu.
+    /// Called by service observers for real-time battery/connectivity changes.
+    /// Also restores the title defensively as AppKit can drop the title text when the image
+    /// is updated while the menu is mid-render (transient layout glitch).
+    @MainActor
+    private func updateDeviceImages() {
+        guard let devices = self.deviceDataSource?.pairedDevices else { return }
+        for device in devices {
+            guard let item = deviceMenuItems[device.id] else { continue }
+            if item.title != device.name { item.title = device.name }
+            item.image = statusImage(for: device)
+        }
+    }
+    
+    @MainActor
     private func statusImage(for device: Device) -> NSImage? {
-        assert(self.serviceManager != nil, "serviceManager property is not setup correctly")
         guard let serviceManager = self.serviceManager else { return nil }
         
-        var batteryStatus: BatteryService.BatteryStatus? = nil
-        var connectivityStatus: ConnectivityReportService.ConnectivityStatus? = nil
-        
-        // Get battery status if available
-        if let service = serviceManager.services.first(where: { $0 is BatteryService }) as? BatteryService {
-            batteryStatus = service.statuses.first(where: { $0.key == device.id })?.value
-        }
-        
-        // Get network status if available
-        if let service = serviceManager.services.first(where: { $0 is ConnectivityReportService }) as? ConnectivityReportService {
-            connectivityStatus = service.statuses.first(where: { $0.key == device.id })?.value
-        }
-        
-        // If no status info available, return nil
-        if batteryStatus == nil && connectivityStatus == nil {
-            return nil
-        }
-        
-        // Calculate image width based on what status info is available
-        let batteryWidth: CGFloat = batteryStatus != nil ? 56 : 0
-        let connectivityWidth: CGFloat = connectivityStatus != nil ? 30 : 0
-        let totalWidth = batteryWidth + connectivityWidth
-        
-        // Create image with all status indicators
-        let image = NSImage(size: CGSize(width: totalWidth, height: 13), flipped: false) { _ in
-            var currentX: CGFloat = 0
-            
-            // Draw battery status if available
-            if let batteryStatus = batteryStatus {
-                let rect = NSRect(x: currentX, y: 0, width: 24, height: 13)
-                let mainIcon = batteryStatus.isCharging ? #imageLiteral(resourceName: "batteryStatusChargingIconInverted") : (batteryStatus.isCritical ? #imageLiteral(resourceName: "batteryCriticalIcon") : #imageLiteral(resourceName: "batteryStatusIcon"))
-                assert(mainIcon.size == rect.size)
-                mainIcon.draw(in: rect)
-                
-                let percentage = "\(batteryStatus.currentCharge)%" as NSString
-                let attr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
-                            NSAttributedString.Key.foregroundColor: NSColor.black,]
-                percentage.draw(in: NSRect(x: currentX + 26, y: 2, width: 28, height: 10), withAttributes: attr)
-                
-                let fullWidth: CGFloat = 16
-                if (!batteryStatus.isCharging && !batteryStatus.isCritical) {
-                    let chargedWidth: CGFloat = fullWidth * CGFloat(batteryStatus.currentCharge) / 100.0
-                    NSColor.black.set()
-                    NSRect(x: currentX + 2, y: 2, width: chargedWidth, height: 8).fill()
-                }
-                
-                currentX += batteryWidth
+        // Collect image fragments from all services that provide status bar images
+        let fragments: [(order: Int, image: NSImage)] = serviceManager.services
+            .compactMap { $0 as? StatusBarImageProvider }
+            .compactMap { provider in
+                guard let image = provider.statusBarImage(for: device) else { return nil }
+                return (provider.statusBarImageSortOrder, image)
             }
-            
-            // Draw network status if available
-            if let connectivityStatus = connectivityStatus {
-                // Draw network type indicator
-                let signalStrength = min(max(connectivityStatus.signalStrength, 0), 4)
-                
-                // Draw network type (3G/4G/5G)
-                let networkType = connectivityStatus.networkType
-                let networkLabel = (networkType == "LTE" ? "4G" :
-                                        networkType == "5G" ? "5G" :
-                                        (networkType == "UMTS" || networkType == "CDMA2000" || networkType == "HSPA") ? "3G" :
-                                        (networkType == "GSM" || networkType == "CDMA" || networkType == "iDEN" || networkType == "EDGE") ? "2G" : "")
-                
-                if !networkLabel.isEmpty {
-                    let netAttr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
-                                   NSAttributedString.Key.foregroundColor: NSColor.black,]
-                    (networkLabel as NSString).draw(in: NSRect(x: currentX, y: 2, width: 15, height: 10), withAttributes: netAttr)
-                }
-                
-                // Draw signal bars with larger size
-                if signalStrength > 0 {
-                    for i in 0..<signalStrength {
-                        NSColor.black.set()
-                        let barHeight = CGFloat(i + 1) * 2.5 // Increased bar height
-                        let barWidth: CGFloat = 2.0 // Increased bar width
-                        NSRect(x: currentX + 16 + (CGFloat(i) * 3), y: 2, width: barWidth, height: barHeight).fill()
-                    }
-                } else {
-                    // Draw X for no signal
-                    let noSignalAttr = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10),
-                                        NSAttributedString.Key.foregroundColor: NSColor.black,]
-                    ("X" as NSString).draw(in: NSRect(x: currentX + 16, y: 2, width: 10, height: 10), withAttributes: noSignalAttr)
-                }
+            .sorted { $0.order < $1.order }
+        
+        guard !fragments.isEmpty else { return nil }
+        
+        // Composite all fragments horizontally with spacing between them
+        let interSpacing: CGFloat = 2
+        let imageHeight: CGFloat = 13
+        let totalWidth = fragments.map(\.image.size.width).reduce(0, +) + interSpacing * CGFloat(max(fragments.count - 1, 0))
+        
+        let image = NSImage(size: CGSize(width: totalWidth, height: imageHeight), flipped: false) { _ in
+            var x: CGFloat = 0
+            for (index, fragment) in fragments.enumerated() {
+                fragment.image.draw(in: NSRect(
+                    x: x,
+                    y: (imageHeight - fragment.image.size.height) / 2,
+                    width: fragment.image.size.width,
+                    height: fragment.image.size.height
+                ))
+                x += fragment.image.size.width + (index < fragments.count - 1 ? interSpacing : 0)
             }
-            
             return true
         }
         
-        image.isTemplate = true
         return image
     }
 }

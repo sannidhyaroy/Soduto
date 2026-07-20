@@ -14,15 +14,17 @@ import AVFoundation
 import CoreAudio
 import MediaPlayer
 
-/// Show notifications for phone call or SMS events. Also allows to send SMS
+/// Show notifications for phone call. Also allows to send SMS via the legacy
+/// compose window (non-v2 devices only)
 ///
 /// This service will display a notification each time a package with type
 /// "kdeconnect.telephony" is received. The type of notification will change
 /// depending on the contents of the field "event" (string).
 ///
 /// Valid contents for "event" are: "ringing", "talking", "missedCall" and "sms".
-/// Note that "talking" is just ignored in this implementation, while the others
-/// will display a system notification.
+/// Note that "sms" is ignored in this implementation, while the others (except
+/// "talking" which drives the ongoing-call HUD instead) will display a system
+/// notification.
 ///
 /// If the incoming package contains a "phoneNumber" string field, the notification
 /// will also display it. Note that "phoneNumber" can be a contact name instead
@@ -30,8 +32,6 @@ import MediaPlayer
 ///
 /// If the incoming package contains "isCancel" set to true, the package is ignored.
 public class TelephonyService: Service, UserNotificationActionHandler {
-    
-    let un = UNUserNotificationCenter.current()
     
     // MARK: Types
     
@@ -49,9 +49,17 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     
     // MARK: Private properties
     
+    let un = UNUserNotificationCenter.current()
+    
     private var pendingSMSPackets: [String:([DataPacket], Timer)] = [:]
     private lazy var sendMessageController = SendMessageWindowController.loadController()
-    private let audioManager = AudioManager()
+    private let mediaController = SystemMediaController.shared
+    
+    /// IDs of devices for which this service is currently set up
+    private var connectedDeviceIds = Set<String>()
+    
+    /// ID of the device whose active-call HUD is currently on screen, if any
+    private var activeCallToastDeviceId: String? = nil
     
     
     // MARK: Service properties
@@ -59,7 +67,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     public static let serviceId: Service.Id = "com.soduto.services.telephony"
     
     public let incomingCapabilities = Set<Service.Capability>([ DataPacket.telephonyPacketType ])
-    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.telephonyRequestPacketType, DataPacket.smsRequestPacketType ])
+    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.telephonyMuteRequestPacketType, DataPacket.smsRequestPacketType ])
     
     
     // MARK: Service methods
@@ -67,15 +75,19 @@ public class TelephonyService: Service, UserNotificationActionHandler {
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
         guard dataPacket.isTelephonyPacket else { return false }
         
-#if DEBUG
-        Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
-#else
-        Logger.services.debug("handleDataPacket(type: \(dataPacket.type, privacy: .public), id: \(dataPacket.id, privacy: .public)) from device: \(device.id, privacy: .public)")
-#endif
+        #if DEBUG
+            Logger.services.debug("handleDataPacket(<\(dataPacket, privacy: .public)> fromDevice:<\(device, privacy: .public)>)")
+        #else
+            Logger.services.debug("handleDataPacket(type: \(dataPacket.type, privacy: .public), id: \(dataPacket.id, privacy: .public)) from device: \(device.id, privacy: .public)")
+        #endif
         
         do {
             if try dataPacket.getCancelFlag() {
                 self.hideNotification(for: dataPacket, from: device)
+                self.dismissOngoingCallHUD(for: device)
+                Logger.services.debug("Telephony::isCancel, requesting media resume (pausedByController=\(self.mediaController.pausedByController, privacy: .public))")
+                self.mediaController.resume()
+                Logger.services.debug("Telephony::isCancel, after media resume request (pausedByController=\(self.mediaController.pausedByController, privacy: .public))")
             }
             else if let event = try dataPacket.getEvent() ?? nil {
                 switch event {
@@ -87,9 +99,16 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                     break
                 case DataPacket.TelephonyEvent.talking.rawValue:
                     self.hideNotification(for: dataPacket, from: device)
+                    self.showOngoingCallHUD(for: dataPacket, from: device)
+                    Logger.services.debug("Telephony::talking, requesting media pause (pausedByController=\(self.mediaController.pausedByController, privacy: .public))")
+                    self.mediaController.pause()
+                    Logger.services.debug("Telephony::talking, after media pause request (pausedByController=\(self.mediaController.pausedByController, privacy: .public))")
                     break
                 case DataPacket.TelephonyEvent.sms.rawValue:
-                    self.handleSMSPacket(dataPacket, from: device)
+                    // Drop the legacy `event:"sms"` path entirely that matches KDE Desktop (telephonyplugin.cpp:82 "ignore old style sms packet").
+                    // SMS notifications come through `NotificationsService` (mirroring the Android SMS app's system notification), and SMS reply / browsing is handled by `SMSService`.
+                    // Telephony stays as the path for call events (ringing, missedCall, talking) only.
+                    Logger.services.debug("Telephony::sms ignored (handled by NotificationsService + SMSService)")
                     break
                 default:
                     Logger.services.error("Unknown telephony event type: \(event, privacy: .public)")
@@ -104,25 +123,34 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         return true
     }
     
-    public func setup(for device: Device) {}
+    public func setup(for device: Device) {
+        connectedDeviceIds.insert(device.id)
+    }
     
-    public func cleanup(for device: Device) {}
+    public func cleanup(for device: Device) {
+        connectedDeviceIds.remove(device.id)
+    }
     
     public func actions(for device: Device) -> [ServiceAction] {
         guard device.incomingCapabilities.contains(DataPacket.smsRequestPacketType) else { return [] }
         guard device.pairingStatus == .Paired else { return [] }
+        // SMS Protocol v2-capable phones get the proper "Messages" entry from `SMSService`
+        // Don't duplicate it with the legacy one-shot "Send SMS" compose window here
+        guard !SMSService.deviceSupportsV2SMS(device) else { return [] }
         
         return [
             ServiceAction(id: ActionId.sendSms.rawValue, title: "Send SMS", description: "Send text messages from the desktop", service: self, device: device)
         ]
     }
     
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
         guard let actionId = ActionId(rawValue: id) else { return }
         guard device.pairingStatus == .Paired else { return }
         
         switch actionId {
         case .sendSms:
+            // Only reachable for non-v2 devices as SMS Protocol v2-capable phones are filtered out in `actions(for:)` and instead get `SMSService`'s "Messages" entry
+            // Keeps the legacy one-shot compose dialog alive for older Android KDE Connect clients
             sendMessageController.sendActionHandler = { controller in
                 controller.sendActionHandler = nil
                 controller.window?.close()
@@ -160,16 +188,73 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 device.send(DataPacket.mutePhonePacket())
             }
         case DataPacket.TelephonyEvent.sms.rawValue:
-            if let textResponse = response as? UNTextInputNotificationResponse {
-                guard let phoneNumber = userInfo[NotificationProperty.phoneNumber.rawValue] as? String else { break }
-                device.send(DataPacket.smsRequestPacket(phoneNumber: phoneNumber, message: textResponse.userText))
-            }
+            // Legacy SMS reply path, unreachable now that the `event:"sms"` notification is no longer created
+            // Kept as a defensive no-op in case an old delivered notification still triggers this codepath after an update
+            break
         default:
             break
         }
     }
     
     // MARK: Private methods
+    
+    /// Returns a notification attachment using the contact's photo from the packet when available,
+    /// falling back to a named image from the app bundle.
+    private func notificationAttachment(for dataPacket: DataPacket, fallbackImageName: String, identifier: String) -> UNNotificationAttachment? {
+        if let image = try? dataPacket.getPhoneThumbnail(),
+           let tiff = image.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiff),
+           let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: NSNumber(value: 0.9)]) {
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(identifier).appendingPathExtension("jpg")
+            do {
+                try jpeg.write(to: tempURL)
+                // Do NOT delete `tempURL` here
+                // UNNotificationAttachment on macOS stores a reference to the file rather than copying it eagerly. The OS cleans `/tmp`.
+                return try UNNotificationAttachment(identifier: identifier, url: tempURL)
+            } catch {
+                Logger.services.error("Failed to create contact photo attachment: \(error, privacy: .public)")
+            }
+        }
+        guard let iconPath = Bundle.main.pathForImageResource(NSImage.Name(fallbackImageName)) else { return nil }
+        do {
+            return try UNNotificationAttachment(identifier: identifier, url: URL(fileURLWithPath: iconPath))
+        } catch {
+            Logger.services.error("Failed to create fallback icon attachment (\(fallbackImageName, privacy: .public)): \(error, privacy: .public)")
+            return nil
+        }
+    }
+    
+    /// Shows a persistent HUD toast indicating an active call
+    private func showOngoingCallHUD(for dataPacket: DataPacket, from device: Device) {
+        let contactName = (try? dataPacket.getContactName())?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phoneNumber = (try? dataPacket.getPhoneNumber())?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let caller = [contactName, phoneNumber].compactMap { $0 }.first { !$0.isEmpty }
+        
+        let isMultiDevice = connectedDeviceIds.count > 1
+        let message: String
+        if let caller {
+            message = isMultiDevice ? "On a call with \(caller) · \(device.name)" : "On a call with \(caller)"
+        } else {
+            message = isMultiDevice ? "On an active call · \(device.name)" : "On an active call"
+        }
+        
+        var style = HUDToast.Style.success
+        style.symbolName = "phone.badge.waveform.fill"
+        
+        activeCallToastDeviceId = device.id
+        MainActor.assumeIsolated {
+            HUDToast.show(message, style: style)
+        }
+    }
+    
+    /// Dismisses the active-call HUD if it belongs to the given device
+    private func dismissOngoingCallHUD(for device: Device) {
+        guard activeCallToastDeviceId == device.id else { return }
+        activeCallToastDeviceId = nil
+        MainActor.assumeIsolated {
+            HUDToast.dismiss()
+        }
+    }
     
     private func notificationId(for dataPacket: DataPacket, from device: Device) -> String? {
         guard dataPacket.isTelephonyPacket else { return nil }
@@ -194,9 +279,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         guard dataPacket.isTelephonyPacket else { return }
         guard (try? dataPacket.getEvent()) == DataPacket.TelephonyEvent.ringing.rawValue else { return }
         
-        // Handle audio settings for ringing call
-        handleRingingCallAudio()
-        
         do {
             guard let notificationId = self.notificationId(for: dataPacket, from: device) else { return }
             let phoneNumber = try dataPacket.getPhoneNumber() ?? "Unknown Number"
@@ -213,16 +295,11 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             notification.subtitle = displayName.isEmpty ? "Incoming call" : "Incoming call from \(displayName)"
             notification.sound = .default
             notification.categoryIdentifier = "IncomingCall"
+            notification.threadIdentifier = "telephony"
             notification.setUrgency(.timeSensitive)
             
-            if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
-                let notificationIconURL = URL(fileURLWithPath: iconPath)
-                do {
-                    let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
-                    notification.attachments = [attachment]
-                } catch {
-                    Logger.services.error("Failed to create ringing notification attachment: \(error, privacy: .public)")
-                }
+            if let attachment = notificationAttachment(for: dataPacket, fallbackImageName: "Phone", identifier: notificationId) {
+                notification.attachments = [attachment]
             }
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
@@ -253,16 +330,11 @@ public class TelephonyService: Service, UserNotificationActionHandler {
             notification.title = device.name
             notification.subtitle = "Missed a call from \(displayName)"
             notification.sound = .default
+            notification.threadIdentifier = "telephony"
             notification.setUrgency(.active)
             
-            if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Phone")) {
-                let notificationIconURL = URL(fileURLWithPath: iconPath)
-                do {
-                    let attachment = try UNNotificationAttachment(identifier: notificationId, url: notificationIconURL, options: nil)
-                    notification.attachments = [attachment]
-                } catch {
-                    Logger.services.error("Failed to create missed call notification attachment: \(error, privacy: .public)")
-                }
+            if let attachment = notificationAttachment(for: dataPacket, fallbackImageName: "Phone", identifier: notificationId) {
+                notification.attachments = [attachment]
             }
             
             let request = UNNotificationRequest(identifier: notificationId, content: notification, trigger: nil)
@@ -318,6 +390,7 @@ public class TelephonyService: Service, UserNotificationActionHandler {
                 notification.subtitle = displayName.isEmpty ? "New SMS message" : "SMS from \(displayName)"
                 notification.body = messageBody
                 notification.sound = .default
+                notification.threadIdentifier = "telephony"
                 notification.setUrgency(.active)
                 
                 if let iconPath = Bundle.main.pathForImageResource(NSImage.Name("Messages")) {
@@ -353,19 +426,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         assert(dataPacket.isTelephonyPacket, "Expected telephony data packet")
         
         guard let id = self.notificationId(for: dataPacket, from: device) else { return }
-        
-        // If this is handling a ringing call that ended, restore audio state
-        do {
-            if let event = try dataPacket.getEvent() {
-                if event == DataPacket.TelephonyEvent.ringing.rawValue || event == DataPacket.TelephonyEvent.talking.rawValue {
-                    // Restore audio state when call ends
-                    restoreAudioState()
-                }
-            }
-        } catch {
-            Logger.services.error("Error determining call event type: \(error, privacy: .public)")
-        }
-        
         un.removeNotification(withId: id)
         
         Logger.services.debug("Notification hidden: \(id, privacy: .public)")
@@ -413,19 +473,6 @@ public class TelephonyService: Service, UserNotificationActionHandler {
         pendingSMSPackets[id] = (packets, timer)
     }
     
-    // MARK: - Call Audio Handling Methods
-    
-    /// Handle audio settings for incoming (ringing) calls
-    private func handleRingingCallAudio() {
-        // Always pause media for incoming calls
-        audioManager.pauseAllMedia()
-    }
-    
-    /// Restore audio settings when call ends
-    private func restoreAudioState() {
-        // Resume media playback
-        audioManager.resumeAllMedia()
-    }
 }
 
 
@@ -453,17 +500,12 @@ fileprivate extension DataPacket {
         case talking = "talking"
     }
     
-    enum TelephonyAction: String {
-        case mute = "mute"
-    }
-    
     enum TelephonyProperty: String {
         case event = "event"                    // (string): can be one of TelephonyEvent values
         case phoneNumber = "phoneNumber"        // (string)
         case contactName = "contactName"        // (string)
         case messageBody = "messageBody"        // (string)
-        case phoneThumbnail = "phoneThumbnail"  // (bytes)
-        case action = "action"                  // (string): 'mute' for muting the phone
+        case phoneThumbnail = "phoneThumbnail"  // (base64 JPEG)
         case sendSms = "sendSms"                // (boolean): true to send sms
         case isCancel = "isCancel"              // (boolean): cancel previous event
     }
@@ -472,12 +514,12 @@ fileprivate extension DataPacket {
     // MARK: Properties
     
     static let telephonyPacketType = "kdeconnect.telephony"
-    static let telephonyRequestPacketType = "kdeconnect.telephony.request"
+    static let telephonyMuteRequestPacketType = "kdeconnect.telephony.request_mute"
     static let smsRequestPacketType = "kdeconnect.sms.request"
     
     var isTelephonyPacket: Bool { return self.type == DataPacket.telephonyPacketType }
     
-    var isTelephonyRequestPacket: Bool { return self.type == DataPacket.telephonyRequestPacketType }
+    var isTelephonyMuteRequestPacket: Bool { return self.type == DataPacket.telephonyMuteRequestPacketType }
     
     var isSmsRequestPacket: Bool { return self.type == DataPacket.smsRequestPacketType }
     
@@ -493,9 +535,7 @@ fileprivate extension DataPacket {
     }
     
     static func mutePhonePacket() -> DataPacket {
-        return DataPacket(type: telephonyRequestPacketType, body: [
-            TelephonyProperty.action.rawValue: TelephonyAction.mute.rawValue as AnyObject
-        ])
+        return DataPacket(type: telephonyMuteRequestPacketType, body: [:])
     }
     
     
@@ -532,8 +572,9 @@ fileprivate extension DataPacket {
     func getPhoneThumbnail() throws -> NSImage? {
         try self.validateTelephonyType()
         guard body.keys.contains(TelephonyProperty.phoneThumbnail.rawValue) else { return nil }
-        guard let data = body[TelephonyProperty.phoneThumbnail.rawValue] as? Data else { throw TelephonyError.invalidEvent }
-        guard let image = NSImage(data: data) else { throw TelephonyError.invalidEvent }
+        guard let base64String = body[TelephonyProperty.phoneThumbnail.rawValue] as? String else { throw TelephonyError.invalidPhoneThumbnail }
+        guard let data = Data(base64Encoded: base64String, options: .ignoreUnknownCharacters) else { throw TelephonyError.invalidPhoneThumbnail }
+        guard let image = NSImage(data: data) else { throw TelephonyError.invalidPhoneThumbnail }
         return image
     }
     
@@ -553,64 +594,5 @@ fileprivate extension DataPacket {
     
     func validateTelephonyOrSmsRequestType() throws {
         guard self.isTelephonyPacket || self.isSmsRequestPacket else { throw TelephonyError.wrongType }
-    }
-}
-
-/// AudioManager handles media playback control
-/// for call handling in TelephonyService
-class AudioManager {
-    
-    // MARK: Properties
-    
-    private var mediaPlayersWerePaused: [String: Bool] = [:]
-    
-    // MARK: Media Playback Control Methods
-    
-    /// Pause all currently playing media
-    func pauseAllMedia() {
-        // Only send the pause event if it's not already paused
-        if !mediaPlayersWerePaused.isEmpty {
-            return
-        }
-        
-        // Mark that we've paused media
-        mediaPlayersWerePaused["default"] = true
-        
-        // Send pause media control event
-        sendMediaControlEvent(isPlay: false)
-    }
-    
-    /// Resume all previously paused media
-    func resumeAllMedia() {
-        // Only resume if we previously paused
-        if mediaPlayersWerePaused.isEmpty {
-            return
-        }
-        
-        // Reset the tracking
-        mediaPlayersWerePaused.removeAll()
-        
-        // Send play media control event
-        sendMediaControlEvent(isPlay: true)
-    }
-    
-    /// Helper method to send media control events
-    private func sendMediaControlEvent(isPlay: Bool) {
-        // Create the appropriate media control event
-        let controlEvent = NSEvent.otherEvent(
-            with: .applicationDefined,
-            location: NSPoint.zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            subtype: 8,
-            data1: isPlay ? 19 : 20,  // 19 is play, 20 is pause
-            data2: 0
-        )
-        
-        if let event = controlEvent {
-            NSApplication.shared.sendEvent(event)
-        }
     }
 }

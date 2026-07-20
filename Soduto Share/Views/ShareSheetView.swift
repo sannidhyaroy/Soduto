@@ -183,8 +183,8 @@ struct DeviceBubble: View {
                     // Background circle
                     Circle()
                         .fill(isHovering && isInteractive
-                              ? Color.accentColor.opacity(0.15)
-                              : Color(NSColor.controlBackgroundColor))
+                            ? Color.accentColor.opacity(0.15)
+                            : Color(NSColor.controlBackgroundColor))
                         .frame(width: 56, height: 56)
                     
                     // Device icon

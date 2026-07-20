@@ -17,6 +17,11 @@ import os
 /// Delegate protocol for DownloadTask events.
 public protocol DownloadTaskDelegate: AnyObject {
     func downloadTask(_ task: DownloadTask, finishedWithSuccess success: Bool)
+    func downloadTask(_ task: DownloadTask, didReceiveBytes bytesReceived: Int64, totalBytes: Int64?)
+}
+
+public extension DownloadTaskDelegate {
+    func downloadTask(_ task: DownloadTask, didReceiveBytes bytesReceived: Int64, totalBytes: Int64?) {}
 }
 
 /// Download task for receiving file payloads over TLS.
@@ -74,7 +79,9 @@ public class DownloadTask {
     private var bytesReceived: Int64 = 0
     private var bytesReceivedFromNetwork: Int64 = 0  // Tracked synchronously for completion check
     private var isClosed: Bool = false
+    public private(set) var cancelRequested: Bool = false
     private var trustHandler: PayloadClientTrustHandler?
+    private var lastProgressReportTime: Date = .distantPast
     
     // MARK: Init / Deinit
     
@@ -140,6 +147,7 @@ public class DownloadTask {
     
     /// Cancels the download.
     public func cancel() {
+        cancelRequested = true
         self.channel?.close(promise: nil)
     }
     
@@ -194,7 +202,11 @@ public class DownloadTask {
         bootstrap.connect(to: targetAddress).whenComplete { [weak self] result in
             switch result {
             case .success(let channel):
-                self?.channel = channel
+                if self?.cancelRequested == true {
+                    channel.close(promise: nil)
+                } else {
+                    self?.channel = channel
+                }
             case .failure(let error):
                 Logger.network.error("DownloadTask connection failed: \(error, privacy: .public)")
                 self?.downloadFinished(success: false)
@@ -248,6 +260,7 @@ public class DownloadTask {
     }
     
     fileprivate func handleDataReceived(_ data: Data) {
+        guard !cancelRequested else { return }
         guard let stream = self.stream, stream.hasSpaceAvailable else {
             Logger.network.error("DownloadTask: stream not available for writing")
             self.channel?.close(promise: nil)
@@ -288,6 +301,18 @@ public class DownloadTask {
             guard batchBytesWritten < data.count else { break }
         }
         
+        // Fire progress callback (throttled to 500ms)
+        let now = Date()
+        if now.timeIntervalSince(self.lastProgressReportTime) >= 0.5 {
+            self.lastProgressReportTime = now
+            let recv = self.bytesReceived
+            let total = self.payloadSize
+            self.delegateQueue.async { [weak self] in
+                guard let self else { return }
+                self.delegate?.downloadTask(self, didReceiveBytes: recv, totalBytes: total)
+            }
+        }
+        
         // Check if we've received all expected data
         if let payloadSize = self.payloadSize, self.bytesReceived >= payloadSize {
             self.channel?.close(promise: nil)
@@ -295,6 +320,11 @@ public class DownloadTask {
     }
     
     fileprivate func handleChannelInactive() {
+        // If user cancelled, always treat as failure regardless of bytes already buffered
+        guard !cancelRequested else {
+            self.downloadFinished(success: false)
+            return
+        }
         // Use bytesReceivedFromNetwork (updated synchronously) rather than bytesReceived
         // (updated asynchronously on writeQueue) to avoid race condition where channel
         // closes before async writes complete

@@ -434,11 +434,11 @@ public class ConnectionProvider: NSObject, ConnectionDelegate {
         guard let deviceId = try? packet.getDeviceId() else { return }
         guard delegate.isNewConnectionNeeded(byProvider: self, deviceId: deviceId) else { return }
         
-#if DEBUG
-        Logger.network.debug("UDP received packet from \(String(describing: remoteAddress), privacy: .public): \(packet, privacy: .public)")
-#else
-        Logger.network.debug("UDP received packet from \(String(describing: remoteAddress), privacy: .public) deviceId: \(deviceId, privacy: .public)")
-#endif
+        #if DEBUG
+            Logger.network.debug("UDP received packet from \(String(describing: remoteAddress), privacy: .public): \(packet, privacy: .public)")
+        #else
+            Logger.network.debug("UDP received packet from \(String(describing: remoteAddress), privacy: .public) deviceId: \(deviceId, privacy: .public)")
+        #endif
         
         // Create a socket address for the connection
         guard let connectionAddress = convertToSocketAddress(remoteAddress, port: UInt16(port)) else {

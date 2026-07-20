@@ -6,7 +6,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>$(TeamIdentifierPrefix)com.soduto.Soduto</string>
+		<string>$(TeamIdentifierPrefix)$(BUNDLE_ID)</string>
 	</array>
 	<key>com.apple.security.files.bookmarks.app-scope</key>
 	<true/>
@@ -20,10 +20,14 @@
 	<true/>
 	<key>com.apple.security.personal-information.addressbook</key>
 	<true/>
-    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-    <array>
-        <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
-        <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spki</string>
-    </array>
+	<key>com.apple.security.temporary-exception.files.absolute-path.read-only</key>
+	<array>
+		<string>/private/etc/shells</string>
+	</array>
+	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spki</string>
+	</array>
 </dict>
 </plist>

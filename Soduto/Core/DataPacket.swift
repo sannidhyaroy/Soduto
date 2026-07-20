@@ -150,6 +150,10 @@ extension DataPacket {
         case tcpPort = "tcpPort"
         case targetDeviceId = "targetDeviceId"
         case targetProtocolVersion = "targetProtocolVersion"
+        case clientName = "clientName"
+        case clientVersion = "clientVersion"
+        case platformName = "platformName"
+        case platformVersion = "platformVersion"
     }
     
     public enum IdentityError: Error {
@@ -180,14 +184,39 @@ extension DataPacket {
     public static func identityPacket(additionalProperties:DataPacket.Body?, config: HostConfiguration) -> DataPacket {
         assert(!config.incomingCapabilities.isEmpty || !config.outgoingCapabilities.isEmpty, "Empty capabilities for identity packet, probably something is wrong")
         
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        let platformVersion = "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
+        #if os(macOS)
+            let platformName = "macOS"
+        #elseif os(iOS)
+            let platformName = "iOS"
+        #elseif os(tvOS)
+            let platformName = "tvOS"
+        #elseif os(watchOS)
+            let platformName = "watchOS"
+        #elseif os(Linux)
+            let platformName = "Linux"
+        #elseif os(Windows)
+            let platformName = "Windows"
+        #else
+            let platformName = "Unknown"
+        #endif
         var body: Body = [
             IdentityProperty.deviceId.rawValue: config.hostDeviceId as AnyObject,
             IdentityProperty.deviceName.rawValue: config.hostDeviceName as AnyObject,
             IdentityProperty.deviceType.rawValue: config.hostDeviceType.rawValue as AnyObject,
             IdentityProperty.protocolVersion.rawValue: NSNumber(value: DataPacket.protocolVersion),
             IdentityProperty.outgoingCapabilities.rawValue: Array(config.outgoingCapabilities) as AnyObject,
-            IdentityProperty.incomingCapabilities.rawValue: Array(config.incomingCapabilities) as AnyObject
+            IdentityProperty.incomingCapabilities.rawValue: Array(config.incomingCapabilities) as AnyObject,
+            IdentityProperty.platformName.rawValue: platformName as AnyObject,
+            IdentityProperty.platformVersion.rawValue: platformVersion as AnyObject
         ]
+        if let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String {
+            body[IdentityProperty.clientName.rawValue] = name as AnyObject
+        }
+        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+            body[IdentityProperty.clientVersion.rawValue] = version as AnyObject
+        }
         if let properties = additionalProperties {
             for (key, value) in properties {
                 body[key] = value
@@ -242,6 +271,22 @@ extension DataPacket {
         return Set(capabilities)
     }
     
+    public func getClientName() -> String? {
+        return body[IdentityProperty.clientName.rawValue] as? String
+    }
+
+    public func getClientVersion() -> String? {
+        return body[IdentityProperty.clientVersion.rawValue] as? String
+    }
+
+    public func getPlatformName() -> String? {
+        return body[IdentityProperty.platformName.rawValue] as? String
+    }
+
+    public func getPlatformVersion() -> String? {
+        return body[IdentityProperty.platformVersion.rawValue] as? String
+    }
+
     public func validateIdentityType() throws {
         guard type == DataPacket.identityPacketType else { throw IdentityError.wrongType }
     }

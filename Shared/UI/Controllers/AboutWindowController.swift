@@ -12,9 +12,11 @@ import Cocoa
 public class AboutWindowController: NSWindowController {
     
     var dismissHandler: ((AboutWindowController)->Void)?
+    private var localKeyMonitor: Any?
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+        if let monitor = localKeyMonitor { NSEvent.removeMonitor(monitor) }
     }
     
     private static var controller: AboutWindowController?
@@ -32,6 +34,13 @@ public class AboutWindowController: NSWindowController {
     
     public override func windowDidLoad() {
         super.windowDidLoad()
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.window,
+                  event.modifierFlags.contains(.command),
+                  event.charactersIgnoringModifiers == "w" else { return event }
+            self.window?.performClose(nil)
+            return nil
+        }
         
         // IB does not set it correctly on 10.12
         self.window?.titleVisibility = .hidden

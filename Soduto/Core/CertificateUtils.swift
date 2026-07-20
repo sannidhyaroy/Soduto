@@ -270,7 +270,7 @@ public class CertificateUtils {
         ]
         let values = SecCertificateCopyValues(certificate, oids as CFArray?, nil) as? [String:[String:AnyObject]]
         return relativeTime(forOID: kSecOIDX509V1ValidityNotAfter, values: values) >= 0.0
-        && relativeTime(forOID: kSecOIDX509V1ValidityNotBefore, values: values) <= 0.0
+            && relativeTime(forOID: kSecOIDX509V1ValidityNotBefore, values: values) <= 0.0
     }
     
     

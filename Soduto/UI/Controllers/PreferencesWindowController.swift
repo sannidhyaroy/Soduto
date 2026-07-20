@@ -11,6 +11,12 @@ import Cocoa
 
 public class PreferencesWindowController: NSWindowController {
     
+    private var localKeyMonitor: Any?
+    
+    deinit {
+        if let monitor = localKeyMonitor { NSEvent.removeMonitor(monitor) }
+    }
+    
     var deviceDataSource: DeviceDataSource? {
         didSet { self.preferencesTabViewController?.deviceDataSource = self.deviceDataSource }
     }
@@ -34,6 +40,13 @@ public class PreferencesWindowController: NSWindowController {
     
     public override func windowDidLoad() {
         super.windowDidLoad()
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.window,
+                  event.modifierFlags.contains(.command),
+                  event.charactersIgnoringModifiers == "w" else { return event }
+            self.window?.performClose(nil)
+            return nil
+        }
         
         let screenRect = NSScreen.main?.frame ?? NSRect.zero
         self.window?.setFrame(NSRect(x: screenRect.width / 2 - 340, y: screenRect.height / 2 - 200, width: 680, height: 400), display: false)

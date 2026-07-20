@@ -229,8 +229,8 @@ struct DeviceRowView: View {
                 // Background circle
                 Circle()
                     .fill(isBubbleHovered
-                          ? Color.accentColor.opacity(0.15)
-                          : Color(nsColor: .controlBackgroundColor))
+                        ? Color.accentColor.opacity(0.15)
+                        : Color(nsColor: .controlBackgroundColor))
                     .frame(width: 44, height: 44)
                 
                 // Device icon

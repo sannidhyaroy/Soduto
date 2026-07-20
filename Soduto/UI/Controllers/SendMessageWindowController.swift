@@ -466,9 +466,9 @@ extension ContactPhoneNumber {
             try store.enumerateContacts(with: request, usingBlock: { (contact: CNContact, result: UnsafeMutablePointer<ObjCBool>) in
                 let phoneNumbers = contact.phoneNumbers.filter { phoneNumber in
                     return phoneNumber.label != CNLabelPhoneNumberPager
-                    && phoneNumber.label != CNLabelPhoneNumberHomeFax
-                    && phoneNumber.label != CNLabelPhoneNumberWorkFax
-                    && phoneNumber.label != CNLabelPhoneNumberOtherFax
+                        && phoneNumber.label != CNLabelPhoneNumberHomeFax
+                        && phoneNumber.label != CNLabelPhoneNumberWorkFax
+                        && phoneNumber.label != CNLabelPhoneNumberOtherFax
                 }
                 guard phoneNumbers.count > 0 else { return }
                 guard let fullName = CNContactFormatter.string(from: contact, style: .fullName) else { return }

@@ -2,7 +2,7 @@
 //  RunCommandService.swift
 //  Soduto
 //
-//  Created on 2025-04-19.
+//  Created by Swapnil Devesh on 2025-04-19.
 //  Copyright © 2025 Soduto. All rights reserved.
 //
 
@@ -10,110 +10,108 @@ import Foundation
 import Cocoa
 import os
 
-/// RunCommand service data packet utilities
-fileprivate extension DataPacket {
-    
-    static let runCommandPacketType = "kdeconnect.runcommand"
-    static let runCommandRequestPacketType = "kdeconnect.runcommand.request"
-    
-    var isRunCommandPacket: Bool { return self.type == DataPacket.runCommandPacketType }
-    var isRunCommandRequestPacket: Bool { return self.type == DataPacket.runCommandRequestPacketType }
-    
-    static func runCommandRequestPacket(key: String) -> DataPacket {
-        return DataPacket(type: runCommandRequestPacketType, body: ["key": key as AnyObject])
-    }
-    
-    static func runCommandListRequestPacket() -> DataPacket {
-        return DataPacket(type: runCommandRequestPacketType, body: ["requestCommandList": true as AnyObject])
-    }
-    
-    static func runCommandListPacket(commandList: [String: [String: String]]) -> DataPacket {
-        let commandListString = try? JSONSerialization.data(withJSONObject: commandList)
-        let commandListJSON = commandListString != nil ? String(data: commandListString!, encoding: .utf8) : "{}"
-        return DataPacket(type: runCommandPacketType, body: ["commandList": commandListJSON as AnyObject])
-    }
-    
-    func getCommandList() throws -> [String: [String: String]]? {
-        guard self.isRunCommandPacket else { throw RunCommandService.RunCommandError.wrongType }
-        
-        guard let commandListString = self.body["commandList"] as? String else { return nil }
-        guard let data = commandListString.data(using: .utf8) else { return nil }
-        guard let commandList = try JSONSerialization.jsonObject(with: data) as? [String: [String: String]] else { return nil }
-        
-        return commandList
-    }
-    
-    func getRequestKey() throws -> String? {
-        guard self.isRunCommandRequestPacket else { throw RunCommandService.RunCommandError.wrongType }
-        
-        return self.body["key"] as? String
-    }
-    
-    func isRequestingCommandList() throws -> Bool {
-        guard self.isRunCommandRequestPacket else { throw RunCommandService.RunCommandError.wrongType }
-        
-        return self.body["requestCommandList"] as? Bool == true
-    }
-}
-
 /// Run commands on remote devices or let remote devices run commands on this device
-public class RunCommandService: Service {
+public class RunCommandService: BidirectionalService {
     
     // MARK: Types
-    
-    enum RunCommandError: Error {
-        case wrongType
-        case invalidCommand
-    }
     
     enum ActionId: ServiceAction.Id {
         case runCommand = 1
     }
     
     public struct Command: Codable {
-        var uuid: String
+        static let defaultShell = "/bin/zsh"
+        
+        let uuid: String
         var name: String
         var command: String
+        var shell: String
+        var isEnabled: Bool
+        
+        init(uuid: String, name: String, command: String, shell: String = Command.defaultShell, isEnabled: Bool = true) {
+            self.uuid = uuid
+            self.name = name
+            self.command = command
+            self.shell = shell
+            self.isEnabled = isEnabled
+        }
+        
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.uuid = try container.decode(String.self, forKey: .uuid)
+            self.name = try container.decode(String.self, forKey: .name)
+            self.command = try container.decode(String.self, forKey: .command)
+            self.shell = try container.decodeIfPresent(String.self, forKey: .shell) ?? Command.defaultShell
+            self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        }
     }
+    
     
     // MARK: Properties
     
     public static let serviceId: Service.Id = "com.soduto.services.runcommand"
     
-    public let incomingCapabilities = Set<Service.Capability>([ DataPacket.runCommandPacketType, DataPacket.runCommandRequestPacketType ])
-    public let outgoingCapabilities = Set<Service.Capability>([ DataPacket.runCommandPacketType, DataPacket.runCommandRequestPacketType ])
+    public var incomingCapabilities: Set<Service.Capability> {
+        var caps = Set<Service.Capability>()
+        if incomingEnabled { caps.insert(DataPacket.runCommandRequestPacketType) }
+        if outgoingEnabled { caps.insert(DataPacket.runCommandPacketType) }
+        return caps
+    }
+    public var outgoingCapabilities: Set<Service.Capability> {
+        var caps = Set<Service.Capability>()
+        if incomingEnabled { caps.insert(DataPacket.runCommandPacketType) }
+        if outgoingEnabled { caps.insert(DataPacket.runCommandRequestPacketType) }
+        return caps
+    }
+    
+    var userDefaults: UserDefaults = .standard
+    let incomingPreferenceKey = AppDefaultsStore.Preferences.Services.RunCommand.incomingKey
+    let outgoingPreferenceKey = AppDefaultsStore.Preferences.Services.RunCommand.outgoingKey
+    
+    public var localCommands: [Command] {
+        get {
+            guard let data = userDefaults.data(forKey: AppDefaultsStore.Preferences.Services.RunCommand.commandsKey) else { return [] }
+            return (try? JSONDecoder().decode([Command].self, from: data)) ?? []
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            userDefaults.set(data, forKey: AppDefaultsStore.Preferences.Services.RunCommand.commandsKey)
+            guard incomingEnabled else { return }
+            for device in devices where device.incomingCapabilities.contains(DataPacket.runCommandPacketType) {
+                sendCommandList(to: device)
+            }
+        }
+    }
     
     private var devices: [Device] = []
     private var remoteCommands: [Device.Id: [String: [String: String]]] = [:]
     
-    // MARK: Service methods
+    
+    // MARK: Service
     
     public func handleDataPacket(_ dataPacket: DataPacket, fromDevice device: Device, onConnection connection: Connection) -> Bool {
-        guard dataPacket.isRunCommandPacket || dataPacket.isRunCommandRequestPacket else { return false }
-        
         do {
-            if dataPacket.isRunCommandPacket {
-                // Handle received command list
+            switch dataPacket.type {
+            case DataPacket.runCommandPacketType:
+                guard outgoingEnabled else { return true }
                 if let commandList = try dataPacket.getCommandList() {
                     self.remoteCommands[device.id] = commandList
                     Logger.services.debug("Received command list from \(device.name, privacy: .public)")
                 }
-            }
-            else if dataPacket.isRunCommandRequestPacket {
-                // Handle command execution request
+            case DataPacket.runCommandRequestPacketType:
                 if let key = try dataPacket.getRequestKey() {
+                    guard incomingEnabled else { return true }
                     executeLocalCommand(key, device: device)
-                }
-                // Handle command list request
-                else if try dataPacket.isRequestingCommandList() {
+                } else if try dataPacket.isRequestingCommandList() {
+                    guard incomingEnabled else { return true }
                     sendCommandList(to: device)
                 }
+            default:
+                return false
             }
-        }
-        catch {
+        } catch {
             Logger.services.error("Error handling run command packet: \(error, privacy: .public)")
         }
-        
         return true
     }
     
@@ -122,143 +120,237 @@ public class RunCommandService: Service {
         
         self.devices.append(device)
         
-        // Request the command list from the device
         if device.incomingCapabilities.contains(DataPacket.runCommandRequestPacketType) {
-            device.send(DataPacket.runCommandListRequestPacket())
+            send(DataPacket.runCommandListRequestPacket(), to: device)
         }
         
-        // Send our command list to the device if it supports receiving it
-        if device.incomingCapabilities.contains(DataPacket.runCommandPacketType) {
+        if incomingEnabled, device.incomingCapabilities.contains(DataPacket.runCommandPacketType) {
             sendCommandList(to: device)
         }
     }
     
     public func cleanup(for device: Device) {
-        // Remove device from array
         if let index = self.devices.firstIndex(where: { $0.id == device.id }) {
             self.devices.remove(at: index)
         }
-        
-        // Remove stored remote commands for this device
         self.remoteCommands.removeValue(forKey: device.id)
     }
     
     public func actions(for device: Device) -> [ServiceAction] {
-        var actions: [ServiceAction] = []
+        guard outgoingEnabled else { return [] }
+        guard device.incomingCapabilities.contains(DataPacket.runCommandRequestPacketType) else { return [] }
+        guard let deviceCommands = remoteCommands[device.id], !deviceCommands.isEmpty else { return [] }
         
-        guard device.incomingCapabilities.contains(DataPacket.runCommandRequestPacketType) else { return actions }
+        let commandActions: [ServiceAction] = deviceCommands.compactMap { uuid, commandInfo in
+            guard let name = commandInfo["name"] else { return nil }
+            return ServiceAction(
+                id: ActionId.runCommand.rawValue,
+                title: name,
+                description: "Run command on remote device",
+                service: self,
+                device: device,
+                userInfo: ["uuid": uuid]
+            )
+        }
         
-        actions.append(ServiceAction(
+        return [ServiceAction(
             id: ActionId.runCommand.rawValue,
             title: "Run Command",
             description: "Run a command on the remote device",
             service: self,
-            device: device
-        ))
-        
-        return actions
+            device: device,
+            children: commandActions
+        )]
     }
     
-    public func performAction(_ id: ServiceAction.Id, forDevice device: Device) {
-        // No supported actions
+    public func performAction(_ id: ServiceAction.Id, forDevice device: Device, userInfo: [String: Any]?) {
+        guard let actionId = ActionId(rawValue: id) else { return }
+        
+        switch actionId {
+        case .runCommand:
+            guard let userInfo = userInfo, let uuid = userInfo["uuid"] as? String else { return }
+            send(DataPacket.runCommandRequestPacket(key: uuid), to: device)
+        }
     }
     
-    public func createRunCommandMenu(for device: Device) -> NSMenu {
-        let menu = NSMenu(title: "Run Commands")
-        
-        var hasCommands = false
-        if let deviceCommands = self.remoteCommands[device.id] {
-            if !deviceCommands.isEmpty {
-                hasCommands = true
-                for (uuid, commandInfo) in deviceCommands {
-                    guard let name = commandInfo["name"] else { continue }
-                    
-                    let item = NSMenuItem(title: name, action: #selector(runCommandMenuItemClicked(_:)), keyEquivalent: "")
-                    item.target = self
-                    item.representedObject = (uuid: uuid, device: device)
-                    menu.addItem(item)
-                }
-            }
-        }
-        
-        if !hasCommands {
-            let item = NSMenuItem(title: "No commands configured", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            menu.addItem(item)
-        }
-        
-        return menu
-    }
     
     // MARK: Private methods
     
-    @objc private func runCommandMenuItemClicked(_ sender: NSMenuItem) {
-        guard let (uuid, device) = sender.representedObject as? (uuid: String, device: Device) else { return }
-        
-        device.send(DataPacket.runCommandRequestPacket(key: uuid))
-    }
-    
     private func executeLocalCommand(_ key: String, device: Device) {
-        guard let commands = getLocalCommands() else { return }
+        guard let commandData = localCommands.first(where: { $0.uuid == key }) else {
+            Logger.services.error("Command with key \(key, privacy: .public) not found")
+            return
+        }
+        guard commandData.isEnabled else {
+            Logger.services.notice("Refusing to execute disabled command: \(commandData.name, privacy: .public)")
+            return
+        }
         
-        if let commandData = commands.first(where: { $0.uuid == key }) {
-            Logger.services.debug("Executing command: \(commandData.name, privacy: .public)")
-            
-            let task = Process()
-            task.launchPath = "/bin/sh"
-            task.arguments = ["-c", commandData.command]
-            
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            task.standardError = pipe
-            
-            do {
-                try task.run()
-                task.waitUntilExit()
-            } catch {
-                Logger.services.error("Error executing command: \(error, privacy: .public)")
+        Logger.services.debug("Executing command: \(commandData.name, privacy: .public)")
+        
+        let task = Process()
+        task.launchPath = commandData.shell
+        task.arguments = ["-l", "-c", commandData.command]
+        
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        task.standardOutput = stdoutPipe
+        task.standardError = stderrPipe
+        
+        // Drain the pipes asynchronously. Without an active reader, the
+        // process would block forever once the pipe buffer fills (~64KB) on
+        // verbose commands like `brew update`. readabilityHandler fires on a
+        // private background queue, so draining proceeds even while the
+        // caller is blocked in waitUntilExit()
+        var stdoutData = Data()
+        var stderrData = Data()
+        let dataLock = NSLock()
+        
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            dataLock.lock()
+            stdoutData.append(chunk)
+            dataLock.unlock()
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            dataLock.lock()
+            stderrData.append(chunk)
+            dataLock.unlock()
+        }
+        
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            Logger.services.error("Error launching command '\(commandData.name, privacy: .public)': \(error, privacy: .public)")
+            return
+        }
+        
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+        
+        dataLock.lock()
+        let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
+        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+        dataLock.unlock()
+        
+        let exitCode = task.terminationStatus
+        if exitCode == 0 {
+            Logger.services.info("Command '\(commandData.name, privacy: .public)' completed (exit 0)")
+            if !stdout.isEmpty {
+                Logger.services.debug("stdout: \(stdout, privacy: .public)")
             }
         } else {
-            Logger.services.error("Command with key \(key, privacy: .public) not found")
+            Logger.services.error("Command '\(commandData.name, privacy: .public)' failed (exit \(exitCode, privacy: .public))")
+            if !stderr.isEmpty {
+                Logger.services.error("stderr: \(stderr, privacy: .public)")
+            }
+            if !stdout.isEmpty {
+                Logger.services.debug("stdout: \(stdout, privacy: .public)")
+            }
         }
     }
     
     private func sendCommandList(to device: Device) {
-        let commandList = localCommandsToDict()
-        device.send(DataPacket.runCommandListPacket(commandList: commandList))
+        device.send(DataPacket.runCommandListPacket(commandList: localCommandsToDict()))
     }
     
     private func localCommandsToDict() -> [String: [String: String]] {
         var result: [String: [String: String]] = [:]
-        
-        if let commands = getLocalCommands() {
-            for command in commands {
-                result[command.uuid] = [
-                    "name": command.name,
-                    "command": command.command
-                ]
-            }
+        for command in localCommands where command.isEnabled {
+            result[command.uuid] = ["name": command.name, "command": command.command]
         }
-        
         return result
     }
 }
 
-// MARK: - RunCommandsWindowControllerDelegate
 
-extension RunCommandService: RunCommandsWindowControllerDelegate {
-    func getLocalCommands() -> [RunCommandService.Command]? {
-        return AppDelegate.shared().config.runCommands
+// MARK: - DataPacket (Run Command)
+
+fileprivate extension DataPacket {
+    
+    // MARK: Types
+    
+    enum RunCommandError: Error {
+        case wrongType
+        case invalidCommandList
+        case invalidKey
+        case invalidRequestFlag
     }
     
-    func saveLocalCommands(_ commands: [RunCommandService.Command]) {
-        AppDelegate.shared().config.runCommands = commands
-        
-        // Update command list on all connected devices
-        for device in self.devices {
-            if device.incomingCapabilities.contains(DataPacket.runCommandPacketType) {
-                sendCommandList(to: device)
-            }
-        }
+    struct RunCommandProperty {
+        static let key = "key"
+        static let commandList = "commandList"
+        static let requestCommandList = "requestCommandList"
+    }
+    
+    
+    // MARK: Properties
+    
+    static let runCommandPacketType = "kdeconnect.runcommand"
+    static let runCommandRequestPacketType = "kdeconnect.runcommand.request"
+    
+    var isRunCommandPacket: Bool { return self.type == DataPacket.runCommandPacketType }
+    var isRunCommandRequestPacket: Bool { return self.type == DataPacket.runCommandRequestPacketType }
+    
+    
+    // MARK: Public static methods
+    
+    static func runCommandRequestPacket(key: String) -> DataPacket {
+        return DataPacket(type: runCommandRequestPacketType, body: [RunCommandProperty.key: key as AnyObject])
+    }
+    
+    static func runCommandListRequestPacket() -> DataPacket {
+        return DataPacket(type: runCommandRequestPacketType, body: [RunCommandProperty.requestCommandList: true as AnyObject])
+    }
+    
+    static func runCommandListPacket(commandList: [String: [String: String]]) -> DataPacket {
+        let commandListString = try? JSONSerialization.data(withJSONObject: commandList)
+        let commandListJSON = commandListString.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        return DataPacket(type: runCommandPacketType, body: [RunCommandProperty.commandList: commandListJSON as AnyObject])
+    }
+    
+    
+    // MARK: Public methods
+    
+    func getCommandList() throws -> [String: [String: String]]? {
+        try self.validateRunCommandType()
+        guard body.keys.contains(RunCommandProperty.commandList) else { return nil }
+        guard let commandListString = body[RunCommandProperty.commandList] as? String else { throw RunCommandError.invalidCommandList }
+        guard let data = commandListString.data(using: .utf8) else { throw RunCommandError.invalidCommandList }
+        return try JSONSerialization.jsonObject(with: data) as? [String: [String: String]]
+    }
+    
+    func getRequestKey() throws -> String? {
+        try self.validateRunCommandRequestType()
+        guard body.keys.contains(RunCommandProperty.key) else { return nil }
+        guard let value = body[RunCommandProperty.key] as? String else { throw RunCommandError.invalidKey }
+        return value
+    }
+    
+    func isRequestingCommandList() throws -> Bool {
+        try self.validateRunCommandRequestType()
+        guard body.keys.contains(RunCommandProperty.requestCommandList) else { return false }
+        guard let value = body[RunCommandProperty.requestCommandList] as? NSNumber else { throw RunCommandError.invalidRequestFlag }
+        return value.boolValue
+    }
+    
+    func validateRunCommandType() throws {
+        guard self.isRunCommandPacket else { throw RunCommandError.wrongType }
+    }
+    
+    func validateRunCommandRequestType() throws {
+        guard self.isRunCommandRequestPacket else { throw RunCommandError.wrongType }
     }
 }
